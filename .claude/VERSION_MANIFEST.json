@@ -1,0 +1,268 @@
+{
+  "system_version": "2.1.5",
+  "release_date": "2025-10-11",
+  "release_name": "Auto-Migration Fix for Old Installations",
+  "description": "CRITICAL FIX: dm-init now auto-migrates old local installations to global architecture. Archives old files safely. Fixes mixed architecture bug. Honda: Simple > Complex.",
+  "components": {
+    "hooks": {
+      "auto-update.py": {
+        "version": "2.1.3",
+        "required": true,
+        "description": "SIMPLIFIED: Full package downloads, no granular versioning"
+      },
+      "check-versions.py": {
+        "version": "2.1.0",
+        "required": true,
+        "description": "Version validation script"
+      },
+      "check-claude-md.py": {
+        "version": "2.1.0",
+        "required": true,
+        "description": "CLAUDE.md verification and repair script"
+      },
+      "update-session-id.py": {
+        "version": "2.0.0",
+        "required": true,
+        "description": "Auto-update session ID helper script"
+      },
+      "session-start-digest-injection.py": {
+        "version": "2.1.1",
+        "required": true,
+        "description": "SessionStart hook with AUTO-INSTALL updates (zero user intervention)"
+      },
+      "precompact-digest-generation.py": {
+        "version": "2.0.0",
+        "required": true,
+        "description": "PreCompact hook for digest generation"
+      },
+      "post-response-memory.py": {
+        "version": "2.0.0",
+        "required": true,
+        "description": "PostToolUse hook (minimal pass-through)"
+      }
+    },
+    "commands": {
+      "dm-init.md": {
+        "version": "2.1.5",
+        "required": true,
+        "description": "Installation with auto-migration for old local files"
+      },
+      "dm-doctor.md": {
+        "version": "2.0.0",
+        "required": true,
+        "description": "Diagnostic and health check command"
+      },
+      "pm.md": {
+        "version": "2.1.1",
+        "required": true,
+        "description": "Strict Project Manager with Phase Boundary Protocol"
+      },
+      "phase-complete.md": {
+        "version": "2.1.0",
+        "required": true,
+        "description": "Phase completion validation and sign-off command"
+      },
+      "agent-os-enhanced.md": {
+        "version": "2.1.0",
+        "required": false,
+        "description": "Enhanced Agent OS orchestrator command"
+      },
+      "cluster-maestro-enhanced.md": {
+        "version": "2.1.0",
+        "required": false,
+        "description": "Enhanced Cluster infrastructure orchestrator"
+      },
+      "content-maestro-enhanced.md": {
+        "version": "2.1.0",
+        "required": false,
+        "description": "Enhanced Content creation orchestrator"
+      },
+      "debug-maestro-enhanced.md": {
+        "version": "2.1.0",
+        "required": false,
+        "description": "Enhanced Debug and triage orchestrator"
+      },
+      "dev-maestro-enhanced.md": {
+        "version": "2.1.0",
+        "required": false,
+        "description": "Enhanced Development orchestrator"
+      },
+      "enhanced-maestro.md": {
+        "version": "2.1.0",
+        "required": false,
+        "description": "General enhanced orchestrator"
+      },
+      "validate-slash-command.md": {
+        "version": "2.1.0",
+        "required": false,
+        "description": "Manual validation command"
+      },
+      "pm-review-command.md": {
+        "version": "2.1.0",
+        "required": false,
+        "description": "PM log review command"
+      },
+      "pm-test-command.md": {
+        "version": "2.1.0",
+        "required": false,
+        "description": "PM testing command"
+      },
+      "pm-slash-command.md": {
+        "version": "2.1.0",
+        "required": false,
+        "description": "Alternative PM command"
+      },
+      "implementation-guide.md": {
+        "version": "2.1.0",
+        "required": false,
+        "description": "Implementation guide command"
+      }
+    },
+    "config": {
+      "settings.json": {
+        "version": "2.0.0",
+        "required": true,
+        "description": "Hook configuration with absolute paths"
+      },
+      ".current_session_id": {
+        "version": "2.0.0",
+        "required": true,
+        "description": "Current session ID tracking file"
+      },
+      ".devmaestro-config.json": {
+        "version": "2.1.0",
+        "required": true,
+        "description": "DevMaestro feature flags and configuration"
+      },
+      "CLAUDE.md.starter": {
+        "version": "2.1.0",
+        "required": true,
+        "description": "Starter template for CLAUDE.md with DevMaestro integration"
+      }
+    },
+    "docs": {
+      "DEVMAESTRO_COMMANDS.md": {
+        "version": "2.1.0",
+        "required": true,
+        "description": "DevMaestro command documentation"
+      },
+      "DEVMAESTRO_AGENTS.md": {
+        "version": "2.1.0",
+        "required": true,
+        "description": "DevMaestro agent directory (85 agents)"
+      }
+    },
+    "secrets": {
+      "DEBUG_API_KEY": {
+        "version": "2.0.0",
+        "required": true,
+        "description": "API key for DevMaestro memory service"
+      }
+    }
+  },
+  "version_history": [
+    {
+      "version": "2.1.5",
+      "date": "2025-10-11",
+      "changes": [
+        "CRITICAL FIX: dm-init now auto-migrates old local installations",
+        "Detects when local .claude/hooks/, commands/, agents/ exist alongside global",
+        "Archives old local files to .claude/archive/pre-global-migration/",
+        "Keeps project-specific files (secrets, memory_backups, session ID)",
+        "Updates all path references to use ~/.claude/ (global)",
+        "Fixes 'file not found' errors for users with mixed architecture",
+        "Honda principle: Clean separation of global vs local, no duplication",
+        "Affects ALL users upgrading from pre-v2.1.0 installations"
+      ]
+    },
+    {
+      "version": "2.1.4",
+      "date": "2025-10-11",
+      "changes": [
+        "SessionStart hook NOW AUTO-CHECKS for updates (every Claude session)",
+        "SessionStart hook AUTO-INSTALLS updates (zero user intervention)",
+        "Users just see: 'DevMaestro updated, restart Claude'",
+        "No need to manually run /dm-init or /dm-doctor for updates",
+        "Updates happen automatically in background",
+        "Full package download strategy (1MB, 2 seconds)",
+        "Test version bump to verify auto-update system works"
+      ]
+    },
+    {
+      "version": "2.1.3",
+      "date": "2025-10-11",
+      "changes": [
+        "SIMPLIFIED UPDATE STRATEGY: Always download full 1MB package (~2 seconds)",
+        "REMOVED granular file-level versioning (overengineered, caused issues)",
+        "System version bump = complete reinstall of all files",
+        "Honda philosophy: Simple, reliable, maintainable over complex/fancy",
+        "Bulletproof: What's on server is what you get, no confusion",
+        "Phase validation with /phase-complete command (v2.1.1)",
+        "PM enforces mandatory phase-complete at boundaries",
+        "Auto-cleanup of old DevMaestro agents (preserves custom agents)",
+        "15 commands tracked in VERSION_MANIFEST"
+      ]
+    },
+    {
+      "version": "2.1.2",
+      "date": "2025-10-11",
+      "changes": [
+        "Added /phase-complete command for phase boundary validation",
+        "Updated PM to enforce mandatory phase-complete at phase boundaries",
+        "Enhanced PM with Phase Boundary Protocol (v2.1.1)",
+        "Integrated agentOS-validation-orchestrator sign-off workflow",
+        "Added phase gate success metrics to PM",
+        "Auto-cleanup of old DevMaestro agents (preserves user custom agents)",
+        "Granular file-level versioning in auto-update system (REMOVED in v2.1.3)",
+        "Updated VERSION_MANIFEST to include all 15 command files",
+        "Phase transitions now blocked without validator approval"
+      ]
+    },
+    {
+      "version": "2.1.0",
+      "date": "2025-10-11",
+      "changes": [
+        "Global/local architecture - install once, use everywhere",
+        "Validation system with agentOS-validation-orchestrator and project-manager",
+        "Consolidated agent library (85+ agents)",
+        "Auto-update system with --global-dir support",
+        "Migration tools (migrate-to-global.sh)",
+        "CLAUDE.md integration with auto-repair",
+        "Protection against claude init overwrite",
+        "Modular documentation (DEVMAESTRO_COMMANDS.md, DEVMAESTRO_AGENTS.md)",
+        "Intelligent conflict resolution during consolidation",
+        "65% disk space savings with global installation"
+      ]
+    },
+    {
+      "version": "2.0.0",
+      "date": "2025-10-11",
+      "changes": [
+        "Added automatic session ID update system",
+        "Created update-session-id.py helper script",
+        "Enhanced SessionStart hook to auto-update session ID",
+        "Added session ID verification to dm-init",
+        "Created dm-doctor diagnostic command",
+        "Added API key auto-configuration",
+        "Implemented version control system",
+        "Added version checking capabilities"
+      ]
+    },
+    {
+      "version": "1.0.0",
+      "date": "Pre-2025-10-11",
+      "changes": [
+        "Initial DevMaestro memory system",
+        "Basic hook scripts",
+        "Manual session ID management",
+        "Basic dm-init command"
+      ]
+    }
+  ],
+  "minimum_versions": {
+    "python": "3.7",
+    "node": "20.0",
+    "claude_cli": "1.0.0"
+  },
+  "download_base_url": "https://dm-memory.devmaestro.io/api/client/download"
+}

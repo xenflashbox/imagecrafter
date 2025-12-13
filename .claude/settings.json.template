@@ -1,0 +1,38 @@
+{
+  "hooks": {
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 {{PROJECT_PATH}}/.claude/hooks/precompact-digest-generation.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 {{PROJECT_PATH}}/.claude/hooks/session-start-digest-injection.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 {{PROJECT_PATH}}/.claude/hooks/post-response-memory.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,62 @@
+version: "3.8"
+
+services:
+  imagecrafter:
+    image: ${REGISTRY}/imagecrafter:latest
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL_UNPOOLED=${DATABASE_URL_UNPOOLED}
+      - NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
+      - CLERK_WEBHOOK_SECRET=${CLERK_WEBHOOK_SECRET}
+      - NEXT_PUBLIC_CLERK_SIGN_IN_URL=${NEXT_PUBLIC_CLERK_SIGN_IN_URL}
+      - NEXT_PUBLIC_CLERK_SIGN_UP_URL=${NEXT_PUBLIC_CLERK_SIGN_UP_URL}
+      - NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=${NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL}
+      - NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=${NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
+      - STRIPE_PRICE_STARTER=${STRIPE_PRICE_STARTER}
+      - STRIPE_PRICE_PRO=${STRIPE_PRICE_PRO}
+      - STRIPE_PRICE_TEAM=${STRIPE_PRICE_TEAM}
+      - IMAGE_GEN_API_URL=${IMAGE_GEN_API_URL}
+      - IMAGE_GEN_API_KEY=${IMAGE_GEN_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+    networks:
+      - traefik-public
+    volumes:
+      - imagecrafter-uploads:/app/uploads
+      - imagecrafter-cache:/app/.next/cache
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.imagecrafter.rule=Host(`imagecrafter.app`)
+        - traefik.http.routers.imagecrafter.entrypoints=websecure
+        - traefik.http.routers.imagecrafter.tls.certresolver=letsencrypt
+        - traefik.http.services.imagecrafter.loadbalancer.server.port=3000
+        - traefik.docker.network=traefik-public
+
+networks:
+  traefik-public:
+    external: true
+
+volumes:
+  imagecrafter-uploads:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=${NFS_SERVER},nolock,soft,rw,nfsvers=4
+      device: ":${NFS_DATA_PATH}/imagecrafter/uploads"
+
+  imagecrafter-cache:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: addr=${NFS_SERVER},nolock,soft,rw,nfsvers=4
+      device: ":${NFS_DATA_PATH}/imagecrafter/cache"

@@ -1,0 +1,78 @@
+{
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "dm-mini"
+  ],
+  "permissions": {
+    "allow": [
+      "Bash(find:*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/xen/docker/apps/xenco-orchestrator/.venv/bin/python /home/xen/docker/apps/xenco-orchestrator/.claude/hooks/session_start.py"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/session-start-digest-injection.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/xen/docker/apps/xenco-orchestrator/.venv/bin/python /home/xen/docker/apps/xenco-orchestrator/.claude/hooks/pre_tool.py"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/xen/docker/apps/xenco-orchestrator/.venv/bin/python /home/xen/docker/apps/xenco-orchestrator/.claude/hooks/post_tool.py"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/post-response-memory.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/precompact-digest-generation.py",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/xen/docker/apps/xenco-orchestrator/.venv/bin/python /home/xen/docker/apps/xenco-orchestrator/.claude/hooks/subagent_stop.py"
+          }
+        ]
+      }
+    ]
+  }
+}

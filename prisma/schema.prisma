@@ -1,0 +1,455 @@
+// ImageCraft Database Schema
+// Production-ready schema for AI-powered image generation service
+// Integrates with: Clerk (auth), Stripe (billing), Gemini (image gen)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USER & AUTHENTICATION (Synced from Clerk)
+// ============================================================================
+
+model User {
+  id                String   @id // Clerk user_id (e.g., "user_2abc123...")
+  email             String   @unique
+  firstName         String?
+  lastName          String?
+  imageUrl          String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Stripe integration
+  stripeCustomerId  String?  @unique
+  
+  // Relations
+  subscription      Subscription?
+  projects          Project[]
+  images            Image[]
+  prompts           PromptHistory[]
+  usageRecords      UsageRecord[]
+
+  @@index([email])
+  @@index([stripeCustomerId])
+}
+
+// ============================================================================
+// SUBSCRIPTION & BILLING (Synced from Stripe)
+// ============================================================================
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  userId                 String             @unique
+  user                   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Stripe fields
+  stripeSubscriptionId   String             @unique
+  stripePriceId          String
+  stripeCurrentPeriodEnd DateTime
+  stripeStatus           SubscriptionStatus @default(TRIALING)
+  
+  // Plan details
+  plan                   PlanTier           @default(FREE)
+  monthlyImageLimit      Int                @default(5)
+  imagesUsedThisPeriod   Int                @default(0)
+  
+  // Feature flags based on plan
+  canUsePro              Boolean            @default(false)
+  canUseBatch            Boolean            @default(false)
+  canUse4K               Boolean            @default(false)
+  canUseProjects         Boolean            @default(false)
+  maxProjectCount        Int                @default(0)
+  
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  @@index([stripeSubscriptionId])
+  @@index([stripeStatus])
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  CANCELED
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  PAST_DUE
+  UNPAID
+  PAUSED
+}
+
+enum PlanTier {
+  FREE        // 5 images/month, watermarked, 1K only
+  STARTER     // 100 images/month, no watermark, 1K-2K
+  PRO         // 500 images/month, Pro model, 4K, projects
+  TEAM        // 2000 images/month, API access, multiple seats
+}
+
+// ============================================================================
+// PROJECTS (For character consistency - children's books, storyboards, etc.)
+// ============================================================================
+
+model Project {
+  id                String          @id @default(cuid())
+  userId            String
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name              String
+  description       String?
+  projectType       ProjectType     @default(GENERAL)
+  
+  // Style consistency settings
+  stylePreset       String?         // e.g., "watercolor_childrens_book"
+  colorPalette      String[]        // Array of hex colors to maintain
+  aspectRatio       String          @default("16:9")
+  
+  // Character anchor
+  characterProfile  CharacterProfile?
+  
+  // Generated images in this project
+  images            Image[]
+  
+  // Metadata
+  isArchived        Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([projectType])
+}
+
+enum ProjectType {
+  GENERAL
+  CHILDRENS_BOOK
+  STORYBOARD
+  PRESENTATION
+  SOCIAL_MEDIA_CAMPAIGN
+  BRAND_ASSETS
+  PRODUCT_LINE
+}
+
+// ============================================================================
+// CHARACTER PROFILE (The "anchor" for consistent characters)
+// ============================================================================
+
+model CharacterProfile {
+  id                String   @id @default(cuid())
+  projectId         String   @unique
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  name              String   // e.g., "Tina Tortoise"
+  
+  // The detailed description extracted from anchor image
+  // This gets injected into every prompt in the project
+  description       String   @db.Text
+  
+  // Reference to the anchor image
+  anchorImageId     String?  @unique
+  anchorImage       Image?   @relation("AnchorImage", fields: [anchorImageId], references: [id])
+  
+  // Additional visual attributes (structured for consistency)
+  physicalTraits    Json?    // { "eyeColor": "brown", "size": "small", etc. }
+  clothing          Json?    // { "accessories": ["pink bow"], "outfit": null }
+  styleNotes        String?  // "Soft watercolor, rounded features, child-friendly"
+  
+  // For AI analysis metadata
+  analysisModel     String?  // Which model analyzed the anchor image
+  analysisVersion   String?  // Version tracking for re-analysis
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// ============================================================================
+// IMAGES (All generated images)
+// ============================================================================
+
+model Image {
+  id                String        @id @default(cuid())
+  externalId        String        @unique // The ID from your image-gen API
+  userId            String
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Project association (optional - standalone images don't need a project)
+  projectId         String?
+  project           Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  
+  // Image details
+  imageUrl          String        // CDN URL from your image-gen service
+  thumbnailUrl      String?       // Smaller version for gallery view
+  
+  // Generation parameters
+  originalPrompt    String        @db.Text  // What the user typed
+  enhancedPrompt    String        @db.Text  // What was actually sent to Gemini
+  aspectRatio       String        @default("1:1")
+  resolution        Resolution    @default(RES_1K)
+  model             String        @default("gemini-2.5-flash-image")
+  usedPro           Boolean       @default(false)
+  styleHints        String?
+  
+  // Template used (if any)
+  templateId        String?
+  template          Template?     @relation(fields: [templateId], references: [id])
+  
+  // Character profile injection (if part of a project with character)
+  characterInjected Boolean       @default(false)
+  
+  // Status and metadata
+  status            ImageStatus   @default(COMPLETED)
+  isWatermarked     Boolean       @default(false)
+  isFavorite        Boolean       @default(false)
+  
+  // For anchor images
+  anchoredProfile   CharacterProfile? @relation("AnchorImage")
+  
+  // Timestamps
+  generatedAt       DateTime      @default(now())
+  expiresAt         DateTime?     // 90-day retention from your API
+  
+  // Soft delete (users can "delete" but we keep for billing records)
+  deletedAt         DateTime?
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([externalId])
+  @@index([generatedAt])
+  @@index([status])
+}
+
+enum Resolution {
+  RES_1K
+  RES_2K
+  RES_4K
+}
+
+enum ImageStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
+// ============================================================================
+// PROMPT HISTORY (For reusing/editing prompts)
+// ============================================================================
+
+model PromptHistory {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // The prompt content
+  originalPrompt    String   @db.Text
+  enhancedPrompt    String   @db.Text
+  
+  // Context
+  templateId        String?
+  templateSlug      String?  // Denormalized for quick reference
+  projectId         String?
+  
+  // Generation settings used
+  aspectRatio       String
+  resolution        Resolution
+  model             String
+  styleHints        String?
+  
+  // Result reference
+  imageId           String?
+  wasSuccessful     Boolean  @default(true)
+  errorMessage      String?
+  
+  // User interaction
+  timesReused       Int      @default(0)
+  isSaved           Boolean  @default(false) // User explicitly saved this prompt
+  
+  createdAt         DateTime @default(now())
+
+  @@index([userId])
+  @@index([isSaved])
+  @@index([createdAt])
+}
+
+// ============================================================================
+// TEMPLATES (Pre-built prompt modes)
+// ============================================================================
+
+model Template {
+  id                String         @id @default(cuid())
+  slug              String         @unique // URL-friendly identifier
+  
+  // Display info
+  name              String         // "Blog Hero Image"
+  description       String
+  category          TemplateCategory
+  iconName          String?        // Lucide icon name for UI
+  
+  // The prompt engineering
+  promptTemplate    String         @db.Text  // Template with {{placeholders}}
+  defaultStyleHints String?
+  defaultAspectRatio String        @default("16:9")
+  
+  // Example/preview
+  examplePrompt     String?        @db.Text
+  exampleImageUrl   String?
+  
+  // Sub-presets (e.g., "Blog Hero" -> "Tech", "Health", "Lifestyle")
+  presets           TemplatePreset[]
+  
+  // Usage tracking
+  images            Image[]
+  usageCount        Int            @default(0)
+  
+  // Admin
+  isActive          Boolean        @default(true)
+  isPremium         Boolean        @default(false) // Requires paid plan
+  sortOrder         Int            @default(0)
+  
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([category])
+  @@index([isActive])
+}
+
+model TemplatePreset {
+  id                String   @id @default(cuid())
+  templateId        String
+  template          Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  
+  slug              String   // e.g., "tech", "health", "lifestyle"
+  name              String   // e.g., "Technology", "Health & Wellness"
+  
+  // Style overrides for this preset
+  styleOverrides    Json     // { "mood": "innovative", "colors": ["blue", "purple"] }
+  promptSuffix      String?  // Additional prompt text for this style
+  
+  // Preview
+  exampleImageUrl   String?
+  
+  sortOrder         Int      @default(0)
+
+  @@unique([templateId, slug])
+}
+
+enum TemplateCategory {
+  BLOG_IMAGES
+  SOCIAL_MEDIA
+  PRESENTATIONS
+  STORYTELLING      // Children's books, storyboards
+  PRODUCT_MARKETING
+  PROFILE_BACKGROUNDS
+  INFOGRAPHICS
+  CUSTOM
+}
+
+// ============================================================================
+// USAGE TRACKING (For billing and analytics)
+// ============================================================================
+
+model UsageRecord {
+  id                String      @id @default(cuid())
+  userId            String
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // What was used
+  action            UsageAction
+  imageId           String?
+  
+  // Cost tracking
+  creditsUsed       Int         @default(1)
+  wasProModel       Boolean     @default(false)
+  resolution        Resolution  @default(RES_1K)
+  
+  // Billing period reference
+  billingPeriodStart DateTime
+  billingPeriodEnd   DateTime
+  
+  // API response metadata
+  apiLatencyMs      Int?
+  apiModel          String?
+  
+  createdAt         DateTime    @default(now())
+
+  @@index([userId])
+  @@index([billingPeriodStart, billingPeriodEnd])
+  @@index([createdAt])
+}
+
+enum UsageAction {
+  IMAGE_GENERATED
+  IMAGE_GENERATED_PRO
+  IMAGE_GENERATED_4K
+  BATCH_GENERATED
+  CHARACTER_ANALYZED
+  PROMPT_ENHANCED
+}
+
+// ============================================================================
+// BATCH JOBS (For tracking multi-image generation)
+// ============================================================================
+
+model BatchJob {
+  id                String      @id @default(cuid())
+  userId            String
+  
+  // Batch details
+  totalImages       Int
+  completedImages   Int         @default(0)
+  failedImages      Int         @default(0)
+  
+  status            BatchStatus @default(PENDING)
+  
+  // The prompts/settings
+  prompts           Json        // Array of prompt objects
+  sharedSettings    Json        // Aspect ratio, style, etc.
+  
+  // Results
+  imageIds          String[]    // Array of generated image IDs
+  errors            Json?       // Any errors that occurred
+  
+  // Timing
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime    @default(now())
+
+  @@index([userId])
+  @@index([status])
+}
+
+enum BatchStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  PARTIAL_FAILURE
+  FAILED
+}
+
+// ============================================================================
+// WAITLIST (Pre-launch signups)
+// ============================================================================
+
+model WaitlistEntry {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  source            String?  // Where they came from
+  referralCode      String?  // If referred by someone
+  
+  // Preferences
+  interestedIn      String[] // ["childrens_books", "blog_images", etc.]
+  
+  // Status
+  isInvited         Boolean  @default(false)
+  invitedAt         DateTime?
+  convertedToUser   Boolean  @default(false)
+  
+  createdAt         DateTime @default(now())
+
+  @@index([email])
+  @@index([isInvited])
+}
