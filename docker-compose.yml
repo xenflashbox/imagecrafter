@@ -21,10 +21,13 @@ services:
       - STRIPE_PRICE_TEAM=${STRIPE_PRICE_TEAM}
       - IMAGE_GEN_API_URL=${IMAGE_GEN_API_URL}
       - IMAGE_GEN_API_KEY=${IMAGE_GEN_API_KEY}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - AI_GATEWAY_API_KEY=${AI_GATEWAY_API_KEY}
+      - AI_GATEWAY_URL=${AI_GATEWAY_URL}
+      - AI_MODEL=${AI_MODEL}
+      - AI_ENHANCEMENT_REQUIRED=${AI_ENHANCEMENT_REQUIRED:-false}
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
     networks:
-      - traefik-public
+      - traefik_proxy
     volumes:
       - imagecrafter-uploads:/app/uploads
       - imagecrafter-cache:/app/.next/cache
@@ -38,12 +41,12 @@ services:
         - traefik.enable=true
         - traefik.http.routers.imagecrafter.rule=Host(`imagecrafter.app`)
         - traefik.http.routers.imagecrafter.entrypoints=websecure
-        - traefik.http.routers.imagecrafter.tls.certresolver=letsencrypt
+        - traefik.http.routers.imagecrafter.tls.certresolver=cf
         - traefik.http.services.imagecrafter.loadbalancer.server.port=3000
-        - traefik.docker.network=traefik-public
+        - traefik.docker.network=traefik_proxy
 
 networks:
-  traefik-public:
+  traefik_proxy:
     external: true
 
 volumes:

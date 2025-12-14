@@ -195,7 +195,7 @@ export default function ProjectsPage() {
           </div>
 
           <Link
-            href="/settings/billing"
+            href="/settings"
             className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all font-medium"
           >
             <Zap className="w-4 h-4" />

@@ -41,3 +41,6 @@ next-env.d.ts
 
 # Original archive
 imagecrafter.zip
+.claude/memory_backups/*
+.claude/secrets/*
+.claude/IMAGECRAFTER_CLUSTER_CONFIGS.md

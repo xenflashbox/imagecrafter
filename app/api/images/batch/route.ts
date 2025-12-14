@@ -1,13 +1,14 @@
 /**
  * POST /api/images/batch
- * 
+ *
  * Batch image generation endpoint - generate up to 10 images at once
  * Requires Starter plan or higher
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { imageGenerationService, type BatchGenerateRequest } from "@/lib/services/image-generation";
+import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
 // Request validation schema
@@ -31,6 +32,59 @@ export async function POST(request: NextRequest) {
         { success: false, error: "Unauthorized" },
         { status: 401 }
       );
+    }
+
+    // Auto-provision user if they don't exist in database
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!existingUser) {
+      const clerkUser = await currentUser();
+      if (!clerkUser) {
+        return NextResponse.json(
+          { success: false, error: "Could not fetch user data" },
+          { status: 500 }
+        );
+      }
+
+      const primaryEmail = clerkUser.emailAddresses[0]?.emailAddress;
+      if (!primaryEmail) {
+        return NextResponse.json(
+          { success: false, error: "User has no email address" },
+          { status: 400 }
+        );
+      }
+
+      await prisma.user.create({
+        data: {
+          id: userId,
+          email: primaryEmail,
+          firstName: clerkUser.firstName,
+          lastName: clerkUser.lastName,
+          imageUrl: clerkUser.imageUrl,
+        },
+      });
+
+      await prisma.subscription.create({
+        data: {
+          userId,
+          stripeSubscriptionId: `free_${userId}`,
+          stripePriceId: "free",
+          stripeCurrentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          stripeStatus: "ACTIVE",
+          plan: "FREE",
+          monthlyImageLimit: 5,
+          canUsePro: false,
+          canUseBatch: false,
+          canUse4K: false,
+          canUseProjects: false,
+          maxProjectCount: 0,
+          imagesUsedThisPeriod: 0,
+        },
+      });
+
+      console.log(`Auto-provisioned user: ${userId}`);
     }
 
     // Parse and validate request body

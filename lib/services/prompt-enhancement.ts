@@ -1,17 +1,52 @@
 /**
  * ImageCraft Prompt Enhancement Service
- * 
+ *
  * This service transforms plain English user input into Gemini-optimized prompts.
  * It handles:
  * - Template-based prompt construction
  * - Character profile injection for project consistency
  * - Style hint optimization
  * - Aspect ratio recommendations
+ *
+ * ARCHITECTURE: Uses Xenco Labs AI Gateway (not direct API calls)
+ * - Centralized API key management
+ * - Cost monitoring via LiteLLM
+ * - Model flexibility (Claude, GPT, Grok, etc.)
  */
 
-import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/prisma";
 import type { CharacterProfile, Template, TemplatePreset } from "@prisma/client";
+
+// ============================================================================
+// AI GATEWAY CONFIGURATION
+// ============================================================================
+
+const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || "https://api.reresume.app/api/ai/chat/completions";
+// Use AI_GATEWAY_API_KEY if available, fall back to DEVMAESTRO_API_KEY
+const AI_GATEWAY_KEY = process.env.AI_GATEWAY_API_KEY || process.env.DEVMAESTRO_API_KEY || "";
+const AI_MODEL = process.env.AI_MODEL || "claude-3-5-sonnet";
+// Enable fallback mode when AI gateway is unavailable
+const AI_ENHANCEMENT_REQUIRED = process.env.AI_ENHANCEMENT_REQUIRED === "true";
+
+interface AIGatewayResponse {
+  id: string;
+  object: string;
+  created: number;
+  model: string;
+  choices: Array<{
+    index: number;
+    message: {
+      role: string;
+      content: string;
+    };
+    finish_reason: string;
+  }>;
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+}
 
 // ============================================================================
 // TYPES
@@ -59,10 +94,83 @@ export interface CharacterAnalysisResult {
 // ============================================================================
 
 export class PromptEnhancementService {
-  private anthropic: Anthropic;
+  private gatewayUrl: string;
+  private apiKey: string;
+  private model: string;
 
   constructor() {
-    this.anthropic = new Anthropic();
+    this.gatewayUrl = AI_GATEWAY_URL;
+    this.apiKey = AI_GATEWAY_KEY;
+    this.model = AI_MODEL;
+
+    if (!this.apiKey) {
+      console.warn(
+        "⚠️ AI_GATEWAY_API_KEY not set - AI prompt enhancement will use fallback mode"
+      );
+    }
+  }
+
+  /**
+   * Call the AI Gateway with OpenAI-compatible format
+   * Returns null on error (allows fallback to original prompt)
+   */
+  private async callAIGateway(
+    systemPrompt: string,
+    userMessage: string,
+    maxTokens: number = 1024
+  ): Promise<string | null> {
+    // If no API key, skip AI enhancement
+    if (!this.apiKey) {
+      console.warn("⚠️ No AI Gateway API key - skipping prompt enhancement");
+      return null;
+    }
+
+    try {
+      const response = await fetch(this.gatewayUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userMessage },
+          ],
+          max_tokens: maxTokens,
+          temperature: 0.7,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("AI Gateway error:", response.status, errorText);
+
+        // If enhancement is required, throw the error
+        if (AI_ENHANCEMENT_REQUIRED) {
+          throw new Error(`AI Gateway error: ${response.status} - ${errorText}`);
+        }
+
+        // Otherwise, return null to trigger fallback
+        console.warn("⚠️ AI Gateway unavailable - using fallback mode");
+        return null;
+      }
+
+      const data = (await response.json()) as AIGatewayResponse;
+      return data.choices[0]?.message?.content || null;
+    } catch (error) {
+      console.error("AI Gateway call failed:", error);
+
+      // If enhancement is required, re-throw the error
+      if (AI_ENHANCEMENT_REQUIRED) {
+        throw error;
+      }
+
+      // Otherwise, return null to trigger fallback
+      console.warn("⚠️ AI Gateway error - using fallback mode");
+      return null;
+    }
   }
 
   /**
@@ -145,14 +253,7 @@ export class PromptEnhancementService {
     // Construct the prompt enhancement request
     const systemPrompt = this.buildSystemPrompt(template, preset, characterProfile);
 
-    const response = await this.anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content: `Transform this user request into an optimized Gemini image prompt:
+    const userMessage = `Transform this user request into an optimized Gemini image prompt:
 
 USER REQUEST: "${userPrompt}"
 
@@ -160,12 +261,20 @@ ASPECT RATIO: ${finalAspectRatio}
 ${finalStyleHints ? `STYLE HINTS: ${finalStyleHints}` : ""}
 ${characterProfile ? `CHARACTER TO INCLUDE: ${characterProfile.name}` : ""}
 
-Respond with ONLY the optimized prompt text, nothing else. Keep it 20-50 words.`,
-        },
-      ],
-    });
+Respond with ONLY the optimized prompt text, nothing else. Keep it 20-50 words.`;
 
-    const enhancedPrompt = this.extractTextContent(response);
+    // Try AI enhancement, fall back to user prompt if unavailable
+    const aiEnhancedPrompt = await this.callAIGateway(systemPrompt, userMessage, 1024);
+
+    // Use AI-enhanced prompt if available, otherwise use original with basic enhancement
+    let enhancedPrompt: string;
+    if (aiEnhancedPrompt) {
+      enhancedPrompt = aiEnhancedPrompt;
+    } else {
+      // Fallback: basic enhancement without AI
+      enhancedPrompt = this.buildFallbackPrompt(userPrompt, finalAspectRatio, finalStyleHints);
+      console.log("📝 Using fallback prompt enhancement (AI Gateway unavailable)");
+    }
 
     // If character profile exists, prepend it
     let finalPrompt = enhancedPrompt;
@@ -241,27 +350,12 @@ Example: "Tina Tortoise sitting at a small breakfast table, looking sleepy..."`;
 
   /**
    * Analyze an image to create a character profile
+   * Uses AI Gateway with vision support (OpenAI-compatible format)
    */
   async analyzeCharacterImage(request: CharacterAnalysisRequest): Promise<CharacterAnalysisResult> {
     const { imageUrl, characterName, projectType, styleNotes } = request;
 
-    const response = await this.anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 2048,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: {
-                type: "url",
-                url: imageUrl,
-              },
-            },
-            {
-              type: "text",
-              text: `Analyze this image to create a detailed character profile for "${characterName}".
+    const userContent = `Analyze this image to create a detailed character profile for "${characterName}".
 
 PROJECT TYPE: ${projectType}
 ${styleNotes ? `STYLE NOTES: ${styleNotes}` : ""}
@@ -288,14 +382,47 @@ Format your response as JSON:
     "outfit": ["..."]
   },
   "styleNotes": "Art style description for consistency"
-}`,
-            },
-          ],
-        },
-      ],
+}`;
+
+    // Use OpenAI-compatible vision format through the gateway
+    const response = await fetch(this.gatewayUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image_url",
+                image_url: {
+                  url: imageUrl,
+                },
+              },
+              {
+                type: "text",
+                text: userContent,
+              },
+            ],
+          },
+        ],
+        max_tokens: 2048,
+        temperature: 0.7,
+      }),
     });
 
-    const content = this.extractTextContent(response);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("AI Gateway vision error:", response.status, errorText);
+      throw new Error(`AI Gateway error: ${response.status} - ${errorText}`);
+    }
+
+    const data = (await response.json()) as AIGatewayResponse;
+    const content = data.choices[0]?.message?.content || "";
 
     // Parse the JSON response
     try {
@@ -314,6 +441,38 @@ Format your response as JSON:
         styleNotes: styleNotes || "Style not analyzed",
       };
     }
+  }
+
+  /**
+   * Build a basic enhanced prompt without AI
+   * Used as fallback when AI Gateway is unavailable
+   */
+  private buildFallbackPrompt(
+    userPrompt: string,
+    aspectRatio: string,
+    styleHints: string | null
+  ): string {
+    // Start with the user's prompt
+    let prompt = userPrompt.trim();
+
+    // Add style hints if provided
+    if (styleHints) {
+      prompt = `${prompt}, ${styleHints}`;
+    }
+
+    // Add aspect ratio-specific composition hints
+    if (aspectRatio === "16:9") {
+      prompt = `${prompt}, wide composition, cinematic framing`;
+    } else if (aspectRatio === "9:16") {
+      prompt = `${prompt}, vertical composition, portrait orientation`;
+    } else if (aspectRatio === "1:1") {
+      prompt = `${prompt}, centered composition, square format`;
+    }
+
+    // Add general quality hints for Gemini
+    prompt = `${prompt}, high quality, detailed`;
+
+    return prompt;
   }
 
   /**
@@ -367,13 +526,6 @@ Format your response as JSON:
     return recommendations;
   }
 
-  /**
-   * Extract text content from Anthropic response
-   */
-  private extractTextContent(response: Anthropic.Message): string {
-    const textBlock = response.content.find((block) => block.type === "text");
-    return textBlock && textBlock.type === "text" ? textBlock.text : "";
-  }
 }
 
 // ============================================================================

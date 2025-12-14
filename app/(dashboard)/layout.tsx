@@ -134,7 +134,7 @@ export default function DashboardLayout({
               />
             </div>
             <Link
-              href="/settings/billing"
+              href="/settings"
               className="flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all text-sm font-medium"
             >
               <Zap className="w-4 h-4" />
