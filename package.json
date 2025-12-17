@@ -11,9 +11,13 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "r2:migrate": "tsx scripts/migrate-to-r2.ts",
+    "r2:migrate:dry": "tsx scripts/migrate-to-r2.ts --dry-run"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.953.0",
+    "@aws-sdk/lib-storage": "^3.953.0",
     "@clerk/nextjs": "^6.12.0",
     "@prisma/client": "^6.2.0",
     "@radix-ui/react-dialog": "^1.1.4",
@@ -35,6 +39,7 @@
     "next": "15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "sharp": "^0.34.5",
     "stripe": "^17.5.0",
     "svix": "^1.45.1",
     "tailwind-merge": "^2.6.0",

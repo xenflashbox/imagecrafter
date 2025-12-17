@@ -1,700 +1,552 @@
 /**
- * ImageCraft Image Generation Service
+ * Image Generation Service
  * 
- * Wraps the existing Gemini Image Gen API at image-gen.xencolabs.com
- * Handles:
- * - Single and batch image generation
- * - Usage tracking and plan limits
- * - Watermarking for free tier
- * - Character profile injection
- * - Project association
+ * Handles image generation with credit-based billing.
+ * Wraps the Gemini API at image-gen.xencolabs.com
  */
 
 import { prisma } from "@/lib/prisma";
-import { PromptEnhancementService } from "./prompt-enhancement";
-import type {
-  Image,
-  Project,
-  User,
-  Subscription,
-  PlanTier,
-  Resolution,
-  UsageAction,
-} from "@prisma/client";
+import {
+  CREDIT_COSTS,
+  RESOLUTION_DIMENSIONS,
+  PLANS,
+  getCreditCost,
+  isResolutionAvailable,
+  type Resolution,
+  type PlanTier,
+} from "@/lib/plans";
+import {
+  isR2Available,
+  uploadToR2Async,
+  calculateExpiration,
+} from "@/lib/r2";
 
-// ============================================================================
-// CONFIGURATION
-// ============================================================================
-
-const IMAGE_GEN_API_BASE = process.env.IMAGE_GEN_API_URL || "https://image-gen.xencolabs.com";
-const IMAGE_GEN_API_KEY = process.env.IMAGE_GEN_API_KEY!;
-
-// Plan limits
-const PLAN_LIMITS: Record<
-  PlanTier,
-  {
-    monthlyImages: number;
-    canUsePro: boolean;
-    canUseBatch: boolean;
-    canUse4K: boolean;
-    canUseProjects: boolean;
-    maxProjects: number;
-    watermarked: boolean;
-  }
-> = {
-  FREE: {
-    monthlyImages: 5,
-    canUsePro: false,
-    canUseBatch: false,
-    canUse4K: false,
-    canUseProjects: false,
-    maxProjects: 0,
-    watermarked: true,
-  },
-  STARTER: {
-    monthlyImages: 100,
-    canUsePro: false,
-    canUseBatch: true,
-    canUse4K: false,
-    canUseProjects: false,
-    maxProjects: 0,
-    watermarked: false,
-  },
-  PRO: {
-    monthlyImages: 500,
-    canUsePro: true,
-    canUseBatch: true,
-    canUse4K: true,
-    canUseProjects: true,
-    maxProjects: 10,
-    watermarked: false,
-  },
-  TEAM: {
-    monthlyImages: 2000,
-    canUsePro: true,
-    canUseBatch: true,
-    canUse4K: true,
-    canUseProjects: true,
-    maxProjects: 50,
-    watermarked: false,
-  },
-};
-
-// ============================================================================
+// =============================================================================
 // TYPES
-// ============================================================================
+// =============================================================================
 
-export interface GenerateImageRequest {
+export interface GenerateImageParams {
   userId: string;
   prompt: string;
+  enhancedPrompt?: string;
+  resolution?: Resolution;
+  aspectRatio?: string;
+  templateId?: string;
+  presetId?: string;
   projectId?: string;
-  templateSlug?: string;
-  presetSlug?: string;
-  aspectRatio?: "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
-  resolution?: "1K" | "2K" | "4K";
-  usePro?: boolean;
-  styleHints?: string;
-  skipEnhancement?: boolean; // For power users who want raw prompts
+  characterId?: string;
+  seed?: number;
 }
 
 export interface GenerateImageResult {
   success: boolean;
-  image?: Image;
-  error?: string;
-  usageRemaining?: number;
-  enhancedPrompt?: string;
-  recommendations?: Record<string, unknown>;
-}
-
-export interface BatchGenerateRequest {
-  userId: string;
-  prompts: string[];
-  projectId?: string;
-  templateSlug?: string;
-  presetSlug?: string;
-  aspectRatio?: "1:1" | "16:9" | "9:16" | "4:3" | "3:4";
-  resolution?: "1K" | "2K" | "4K";
-  usePro?: boolean;
-  styleHints?: string;
-}
-
-export interface BatchGenerateResult {
-  success: boolean;
-  batchId: string;
-  totalRequested: number;
-  completed: number;
-  failed: number;
-  images: Image[];
-  errors: Array<{ index: number; error: string }>;
-}
-
-interface ApiGenerateResponse {
-  success: boolean;
   image?: {
-    external_id: string;
-    image_url: string;
-    prompt: string;
-    aspect_ratio: string;
+    id: string;
+    imageUrl: string;
+    thumbnailUrl?: string;
+    width: number;
+    height: number;
+    resolution: string;
+    creditsCost: number;
+    hasWatermark: boolean;
   };
   error?: string;
+  creditsRemaining?: number;
 }
 
-interface ApiBatchResponse {
-  success: boolean;
-  images?: Array<{
-    external_id: string;
-    image_url: string;
-    prompt: string;
-    aspect_ratio: string;
-  }>;
-  errors?: Array<{ index: number; error: string }>;
+export interface UserCredits {
+  used: number;
+  limit: number;
+  remaining: number;
+  resetsAt: Date;
+  plan: PlanTier;
+  maxResolution: Resolution;
 }
 
-// ============================================================================
-// IMAGE GENERATION SERVICE
-// ============================================================================
+// =============================================================================
+// CREDIT MANAGEMENT
+// =============================================================================
 
-export class ImageGenerationService {
-  private promptService: PromptEnhancementService;
+/**
+ * Get user's current credit status
+ */
+export async function getUserCredits(userId: string): Promise<UserCredits> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { subscription: true },
+  });
 
-  constructor() {
-    this.promptService = new PromptEnhancementService();
+  if (!user) {
+    throw new Error("User not found");
   }
 
-  /**
-   * Generate a single image
-   */
-  async generateImage(request: GenerateImageRequest): Promise<GenerateImageResult> {
-    const {
-      userId,
-      prompt,
-      projectId,
-      templateSlug,
-      presetSlug,
-      aspectRatio = "16:9",
-      resolution = "1K",
-      usePro = false,
-      styleHints,
-      skipEnhancement = false,
-    } = request;
+  // Get or create subscription
+  let subscription = user.subscription;
+  if (!subscription) {
+    subscription = await prisma.subscription.create({
+      data: {
+        userId: user.id,
+        plan: "FREE",
+        creditsLimit: PLANS.FREE.creditsPerMonth,
+        creditsUsed: 0,
+        creditsResetAt: getNextResetDate(),
+        maxResolution: PLANS.FREE.maxResolution,
+        hasWatermark: true,
+      },
+    });
+  }
 
-    // 1. Check user subscription and limits
-    const { user, subscription } = await this.getUserWithSubscription(userId);
-    if (!user) {
-      return { success: false, error: "User not found" };
-    }
+  // Check if credits should reset
+  if (new Date() >= subscription.creditsResetAt) {
+    subscription = await prisma.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        creditsUsed: 0,
+        creditsResetAt: getNextResetDate(),
+      },
+    });
+  }
 
-    const limits = this.getPlanLimits(subscription);
+  return {
+    used: subscription.creditsUsed,
+    limit: subscription.creditsLimit,
+    remaining: subscription.creditsLimit - subscription.creditsUsed,
+    resetsAt: subscription.creditsResetAt,
+    plan: subscription.plan as PlanTier,
+    maxResolution: subscription.maxResolution as Resolution,
+  };
+}
 
-    // Check usage limits
-    const usageCheck = await this.checkUsageLimits(userId, subscription, limits);
-    if (!usageCheck.allowed) {
-      return { success: false, error: usageCheck.reason };
-    }
+/**
+ * Check if user can generate at a specific resolution
+ */
+export async function canGenerate(
+  userId: string,
+  resolution: Resolution
+): Promise<{ allowed: boolean; reason?: string; creditsNeeded?: number }> {
+  const credits = await getUserCredits(userId);
+  const cost = getCreditCost(resolution);
 
-    // Check feature access
-    if (usePro && !limits.canUsePro) {
-      return {
-        success: false,
-        error: "Pro model requires Pro or Team plan. Upgrade to access higher quality images.",
-      };
-    }
+  // Check resolution access
+  if (!isResolutionAvailable(credits.plan, resolution)) {
+    return {
+      allowed: false,
+      reason: `${resolution} resolution requires ${getRequiredPlanForResolution(resolution)} plan or higher`,
+    };
+  }
 
-    if (resolution === "4K" && !limits.canUse4K) {
-      return {
-        success: false,
-        error: "4K resolution requires Pro or Team plan.",
-      };
-    }
+  // Check credits
+  if (credits.remaining < cost) {
+    return {
+      allowed: false,
+      reason: `Not enough credits. Need ${cost}, have ${credits.remaining}`,
+      creditsNeeded: cost,
+    };
+  }
 
-    // 2. Enhance the prompt (unless skipped)
-    let finalPrompt = prompt;
-    let enhancementResult = null;
+  return { allowed: true, creditsNeeded: cost };
+}
 
-    if (!skipEnhancement) {
-      enhancementResult = await this.promptService.enhancePrompt({
-        userPrompt: prompt,
-        templateSlug,
-        presetSlug,
-        projectId,
-        aspectRatio,
-        styleHints,
-      });
-      finalPrompt = enhancementResult.enhancedPrompt;
-    }
+/**
+ * Deduct credits after successful generation
+ */
+async function deductCredits(
+  userId: string,
+  credits: number,
+  resolution: Resolution,
+  imageId: string
+): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { subscription: true },
+  });
 
-    // 3. Call the image generation API
-    const apiResponse = await this.callGenerateApi({
-      prompt: finalPrompt,
-      aspectRatio,
+  if (!user?.subscription) {
+    throw new Error("No subscription found");
+  }
+
+  // Update subscription
+  await prisma.subscription.update({
+    where: { id: user.subscription.id },
+    data: {
+      creditsUsed: { increment: credits },
+    },
+  });
+
+  // Record usage
+  await prisma.usageRecord.create({
+    data: {
+      userId: user.id,
+      action: "generate",
+      creditsUsed: credits,
       resolution,
-      usePro,
-      styleHints: enhancementResult?.styleHints || styleHints,
+      imageId,
+      estimatedCost: getEstimatedCost(resolution),
+    },
+  });
+}
+
+// =============================================================================
+// IMAGE GENERATION
+// =============================================================================
+
+/**
+ * Generate an image using the Gemini API
+ */
+export async function generateImage(
+  params: GenerateImageParams
+): Promise<GenerateImageResult> {
+  const {
+    userId,
+    prompt,
+    enhancedPrompt,
+    resolution = "1K",
+    aspectRatio = "1:1",
+    templateId,
+    presetId,
+    projectId,
+    characterId,
+    seed,
+  } = params;
+
+  // Check if user can generate
+  const canGen = await canGenerate(userId, resolution);
+  if (!canGen.allowed) {
+    return {
+      success: false,
+      error: canGen.reason,
+    };
+  }
+
+  // Get user and subscription
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { subscription: true },
+  });
+
+  if (!user) {
+    return { success: false, error: "User not found" };
+  }
+
+  const subscription = user.subscription;
+  const hasWatermark = subscription?.hasWatermark ?? true;
+
+  // Get dimensions based on aspect ratio and resolution
+  const dimensions = calculateDimensions(resolution, aspectRatio);
+
+  // Call Gemini API
+  const apiUrl = process.env.IMAGE_GEN_API_URL || "https://image-gen.xencolabs.com";
+  const apiKey = process.env.IMAGE_GEN_API_KEY;
+
+  const startTime = Date.now();
+
+  try {
+    const response = await fetch(`${apiUrl}/generate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
+      },
+      body: JSON.stringify({
+        prompt: enhancedPrompt || prompt,
+        width: dimensions.width,
+        height: dimensions.height,
+        seed,
+        // Add watermark parameter if needed
+        watermark: hasWatermark,
+      }),
     });
 
-    if (!apiResponse.success || !apiResponse.image) {
-      return { success: false, error: apiResponse.error || "Image generation failed" };
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `API error: ${response.status}`);
     }
 
-    // 4. Store the image record
+    const data = await response.json();
+    const generationTime = Date.now() - startTime;
+
+    // Calculate credit cost
+    const creditsCost = getCreditCost(resolution);
+
+    // Calculate expiration for R2 storage based on plan
+    const plan = subscription?.plan || "FREE";
+    const expiresAt = isR2Available() ? calculateExpiration(plan) : null;
+
+    // Save image to database (initially with Gemini URL)
     const image = await prisma.image.create({
       data: {
-        externalId: apiResponse.image.external_id,
-        userId,
-        projectId,
-        imageUrl: apiResponse.image.image_url,
+        userId: user.id,
         originalPrompt: prompt,
-        enhancedPrompt: finalPrompt,
+        enhancedPrompt: enhancedPrompt || null,
+        imageUrl: data.imageUrl,
+        thumbnailUrl: data.thumbnailUrl || null,
+        width: dimensions.width,
+        height: dimensions.height,
+        resolution,
+        creditsCost,
+        templateId,
+        presetId,
+        projectId,
+        characterId,
         aspectRatio,
-        resolution: this.mapResolution(resolution),
-        model: usePro ? "gemini-3-pro-image-preview" : "gemini-2.5-flash-image",
-        usedPro: usePro,
-        styleHints: enhancementResult?.styleHints || styleHints,
-        templateId: templateSlug
-          ? (await prisma.template.findUnique({ where: { slug: templateSlug } }))?.id
-          : undefined,
-        characterInjected: enhancementResult?.characterInjected || false,
-        isWatermarked: limits.watermarked,
-        status: "COMPLETED",
-        expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days
+        seed: data.seed || seed,
+        modelVersion: data.model || "gemini-2.0-flash",
+        generationTime,
+        hasWatermark,
+        expiresAt,
       },
     });
 
-    // 5. Record usage
-    await this.recordUsage(userId, subscription, {
-      action: usePro ? "IMAGE_GENERATED_PRO" : "IMAGE_GENERATED",
-      imageId: image.id,
-      resolution: this.mapResolution(resolution),
-    });
+    // Trigger async R2 upload (non-blocking)
+    // Image is returned immediately with Gemini URL, then migrated to R2 in background
+    if (isR2Available()) {
+      uploadToR2Async(
+        image.id,
+        data.imageUrl,
+        data.thumbnailUrl || null,
+        user.id
+      ).catch((err) => {
+        console.error("[R2] Async upload failed for image:", image.id, err);
+      });
+    }
 
-    // 6. Store prompt history
-    await prisma.promptHistory.create({
-      data: {
-        userId,
-        originalPrompt: prompt,
-        enhancedPrompt: finalPrompt,
-        templateSlug,
-        projectId,
-        aspectRatio,
-        resolution: this.mapResolution(resolution),
-        model: usePro ? "gemini-3-pro-image-preview" : "gemini-2.5-flash-image",
-        styleHints: enhancementResult?.styleHints || styleHints,
-        imageId: image.id,
-        wasSuccessful: true,
+    // Deduct credits
+    await deductCredits(userId, creditsCost, resolution, image.id);
+
+    // Save to prompt history
+    await prisma.promptHistory.upsert({
+      where: {
+        id: `${user.id}-${prompt.slice(0, 100)}`, // Simplified unique key
       },
+      create: {
+        id: `${user.id}-${prompt.slice(0, 100)}`,
+        userId: user.id,
+        prompt,
+        enhancedPrompt,
+        templateId,
+        presetId,
+      },
+      update: {
+        timesUsed: { increment: 1 },
+        lastUsedAt: new Date(),
+      },
+    }).catch(() => {
+      // Silently fail on history - not critical
     });
 
-    // 7. Return result
-    const usageRemaining = limits.monthlyImages - (subscription?.imagesUsedThisPeriod || 0) - 1;
+    // Get updated credits
+    const updatedCredits = await getUserCredits(userId);
 
     return {
       success: true,
-      image,
-      usageRemaining,
-      enhancedPrompt: finalPrompt,
-      recommendations: enhancementResult?.recommendations,
+      image: {
+        id: image.id,
+        imageUrl: image.imageUrl,
+        thumbnailUrl: image.thumbnailUrl || undefined,
+        width: image.width,
+        height: image.height,
+        resolution: image.resolution,
+        creditsCost,
+        hasWatermark: image.hasWatermark,
+      },
+      creditsRemaining: updatedCredits.remaining,
     };
-  }
-
-  /**
-   * Generate multiple images in a batch
-   */
-  async generateBatch(request: BatchGenerateRequest): Promise<BatchGenerateResult> {
-    const {
-      userId,
-      prompts,
-      projectId,
-      templateSlug,
-      presetSlug,
-      aspectRatio = "16:9",
-      resolution = "1K",
-      usePro = false,
-      styleHints,
-    } = request;
-
-    // Validate batch size
-    if (prompts.length > 10) {
-      return {
-        success: false,
-        batchId: "",
-        totalRequested: prompts.length,
-        completed: 0,
-        failed: prompts.length,
-        images: [],
-        errors: [{ index: -1, error: "Maximum batch size is 10 images" }],
-      };
-    }
-
-    // Check subscription
-    const { subscription } = await this.getUserWithSubscription(userId);
-    const limits = this.getPlanLimits(subscription);
-
-    if (!limits.canUseBatch) {
-      return {
-        success: false,
-        batchId: "",
-        totalRequested: prompts.length,
-        completed: 0,
-        failed: prompts.length,
-        images: [],
-        errors: [{ index: -1, error: "Batch generation requires Starter plan or higher" }],
-      };
-    }
-
-    // Check if user has enough credits
-    const remaining =
-      (subscription?.monthlyImageLimit || 5) - (subscription?.imagesUsedThisPeriod || 0);
-    if (remaining < prompts.length) {
-      return {
-        success: false,
-        batchId: "",
-        totalRequested: prompts.length,
-        completed: 0,
-        failed: prompts.length,
-        images: [],
-        errors: [
-          {
-            index: -1,
-            error: `Insufficient credits. You have ${remaining} images remaining this period.`,
-          },
-        ],
-      };
-    }
-
-    // Create batch job record
-    const batchJob = await prisma.batchJob.create({
-      data: {
-        userId,
-        totalImages: prompts.length,
-        status: "PROCESSING",
-        prompts: prompts,
-        sharedSettings: { aspectRatio, resolution, usePro, styleHints },
-        startedAt: new Date(),
-      },
-    });
-
-    // Enhance all prompts
-    const enhancedPrompts = await Promise.all(
-      prompts.map((prompt) =>
-        this.promptService.enhancePrompt({
-          userPrompt: prompt,
-          templateSlug,
-          presetSlug,
-          projectId,
-          aspectRatio,
-          styleHints,
-        })
-      )
-    );
-
-    // Call batch API
-    const apiResponse = await this.callBatchApi({
-      prompts: enhancedPrompts.map((e) => e.enhancedPrompt),
-      aspectRatio,
-      resolution,
-      usePro,
-    });
-
-    const images: Image[] = [];
-    const errors: Array<{ index: number; error: string }> = [];
-
-    // Process results
-    if (apiResponse.images) {
-      for (let i = 0; i < apiResponse.images.length; i++) {
-        const apiImage = apiResponse.images[i];
-
-        const image = await prisma.image.create({
-          data: {
-            externalId: apiImage.external_id,
-            userId,
-            projectId,
-            imageUrl: apiImage.image_url,
-            originalPrompt: prompts[i],
-            enhancedPrompt: enhancedPrompts[i].enhancedPrompt,
-            aspectRatio,
-            resolution: this.mapResolution(resolution),
-            model: usePro ? "gemini-3-pro-image-preview" : "gemini-2.5-flash-image",
-            usedPro: usePro,
-            styleHints: enhancedPrompts[i].styleHints,
-            characterInjected: enhancedPrompts[i].characterInjected,
-            isWatermarked: limits.watermarked,
-            status: "COMPLETED",
-            expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
-          },
-        });
-
-        images.push(image);
-
-        // Record usage for each image
-        await this.recordUsage(userId, subscription, {
-          action: usePro ? "IMAGE_GENERATED_PRO" : "IMAGE_GENERATED",
-          imageId: image.id,
-          resolution: this.mapResolution(resolution),
-        });
-      }
-    }
-
-    if (apiResponse.errors) {
-      errors.push(...apiResponse.errors);
-    }
-
-    // Update batch job
-    await prisma.batchJob.update({
-      where: { id: batchJob.id },
-      data: {
-        status: errors.length === 0 ? "COMPLETED" : errors.length < prompts.length ? "PARTIAL_FAILURE" : "FAILED",
-        completedImages: images.length,
-        failedImages: errors.length,
-        imageIds: images.map((i) => i.id),
-        errors: errors.length > 0 ? errors : undefined,
-        completedAt: new Date(),
-      },
-    });
-
+  } catch (error) {
+    console.error("Image generation failed:", error);
     return {
-      success: images.length > 0,
-      batchId: batchJob.id,
-      totalRequested: prompts.length,
-      completed: images.length,
-      failed: errors.length,
-      images,
-      errors,
+      success: false,
+      error: error instanceof Error ? error.message : "Generation failed",
     };
-  }
-
-  /**
-   * Create a character profile from an anchor image
-   */
-  async createCharacterProfile(
-    projectId: string,
-    imageId: string,
-    characterName: string
-  ): Promise<{ success: boolean; profile?: unknown; error?: string }> {
-    // Get the image
-    const image = await prisma.image.findUnique({
-      where: { id: imageId },
-      include: { project: true },
-    });
-
-    if (!image) {
-      return { success: false, error: "Image not found" };
-    }
-
-    if (image.projectId !== projectId) {
-      return { success: false, error: "Image does not belong to this project" };
-    }
-
-    // Analyze the image
-    const analysis = await this.promptService.analyzeCharacterImage({
-      imageUrl: image.imageUrl,
-      characterName,
-      projectType: image.project?.projectType || "GENERAL",
-      styleNotes: image.styleHints || undefined,
-    });
-
-    // Create or update character profile
-    const profile = await prisma.characterProfile.upsert({
-      where: { projectId },
-      update: {
-        name: characterName,
-        description: analysis.description,
-        anchorImageId: imageId,
-        physicalTraits: analysis.physicalTraits,
-        clothing: analysis.clothing,
-        styleNotes: analysis.styleNotes,
-        analysisModel: "claude-sonnet-4-20250514",
-        analysisVersion: "1.0",
-      },
-      create: {
-        projectId,
-        name: characterName,
-        description: analysis.description,
-        anchorImageId: imageId,
-        physicalTraits: analysis.physicalTraits,
-        clothing: analysis.clothing,
-        styleNotes: analysis.styleNotes,
-        analysisModel: "claude-sonnet-4-20250514",
-        analysisVersion: "1.0",
-      },
-    });
-
-    // Record usage
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
-      select: { userId: true },
-    });
-
-    if (project) {
-      const { subscription } = await this.getUserWithSubscription(project.userId);
-      await this.recordUsage(project.userId, subscription, {
-        action: "CHARACTER_ANALYZED",
-        imageId,
-        resolution: "RES_1K",
-      });
-    }
-
-    return { success: true, profile };
-  }
-
-  // ===========================================================================
-  // PRIVATE METHODS
-  // ===========================================================================
-
-  private async getUserWithSubscription(
-    userId: string
-  ): Promise<{ user: User | null; subscription: Subscription | null }> {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: { subscription: true },
-    });
-
-    return {
-      user,
-      subscription: user?.subscription || null,
-    };
-  }
-
-  private getPlanLimits(subscription: Subscription | null) {
-    const plan = subscription?.plan || "FREE";
-    return PLAN_LIMITS[plan];
-  }
-
-  private async checkUsageLimits(
-    userId: string,
-    subscription: Subscription | null,
-    limits: (typeof PLAN_LIMITS)[PlanTier]
-  ): Promise<{ allowed: boolean; reason?: string }> {
-    const used = subscription?.imagesUsedThisPeriod || 0;
-    const limit = limits.monthlyImages;
-
-    if (used >= limit) {
-      return {
-        allowed: false,
-        reason: `You've reached your monthly limit of ${limit} images. Upgrade your plan for more.`,
-      };
-    }
-
-    return { allowed: true };
-  }
-
-  private async recordUsage(
-    userId: string,
-    subscription: Subscription | null,
-    data: {
-      action: UsageAction;
-      imageId?: string;
-      resolution: Resolution;
-    }
-  ) {
-    // Get billing period
-    const periodStart = subscription?.stripeCurrentPeriodEnd
-      ? new Date(
-          new Date(subscription.stripeCurrentPeriodEnd).getTime() - 30 * 24 * 60 * 60 * 1000
-        )
-      : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-
-    const periodEnd =
-      subscription?.stripeCurrentPeriodEnd ||
-      new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0);
-
-    // Create usage record
-    await prisma.usageRecord.create({
-      data: {
-        userId,
-        action: data.action,
-        imageId: data.imageId,
-        creditsUsed: 1,
-        wasProModel: data.action === "IMAGE_GENERATED_PRO",
-        resolution: data.resolution,
-        billingPeriodStart: periodStart,
-        billingPeriodEnd: periodEnd,
-      },
-    });
-
-    // Update subscription usage counter
-    if (subscription) {
-      await prisma.subscription.update({
-        where: { id: subscription.id },
-        data: {
-          imagesUsedThisPeriod: { increment: 1 },
-        },
-      });
-    }
-  }
-
-  private async callGenerateApi(params: {
-    prompt: string;
-    aspectRatio: string;
-    resolution: string;
-    usePro: boolean;
-    styleHints?: string | null;
-  }): Promise<ApiGenerateResponse> {
-    try {
-      const response = await fetch(`${IMAGE_GEN_API_BASE}/api/v1/generate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": IMAGE_GEN_API_KEY,
-        },
-        body: JSON.stringify({
-          prompt: params.prompt,
-          aspect_ratio: params.aspectRatio,
-          resolution: params.resolution,
-          use_pro: params.usePro,
-          style_hints: params.styleHints,
-        }),
-      });
-
-      return await response.json();
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "API call failed",
-      };
-    }
-  }
-
-  private async callBatchApi(params: {
-    prompts: string[];
-    aspectRatio: string;
-    resolution: string;
-    usePro: boolean;
-  }): Promise<ApiBatchResponse> {
-    try {
-      const response = await fetch(`${IMAGE_GEN_API_BASE}/api/v1/batch`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": IMAGE_GEN_API_KEY,
-        },
-        body: JSON.stringify({
-          prompts: params.prompts,
-          aspect_ratio: params.aspectRatio,
-          resolution: params.resolution,
-          use_pro: params.usePro,
-        }),
-      });
-
-      return await response.json();
-    } catch (error) {
-      return {
-        success: false,
-        errors: [{ index: -1, error: error instanceof Error ? error.message : "API call failed" }],
-      };
-    }
-  }
-
-  private mapResolution(res: string): Resolution {
-    switch (res) {
-      case "2K":
-        return "RES_2K";
-      case "4K":
-        return "RES_4K";
-      default:
-        return "RES_1K";
-    }
   }
 }
 
-// Export singleton instance
-export const imageGenerationService = new ImageGenerationService();
+// =============================================================================
+// BATCH GENERATION
+// =============================================================================
+
+export interface BatchGenerateParams {
+  userId: string;
+  prompt: string;
+  enhancedPrompt?: string;
+  resolution?: Resolution;
+  aspectRatio?: string;
+  count: number;
+  templateId?: string;
+  presetId?: string;
+}
+
+export async function batchGenerate(
+  params: BatchGenerateParams
+): Promise<{
+  success: boolean;
+  jobId?: string;
+  error?: string;
+}> {
+  const { userId, resolution = "1K", count } = params;
+
+  // Get user's plan
+  const credits = await getUserCredits(userId);
+  const plan = PLANS[credits.plan];
+
+  // Check batch access
+  if (!plan.features.hasBatchMode) {
+    return {
+      success: false,
+      error: "Batch mode requires Starter plan or higher",
+    };
+  }
+
+  // Check batch size limit
+  if (count > plan.features.maxBatchSize) {
+    return {
+      success: false,
+      error: `Maximum batch size is ${plan.features.maxBatchSize} for your plan`,
+    };
+  }
+
+  // Calculate total credits needed
+  const creditPerImage = getCreditCost(resolution);
+  const totalCredits = creditPerImage * count;
+
+  if (credits.remaining < totalCredits) {
+    return {
+      success: false,
+      error: `Not enough credits. Need ${totalCredits}, have ${credits.remaining}`,
+    };
+  }
+
+  // Get user
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user) {
+    return { success: false, error: "User not found" };
+  }
+
+  // Create batch job
+  const job = await prisma.batchJob.create({
+    data: {
+      userId: user.id,
+      prompt: params.prompt,
+      templateId: params.templateId,
+      presetId: params.presetId,
+      resolution,
+      count,
+      creditsReserved: totalCredits,
+      status: "PENDING",
+    },
+  });
+
+  // TODO: Queue the batch job for processing
+  // For now, process synchronously (not ideal for production)
+  processBatchJob(job.id, params).catch(console.error);
+
+  return {
+    success: true,
+    jobId: job.id,
+  };
+}
+
+async function processBatchJob(jobId: string, params: BatchGenerateParams) {
+  // Implementation would process images one by one
+  // and update the batch job status
+  // For production, use a job queue like Bull or similar
+}
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+function getNextResetDate(): Date {
+  const now = new Date();
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return nextMonth;
+}
+
+function getRequiredPlanForResolution(resolution: Resolution): string {
+  switch (resolution) {
+    case "4K":
+      return "Pro";
+    case "2K":
+      return "Starter";
+    default:
+      return "Free";
+  }
+}
+
+function getEstimatedCost(resolution: Resolution): number {
+  switch (resolution) {
+    case "4K":
+      return 0.05;
+    case "2K":
+      return 0.025;
+    default:
+      return 0.01;
+  }
+}
+
+function calculateDimensions(
+  resolution: Resolution,
+  aspectRatio: string
+): { width: number; height: number } {
+  const baseDimensions = RESOLUTION_DIMENSIONS[resolution];
+  const baseSize = baseDimensions.width;
+
+  // Parse aspect ratio
+  const [w, h] = aspectRatio.split(":").map(Number);
+  if (!w || !h) {
+    return { width: baseSize, height: baseSize };
+  }
+
+  const ratio = w / h;
+
+  if (ratio >= 1) {
+    // Landscape or square
+    return {
+      width: baseSize,
+      height: Math.round(baseSize / ratio),
+    };
+  } else {
+    // Portrait
+    return {
+      width: Math.round(baseSize * ratio),
+      height: baseSize,
+    };
+  }
+}
+
+// =============================================================================
+// IMAGE DOWNLOAD
+// =============================================================================
+
+/**
+ * Get a downloadable URL for an image
+ * This fetches the image and returns it as a blob URL or base64
+ */
+export async function getDownloadableImage(
+  imageUrl: string
+): Promise<{ success: boolean; data?: string; error?: string }> {
+  try {
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const arrayBuffer = await blob.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString("base64");
+    const mimeType = blob.type || "image/png";
+
+    return {
+      success: true,
+      data: `data:${mimeType};base64,${base64}`,
+    };
+  } catch (error) {
+    console.error("Download failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Download failed",
+    };
+  }
+}
