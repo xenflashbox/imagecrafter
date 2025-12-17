@@ -2,7 +2,8 @@ FROM node:20-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
+# Add dependencies needed for sharp (image processing)
+RUN apk add --no-cache libc6-compat vips-dev
 WORKDIR /app
 
 # Install pnpm
@@ -55,6 +56,9 @@ RUN pnpm db:generate && pnpm build
 FROM base AS runner
 WORKDIR /app
 
+# Add runtime dependencies for sharp
+RUN apk add --no-cache vips
+
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -71,6 +75,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Copy Prisma client from pnpm location
 COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 COPY --from=builder /app/node_modules/.pnpm/@prisma+client* ./node_modules/.pnpm/
+
+# Copy sharp for image processing (R2 thumbnails)
+COPY --from=builder /app/node_modules/sharp ./node_modules/sharp
+COPY --from=builder /app/node_modules/.pnpm/sharp* ./node_modules/.pnpm/
 
 USER nextjs
 
