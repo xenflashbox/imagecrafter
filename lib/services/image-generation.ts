@@ -241,7 +241,7 @@ export async function generateImage(
   const startTime = Date.now();
 
   try {
-    const response = await fetch(`${apiUrl}/generate`, {
+    const response = await fetch(`${apiUrl}/api/v1/generate`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -262,8 +262,19 @@ export async function generateImage(
       throw new Error(errorData.error || `API error: ${response.status}`);
     }
 
-    const data = await response.json();
+    const responseData = await response.json();
     const generationTime = Date.now() - startTime;
+
+    // Parse the API response (new structure uses data.image.*)
+    const imageData = responseData.image || responseData;
+    const imageUrl = imageData.image_url || imageData.imageUrl;
+    const thumbnailUrl = imageData.download_url || imageData.thumbnailUrl || null;
+    const modelVersion = imageData.model || "gemini-2.0-flash";
+    const externalId = imageData.external_id || imageData.id || null;
+
+    if (!imageUrl) {
+      throw new Error("No image URL returned from API");
+    }
 
     // Calculate credit cost
     const creditsCost = getCreditCost(resolution);
@@ -278,8 +289,8 @@ export async function generateImage(
         userId: user.id,
         originalPrompt: prompt,
         enhancedPrompt: enhancedPrompt || null,
-        imageUrl: data.imageUrl,
-        thumbnailUrl: data.thumbnailUrl || null,
+        imageUrl: imageUrl,
+        thumbnailUrl: thumbnailUrl,
         width: dimensions.width,
         height: dimensions.height,
         resolution,
@@ -289,11 +300,12 @@ export async function generateImage(
         projectId,
         characterId,
         aspectRatio,
-        seed: data.seed || seed,
-        modelVersion: data.model || "gemini-2.0-flash",
+        seed: seed,
+        modelVersion: modelVersion,
         generationTime,
         hasWatermark,
         expiresAt,
+        externalId: externalId,
       },
     });
 
@@ -302,8 +314,8 @@ export async function generateImage(
     if (isR2Available()) {
       uploadToR2Async(
         image.id,
-        data.imageUrl,
-        data.thumbnailUrl || null,
+        imageUrl,
+        thumbnailUrl,
         user.id
       ).catch((err) => {
         console.error("[R2] Async upload failed for image:", image.id, err);
