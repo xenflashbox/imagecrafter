@@ -1,0 +1,25 @@
+{
+  "kind": "service",
+  "service_id": "imagecrafter",
+  "repo_id": "ic-a7f2d9e1-4b83-4c16-9f5a-2e8d3c1b0a47",
+  "owner": "xenco",
+  "description": "ImageCrafter — AI Image Generation SaaS (Next.js 15, Prisma, Neon DB)",
+  "git_remote": "https://github.com/xenflashbox/imagecrafter.git",
+  "deploy": {
+    "type": "swarm",
+    "manager_host": "10.8.8.15",
+    "docker_image": "registry.xencolabs.com/imagecrafter",
+    "swarm_service": "imagecrafter_imagecrafter",
+    "swarm_stack": "imagecrafter",
+    "health_url": "https://imagecrafter.app",
+    "version_url": "https://imagecrafter.app/api/health"
+  },
+  "database": {
+    "provider": "neon_postgresql",
+    "shared_db": "blogcraft-neon",
+    "table_prefix": "ic_"
+  },
+  "workspace": {
+    "expected_repo_root": "/home/xen/docker/apps/imagecrafter"
+  }
+}
