@@ -10,8 +10,6 @@ import {
   FolderKanban,
   History,
   Settings,
-  CreditCard,
-  LogOut,
   Menu,
   X,
   Sparkles,
@@ -43,15 +41,6 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  // Mock usage data - replace with real data from API
-  const usage = {
-    used: 3,
-    limit: 5,
-    plan: "Free",
-  };
-
-  const usagePercent = (usage.used / usage.limit) * 100;
 
   return (
     <div className="min-h-screen bg-[#08080c] text-white">
@@ -109,38 +98,15 @@ export default function DashboardLayout({
           })}
         </nav>
 
-        {/* Usage Card */}
+        {/* Upgrade CTA */}
         <div className="p-4">
-          <div className="bg-gradient-to-br from-white/5 to-white/[0.02] rounded-xl p-4 border border-white/5">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm text-white/60">Monthly Usage</span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/70">
-                {usage.plan}
-              </span>
-            </div>
-            <div className="mb-2">
-              <span className="text-2xl font-light">{usage.used}</span>
-              <span className="text-white/40 text-sm"> / {usage.limit}</span>
-            </div>
-            <div className="h-1.5 bg-white/10 rounded-full overflow-hidden mb-3">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${usagePercent}%` }}
-                className={`h-full rounded-full ${
-                  usagePercent > 80
-                    ? "bg-gradient-to-r from-orange-500 to-red-500"
-                    : "bg-gradient-to-r from-violet-500 to-fuchsia-500"
-                }`}
-              />
-            </div>
-            <Link
-              href="/settings"
-              className="flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all text-sm font-medium"
-            >
-              <Zap className="w-4 h-4" />
-              Upgrade Plan
-            </Link>
-          </div>
+          <Link
+            href="/settings"
+            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all text-sm font-medium"
+          >
+            <Zap className="w-4 h-4" />
+            Upgrade Plan
+          </Link>
         </div>
 
         {/* User Section */}
@@ -214,20 +180,16 @@ export default function DashboardLayout({
               })}
             </nav>
 
-            {/* Mobile Usage */}
-            <div className="mt-6 p-4 bg-white/5 rounded-xl">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-white/60">Usage</span>
-                <span className="text-sm">
-                  {usage.used}/{usage.limit}
-                </span>
-              </div>
-              <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-full"
-                  style={{ width: `${usagePercent}%` }}
-                />
-              </div>
+            {/* Mobile Upgrade */}
+            <div className="mt-6">
+              <Link
+                href="/settings"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all text-sm font-medium"
+              >
+                <Zap className="w-4 h-4" />
+                Upgrade Plan
+              </Link>
             </div>
           </motion.div>
         )}

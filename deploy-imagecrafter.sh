@@ -141,8 +141,8 @@ EMAIL_FROM="${EMAIL_FROM:-ImageCrafter <hello@imagecrafter.app>}"
 # Clerk URLs with defaults
 NEXT_PUBLIC_CLERK_SIGN_IN_URL="$(require_env NEXT_PUBLIC_CLERK_SIGN_IN_URL "/sign-in")"
 NEXT_PUBLIC_CLERK_SIGN_UP_URL="$(require_env NEXT_PUBLIC_CLERK_SIGN_UP_URL "/sign-up")"
-NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL="$(require_env NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL "/generate")"
-NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL="$(require_env NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL "/generate")"
+NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL="$(require_env NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL "/dashboard")"
+NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL="$(require_env NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL "/dashboard")"
 
 # NFS config for stack deploy
 NFS_SERVER="$(require_env NFS_SERVER "10.8.8.108")"
