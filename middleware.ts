@@ -18,9 +18,11 @@ const isPublicRoute = createRouteMatcher([
   "/api/orders/(.*)",
   "/api/print/(.*)",
 
-  // Blog (public content)
+  // Blog (public content — fetched from Payload CMS)
   "/blog(.*)",
-  "/api/blog/(.*)",
+
+  // Newsletter subscription (public)
+  "/api/newsletter(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, request) => {

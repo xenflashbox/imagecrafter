@@ -300,3 +300,222 @@ export async function sendShippingUpdateEmail(
     html: baseLayout("Your Print Has Shipped", body),
   });
 }
+
+// =============================================================================
+// DOWNLOAD LINK REMINDER (sent 48 hrs before expiry)
+// =============================================================================
+
+export interface DownloadReminderEmailParams {
+  to: string;
+  name?: string;
+  orderRef: string;
+  downloadUrl: string;
+  expiresAt: Date;
+  maxDownloads: number;
+  downloadsUsed: number;
+}
+
+export async function sendDownloadReminderEmail(
+  params: DownloadReminderEmailParams
+): Promise<void> {
+  const { to, name, orderRef, downloadUrl, expiresAt, maxDownloads, downloadsUsed } = params;
+
+  const expiryStr = expiresAt.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+
+  const downloadsLeft = maxDownloads - downloadsUsed;
+
+  const body = `
+    <h2 style="margin:0 0 8px;color:#111827;font-size:22px;font-weight:700;">⏰ Your download link expires soon</h2>
+    <p style="margin:0 0 24px;color:#6b7280;font-size:15px;">
+      Hi ${name ? name : "there"},<br/>
+      Your portrait download link will expire in <strong>48 hours</strong>. Make sure to save your file before it expires.
+    </p>
+
+    <div style="background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:16px;margin-bottom:24px;">
+      <p style="margin:0;font-size:13px;color:#92400e;">
+        ⏰ <strong>Expires:</strong> ${expiryStr}<br/>
+        ⬇️ <strong>Downloads remaining:</strong> ${downloadsLeft} of ${maxDownloads}
+      </p>
+    </div>
+
+    <div style="text-align:center;margin-bottom:24px;">
+      <a href="${downloadUrl}"
+         style="display:inline-block;background:linear-gradient(135deg,#6d28d9,#db2777);color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:16px 40px;border-radius:10px;">
+        ⬇️ Download Your Portrait Now
+      </a>
+    </div>
+
+    <p style="color:#6b7280;font-size:13px;">
+      After the link expires, it cannot be recovered. If you need help, reply to this email with your order reference.
+    </p>
+
+    <div style="border-top:1px solid #e5e7eb;padding-top:20px;margin-top:4px;">
+      <p style="margin:0;color:#9ca3af;font-size:13px;">
+        <strong>Order reference:</strong> ${orderRef}
+      </p>
+    </div>
+  `;
+
+  await transport.sendMail({
+    from: EMAIL_FROM,
+    to,
+    subject: `⏰ Your portrait download expires in 48 hours — ImageCrafter`,
+    html: baseLayout("Download Expiry Reminder", body),
+  });
+}
+
+// =============================================================================
+// GENERATION FAILED (auto-refund notification)
+// =============================================================================
+
+export interface GenerationFailedEmailParams {
+  to: string;
+  name?: string;
+  orderRef: string;
+  stylePackName: string;
+  styleVariantName: string;
+  refundAmount: number;
+  currency: string;
+}
+
+export async function sendGenerationFailedEmail(
+  params: GenerationFailedEmailParams
+): Promise<void> {
+  const { to, name, orderRef, stylePackName, styleVariantName, refundAmount, currency } = params;
+
+  const refundFormatted = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currency.toUpperCase(),
+  }).format(refundAmount / 100);
+
+  const body = `
+    <h2 style="margin:0 0 8px;color:#111827;font-size:22px;font-weight:700;">We're sorry — portrait generation failed</h2>
+    <p style="margin:0 0 24px;color:#6b7280;font-size:15px;">
+      Hi ${name ? name : "there"},<br/>
+      Unfortunately, we were unable to generate your portrait. This is a rare technical issue on our end,
+      and we sincerely apologize for the inconvenience.
+    </p>
+
+    <div style="background:#f5f3ff;border:1px solid #e9d5ff;border-radius:10px;padding:20px;margin-bottom:24px;">
+      <p style="margin:0 0 4px;font-size:13px;color:#7c3aed;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Failed order</p>
+      <p style="margin:0;color:#111827;font-size:15px;font-weight:500;">${stylePackName} — ${styleVariantName}</p>
+    </div>
+
+    <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px;margin-bottom:24px;">
+      <p style="margin:0;font-size:14px;color:#991b1b;font-weight:600;">
+        ✅ Automatic refund issued: ${refundFormatted}
+      </p>
+      <p style="margin:8px 0 0;font-size:13px;color:#b91c1c;">
+        Your refund has been automatically processed and will appear on your statement within 5–10 business days.
+      </p>
+    </div>
+
+    <div style="text-align:center;margin-bottom:24px;">
+      <a href="${APP_URL}/portraits"
+         style="display:inline-block;background:linear-gradient(135deg,#6d28d9,#db2777);color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 36px;border-radius:10px;">
+        🎨 Try Again — Portrait Studio
+      </a>
+    </div>
+
+    <p style="color:#6b7280;font-size:13px;">
+      We've been notified of this failure and our team is investigating. If you try again and experience the same
+      issue, please reply to this email and we'll assist you directly.
+    </p>
+
+    <div style="border-top:1px solid #e5e7eb;padding-top:20px;margin-top:4px;">
+      <p style="margin:0;color:#9ca3af;font-size:13px;">
+        <strong>Order reference:</strong> ${orderRef}
+      </p>
+    </div>
+  `;
+
+  await transport.sendMail({
+    from: EMAIL_FROM,
+    to,
+    subject: `We're sorry — automatic refund issued for order ${orderRef}`,
+    html: baseLayout("Portrait Generation Failed", body),
+  });
+}
+
+// =============================================================================
+// DELIVERY CONFIRMATION (print delivered)
+// =============================================================================
+
+export interface DeliveryConfirmationEmailParams {
+  to: string;
+  name?: string;
+  orderRef: string;
+  stylePackName: string;
+  styleVariantName: string;
+  previewImageUrl?: string;
+}
+
+export async function sendDeliveryConfirmationEmail(
+  params: DeliveryConfirmationEmailParams
+): Promise<void> {
+  const { to, name, orderRef, stylePackName, styleVariantName, previewImageUrl } = params;
+
+  const body = `
+    <h2 style="margin:0 0 8px;color:#111827;font-size:22px;font-weight:700;">Your portrait print has arrived! 🎉</h2>
+    <p style="margin:0 0 24px;color:#6b7280;font-size:15px;">
+      Hi ${name ? name : "there"},<br/>
+      Great news! Your museum-quality portrait print has been delivered. We hope you love it!
+    </p>
+
+    ${previewImageUrl ? `
+    <div style="text-align:center;margin-bottom:24px;">
+      <img src="${previewImageUrl}" alt="Your portrait" style="max-width:100%;border-radius:8px;" />
+    </div>` : ""}
+
+    <div style="background:#f5f3ff;border:1px solid #e9d5ff;border-radius:10px;padding:20px;margin-bottom:24px;">
+      <p style="margin:0 0 4px;font-size:13px;color:#7c3aed;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Delivered</p>
+      <p style="margin:0;color:#111827;font-size:15px;font-weight:500;">${stylePackName} — ${styleVariantName}</p>
+    </div>
+
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin-bottom:24px;">
+      <p style="margin:0;font-size:14px;color:#14532d;">
+        ✅ Your print has been delivered successfully.
+      </p>
+    </div>
+
+    <p style="color:#6b7280;font-size:15px;margin-bottom:20px;">
+      <strong>Loving your portrait?</strong> Share it with friends and family — 
+      tag us on social with <strong>#ImageCrafter</strong> and we may feature your art!
+    </p>
+
+    <div style="display:flex;gap:12px;margin-bottom:24px;">
+      <a href="https://twitter.com/intent/tweet?text=Just+received+my+AI+portrait+from+%40ImageCrafter+%F0%9F%8E%A8+%23ImageCrafter&url=${encodeURIComponent(APP_URL)}"
+         target="_blank"
+         style="display:inline-block;background:#000000;color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;padding:10px 20px;border-radius:8px;">
+        Share on Twitter
+      </a>
+    </div>
+
+    <div style="text-align:center;margin-bottom:24px;">
+      <a href="${APP_URL}/portraits"
+         style="display:inline-block;background:linear-gradient(135deg,#6d28d9,#db2777);color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 36px;border-radius:10px;">
+        🎨 Create Another Portrait
+      </a>
+    </div>
+
+    <div style="border-top:1px solid #e5e7eb;padding-top:20px;margin-top:4px;">
+      <p style="margin:0;color:#9ca3af;font-size:13px;">
+        <strong>Order reference:</strong> ${orderRef}
+      </p>
+    </div>
+  `;
+
+  await transport.sendMail({
+    from: EMAIL_FROM,
+    to,
+    subject: `Your portrait print has arrived! 🎉 — ImageCrafter`,
+    html: baseLayout("Print Delivered", body),
+  });
+}
