@@ -1,7 +1,20 @@
 "use client";
 
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+/**
+ * /gallery — Subscriber Image Gallery (Phase 5 Redesign)
+ *
+ * Shows two tabs:
+ *   • AI Images    — generated images from /api/images (real data)
+ *   • My Portraits — portrait history from /api/portraits (subscriber integration)
+ *
+ * Features:
+ *   - Search, template filter, favorites filter
+ *   - Grid / masonry toggle
+ *   - Image detail modal with download + favorite
+ *   - Pagination via "Load more"
+ */
+
+import { useState, useEffect, useCallback } from "react";
 import {
   Search,
   Filter,
@@ -11,170 +24,213 @@ import {
   Heart,
   Trash2,
   Copy,
-  ExternalLink,
+  X,
   Calendar,
   Image as ImageIcon,
-  X,
-  ChevronLeft,
-  ChevronRight,
-  MoreVertical,
+  Loader2,
   RefreshCw,
+  Camera,
+  ChevronDown,
+  Check,
+  ExternalLink,
 } from "lucide-react";
+import Link from "next/link";
 
-// ============================================================================
+// =============================================================================
 // TYPES
-// ============================================================================
+// =============================================================================
 
 interface GalleryImage {
   id: string;
   imageUrl: string;
+  thumbnailUrl?: string | null;
   originalPrompt: string;
-  enhancedPrompt: string;
+  enhancedPrompt: string | null;
   aspectRatio: string;
-  templateName?: string;
-  projectName?: string;
+  resolution: string;
+  creditsCost: number;
+  hasWatermark: boolean;
   isFavorite: boolean;
-  createdAt: string;
+  generatedAt: string;
+  template: { name: string; slug: string } | null;
+  project: { name: string } | null;
 }
 
-// ============================================================================
-// MOCK DATA - Replace with API call
-// ============================================================================
+interface PortraitItem {
+  id: string;
+  previewImageUrl: string | null;
+  status: string;
+  stylePackSlug: string | null;
+  styleVariantSlug: string | null;
+  createdAt: string;
+  order: {
+    id: string;
+    type: string;
+    status: string;
+  } | null;
+}
 
-const mockImages: GalleryImage[] = [
-  {
-    id: "1",
-    imageUrl: "https://picsum.photos/seed/img1/800/450",
-    originalPrompt: "A cozy coffee shop in autumn",
-    enhancedPrompt:
-      "Warm editorial photograph of artisan coffee being poured in cozy autumn cafe, morning light streaming through windows, fall leaves visible outside, steam rising from cup, wooden counter and plants, lifestyle photography style",
-    aspectRatio: "16:9",
-    templateName: "Blog Hero",
-    isFavorite: true,
-    createdAt: "2024-12-13T10:30:00Z",
-  },
-  {
-    id: "2",
-    imageUrl: "https://picsum.photos/seed/img2/800/800",
-    originalPrompt: "Tech startup team meeting",
-    enhancedPrompt:
-      "Modern flat illustration of diverse team collaborating around holographic display, blue and purple gradient background, tech startup aesthetic, clean geometric shapes",
-    aspectRatio: "1:1",
-    templateName: "Social Media",
-    isFavorite: false,
-    createdAt: "2024-12-12T15:45:00Z",
-  },
-  {
-    id: "3",
-    imageUrl: "https://picsum.photos/seed/img3/450/800",
-    originalPrompt: "Friendly turtle character",
-    enhancedPrompt:
-      "Tina Tortoise: A friendly sea turtle with sage-green shell, pink bow, large expressive brown eyes, soft watercolor children's book illustration style",
-    aspectRatio: "9:16",
-    templateName: "Children's Book",
-    projectName: "Tina Tortoise",
-    isFavorite: true,
-    createdAt: "2024-12-11T09:15:00Z",
-  },
-  {
-    id: "4",
-    imageUrl: "https://picsum.photos/seed/img4/800/450",
-    originalPrompt: "AI neural network visualization",
-    enhancedPrompt:
-      "Futuristic visualization of neural network layers processing data, flowing cyan and purple data streams, dark background with glowing nodes, cinematic lighting",
-    aspectRatio: "16:9",
-    templateName: "Blog Hero",
-    isFavorite: false,
-    createdAt: "2024-12-10T14:20:00Z",
-  },
-  {
-    id: "5",
-    imageUrl: "https://picsum.photos/seed/img5/800/600",
-    originalPrompt: "Product shot of headphones",
-    enhancedPrompt:
-      "Premium wireless headphones on pure white background, soft studio shadows, product photography style, floating angle, clean and minimal",
-    aspectRatio: "4:3",
-    templateName: "Product Shots",
-    isFavorite: false,
-    createdAt: "2024-12-09T11:00:00Z",
-  },
-  {
-    id: "6",
-    imageUrl: "https://picsum.photos/seed/img6/800/450",
-    originalPrompt: "Presentation slide background",
-    enhancedPrompt:
-      "Abstract professional background, subtle blue gradient, geometric shapes in corners, large empty center space for text, corporate presentation style",
-    aspectRatio: "16:9",
-    templateName: "Presentations",
-    isFavorite: false,
-    createdAt: "2024-12-08T16:30:00Z",
-  },
-];
+interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasMore: boolean;
+}
 
-// ============================================================================
+type Tab = "images" | "portraits";
+type ViewMode = "grid" | "masonry";
+
+// =============================================================================
 // COMPONENT
-// ============================================================================
+// =============================================================================
 
 export default function GalleryPage() {
-  const [images, setImages] = useState<GalleryImage[]>(mockImages);
+  const [tab, setTab] = useState<Tab>("images");
+
+  // Image gallery state
+  const [images, setImages] = useState<GalleryImage[]>([]);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
+  const [loadingImages, setLoadingImages] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // Portrait history state
+  const [portraits, setPortraits] = useState<PortraitItem[]>([]);
+  const [loadingPortraits, setLoadingPortraits] = useState(false);
+  const [portraitsLoaded, setPortraitsLoaded] = useState(false);
+
+  // Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTemplate, setFilterTemplate] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"grid" | "masonry">("grid");
-  const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
-  // Filter images
-  const filteredImages = images.filter((img) => {
-    const matchesSearch =
-      searchQuery === "" ||
-      img.originalPrompt.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      img.templateName?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = !filterTemplate || img.templateName === filterTemplate;
-    return matchesSearch && matchesFilter;
-  });
+  // View
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [selectedImage, setSelectedImage] = useState<GalleryImage | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
-  // Get unique template names for filter
-  const templateNames = [...new Set(images.map((img) => img.templateName).filter(Boolean))];
+  // Unique template names from loaded images (for filter)
+  const templateNames = [...new Set(images.map((img) => img.template?.name).filter(Boolean))];
 
-  // Toggle favorite
-  const toggleFavorite = (id: string) => {
-    setImages((prev) =>
-      prev.map((img) => (img.id === id ? { ...img, isFavorite: !img.isFavorite } : img))
-    );
-    if (selectedImage?.id === id) {
-      setSelectedImage((prev) => (prev ? { ...prev, isFavorite: !prev.isFavorite } : null));
+  // ==========================================================================
+  // DATA LOADING
+  // ==========================================================================
+
+  const buildImageParams = useCallback((page: number) => {
+    const params = new URLSearchParams({ page: String(page), limit: "24" });
+    if (searchQuery) params.set("search", searchQuery);
+    if (filterTemplate) params.set("template", filterTemplate);
+    if (favoritesOnly) params.set("favorite", "true");
+    return params.toString();
+  }, [searchQuery, filterTemplate, favoritesOnly]);
+
+  const fetchImages = useCallback(async (page: number, append = false) => {
+    if (append) setLoadingMore(true);
+    else setLoadingImages(true);
+
+    try {
+      const res = await fetch(`/api/images?${buildImageParams(page)}`);
+      if (!res.ok) throw new Error("Failed to load images");
+      const data = await res.json();
+      if (data.success) {
+        setImages((prev) => append ? [...prev, ...data.images] : data.images);
+        setPagination(data.pagination);
+      }
+    } catch (err) {
+      console.error("Failed to load images:", err);
+    } finally {
+      setLoadingImages(false);
+      setLoadingMore(false);
+    }
+  }, [buildImageParams]);
+
+  const fetchPortraits = useCallback(async () => {
+    if (portraitsLoaded) return;
+    setLoadingPortraits(true);
+    try {
+      const res = await fetch("/api/portraits?userId=me&limit=50");
+      if (!res.ok) throw new Error("Failed to load portraits");
+      const data = await res.json();
+      if (data.success && Array.isArray(data.portraits)) {
+        setPortraits(data.portraits);
+      }
+    } catch (err) {
+      console.error("Failed to load portraits:", err);
+    } finally {
+      setLoadingPortraits(false);
+      setPortraitsLoaded(true);
+    }
+  }, [portraitsLoaded]);
+
+  // Load images on mount and filter change
+  useEffect(() => {
+    setCurrentPage(1);
+    fetchImages(1);
+  }, [searchQuery, filterTemplate, favoritesOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load portraits when tab switched
+  useEffect(() => {
+    if (tab === "portraits") fetchPortraits();
+  }, [tab, fetchPortraits]);
+
+  const handleLoadMore = () => {
+    const nextPage = currentPage + 1;
+    setCurrentPage(nextPage);
+    fetchImages(nextPage, true);
+  };
+
+  // ==========================================================================
+  // ACTIONS
+  // ==========================================================================
+
+  const toggleFavorite = async (img: GalleryImage) => {
+    const newVal = !img.isFavorite;
+    setImages((prev) => prev.map((i) => i.id === img.id ? { ...i, isFavorite: newVal } : i));
+    if (selectedImage?.id === img.id) setSelectedImage({ ...img, isFavorite: newVal });
+
+    try {
+      await fetch("/api/images", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageId: img.id, isFavorite: newVal }),
+      });
+    } catch {
+      // Revert on error
+      setImages((prev) => prev.map((i) => i.id === img.id ? { ...i, isFavorite: !newVal } : i));
     }
   };
 
-  // Format date
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  };
-
-  // Download image
   const handleDownload = async (img: GalleryImage) => {
-    const response = await fetch(img.imageUrl);
+    const url = `/api/images/download?url=${encodeURIComponent(img.imageUrl)}&filename=imagecrafter-${img.id}`;
+    const response = await fetch(url);
     const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `imagecrafter-${img.id}.png`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    const objectUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `imagecrafter-${img.id}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(objectUrl);
   };
 
-  // Copy prompt
-  const copyPrompt = (prompt: string) => {
-    navigator.clipboard.writeText(prompt);
-    // TODO: Show toast notification
+  const copyPrompt = (text: string) => {
+    navigator.clipboard.writeText(text);
   };
+
+  const formatDate = (dateStr: string) =>
+    new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+  const formatPortraitStyle = (portrait: PortraitItem) => {
+    const pack = portrait.stylePackSlug?.replace(/-/g, " ") || "Unknown style";
+    const variant = portrait.styleVariantSlug?.replace(/-/g, " ") || "";
+    return variant ? `${pack} / ${variant}` : pack;
+  };
+
+  // ==========================================================================
+  // RENDER
+  // ==========================================================================
 
   return (
     <div className="min-h-screen bg-[#08080c]">
@@ -182,322 +238,420 @@ export default function GalleryPage() {
       <div className="sticky top-0 z-30 bg-[#08080c]/80 backdrop-blur-xl border-b border-white/5">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex flex-col md:flex-row md:items-center gap-4">
-            {/* Title & Count */}
-            <div className="flex-1">
-              <h1 className="text-2xl font-light">Gallery</h1>
-              <p className="text-sm text-white/40">{filteredImages.length} images</p>
-            </div>
-
-            {/* Search */}
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search prompts, templates..."
-                className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-violet-500/50 transition-all"
-              />
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-2">
+            {/* Tabs */}
+            <div className="flex items-center gap-1 bg-white/5 rounded-xl p-1">
               <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`p-2.5 rounded-xl border transition-all ${
-                  showFilters || filterTemplate
-                    ? "bg-violet-500/20 border-violet-500/50 text-violet-300"
-                    : "bg-white/5 border-white/10 text-white/50 hover:text-white"
+                onClick={() => setTab("images")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  tab === "images" ? "bg-violet-600 text-white" : "text-white/50 hover:text-white"
                 }`}
               >
-                <Filter className="w-4 h-4" />
+                <ImageIcon className="w-4 h-4" />
+                AI Images
+                {pagination && <span className="text-xs opacity-60">({pagination.total})</span>}
               </button>
-              <div className="flex rounded-xl overflow-hidden border border-white/10">
-                <button
-                  onClick={() => setViewMode("grid")}
-                  className={`p-2.5 transition-all ${
-                    viewMode === "grid" ? "bg-white/10 text-white" : "bg-white/5 text-white/50"
-                  }`}
-                >
-                  <Grid3X3 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode("masonry")}
-                  className={`p-2.5 transition-all ${
-                    viewMode === "masonry" ? "bg-white/10 text-white" : "bg-white/5 text-white/50"
-                  }`}
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                </button>
-              </div>
+              <button
+                onClick={() => setTab("portraits")}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  tab === "portraits" ? "bg-violet-600 text-white" : "text-white/50 hover:text-white"
+                }`}
+              >
+                <Camera className="w-4 h-4" />
+                My Portraits
+                {portraits.length > 0 && <span className="text-xs opacity-60">({portraits.length})</span>}
+              </button>
             </div>
+
+            {/* Search (images tab only) */}
+            {tab === "images" && (
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search prompts, templates..."
+                  className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-violet-500/50 transition-all text-sm"
+                />
+              </div>
+            )}
+
+            {/* View controls */}
+            {tab === "images" && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setFavoritesOnly(!favoritesOnly)}
+                  className={`p-2.5 rounded-xl border transition-all ${
+                    favoritesOnly
+                      ? "bg-pink-500/20 border-pink-500/50 text-pink-300"
+                      : "bg-white/5 border-white/10 text-white/50 hover:text-white"
+                  }`}
+                  title="Favorites only"
+                >
+                  <Heart className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`p-2.5 rounded-xl border transition-all ${
+                    showFilters || filterTemplate
+                      ? "bg-violet-500/20 border-violet-500/50 text-violet-300"
+                      : "bg-white/5 border-white/10 text-white/50 hover:text-white"
+                  }`}
+                >
+                  <Filter className="w-4 h-4" />
+                </button>
+                <div className="flex rounded-xl overflow-hidden border border-white/10">
+                  <button
+                    onClick={() => setViewMode("grid")}
+                    className={`p-2.5 transition-all ${viewMode === "grid" ? "bg-white/10 text-white" : "bg-white/5 text-white/50"}`}
+                  >
+                    <Grid3X3 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode("masonry")}
+                    className={`p-2.5 transition-all ${viewMode === "masonry" ? "bg-white/10 text-white" : "bg-white/5 text-white/50"}`}
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Filter Pills */}
-          <AnimatePresence>
-            {showFilters && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="mt-4 flex flex-wrap gap-2"
+          {/* Filter pills */}
+          {tab === "images" && showFilters && templateNames.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                onClick={() => setFilterTemplate(null)}
+                className={`px-3 py-1.5 rounded-full text-xs transition-all ${
+                  !filterTemplate ? "bg-violet-500 text-white" : "bg-white/5 text-white/50 hover:text-white"
+                }`}
               >
+                All templates
+              </button>
+              {templateNames.map((name) => (
                 <button
-                  onClick={() => setFilterTemplate(null)}
-                  className={`px-3 py-1.5 rounded-full text-sm transition-all ${
-                    !filterTemplate
-                      ? "bg-violet-500 text-white"
-                      : "bg-white/5 text-white/50 hover:text-white"
+                  key={name}
+                  onClick={() => setFilterTemplate(name === filterTemplate ? null : name || null)}
+                  className={`px-3 py-1.5 rounded-full text-xs transition-all ${
+                    filterTemplate === name ? "bg-violet-500 text-white" : "bg-white/5 text-white/50 hover:text-white"
                   }`}
                 >
-                  All
+                  {name}
                 </button>
-                {templateNames.map((name) => (
-                  <button
-                    key={name}
-                    onClick={() => setFilterTemplate(name || null)}
-                    className={`px-3 py-1.5 rounded-full text-sm transition-all ${
-                      filterTemplate === name
-                        ? "bg-violet-500 text-white"
-                        : "bg-white/5 text-white/50 hover:text-white"
-                    }`}
-                  >
-                    {name}
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Gallery Grid */}
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {filteredImages.length === 0 ? (
-          <div className="text-center py-20">
-            <ImageIcon className="w-16 h-16 text-white/20 mx-auto mb-4" />
-            <h3 className="text-xl font-light text-white/60 mb-2">No images found</h3>
-            <p className="text-white/40">
-              {searchQuery || filterTemplate
-                ? "Try adjusting your search or filters"
-                : "Start creating to build your gallery"}
-            </p>
-          </div>
-        ) : (
-          <div
-            className={`grid gap-4 ${
-              viewMode === "grid"
-                ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-                : "columns-1 sm:columns-2 lg:columns-3"
-            }`}
-          >
-            {filteredImages.map((img, index) => (
-              <motion.div
-                key={img.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className={`group relative ${viewMode === "masonry" ? "mb-4 break-inside-avoid" : ""}`}
-              >
-                <div
-                  className="relative overflow-hidden rounded-xl border border-white/10 bg-white/5 cursor-pointer"
-                  onClick={() => setSelectedImage(img)}
-                >
-                  <img
-                    src={img.imageUrl}
-                    alt={img.originalPrompt}
-                    className={`w-full object-cover transition-transform duration-300 group-hover:scale-105 ${
-                      viewMode === "grid" ? "aspect-video" : ""
-                    }`}
-                  />
 
-                  {/* Overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="absolute bottom-0 left-0 right-0 p-4">
-                      <p className="text-sm text-white/90 line-clamp-2 mb-2">
-                        {img.originalPrompt}
-                      </p>
-                      <div className="flex items-center gap-2 text-xs text-white/50">
-                        {img.templateName && (
-                          <span className="px-2 py-0.5 rounded-full bg-white/10">
-                            {img.templateName}
+        {/* ===== IMAGES TAB ===== */}
+        {tab === "images" && (
+          <>
+            {loadingImages ? (
+              <div className="flex items-center justify-center py-24">
+                <Loader2 className="w-8 h-8 animate-spin text-violet-400" />
+              </div>
+            ) : images.length === 0 ? (
+              <div className="text-center py-24">
+                <ImageIcon className="w-16 h-16 text-white/20 mx-auto mb-4" />
+                <h3 className="text-xl font-light text-white/60 mb-2">
+                  {searchQuery || filterTemplate || favoritesOnly ? "No matching images" : "No images yet"}
+                </h3>
+                <p className="text-white/40 mb-6">
+                  {searchQuery || filterTemplate || favoritesOnly
+                    ? "Try adjusting your filters"
+                    : "Create your first image to start your gallery"}
+                </p>
+                {!searchQuery && !filterTemplate && !favoritesOnly && (
+                  <Link
+                    href="/generate"
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 font-medium hover:from-violet-500 hover:to-fuchsia-500 transition-all"
+                  >
+                    Create an image
+                  </Link>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className={`grid gap-4 ${
+                  viewMode === "grid"
+                    ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+                    : "columns-1 sm:columns-2 lg:columns-3"
+                }`}>
+                  {images.map((img) => (
+                    <div
+                      key={img.id}
+                      className={`group relative ${viewMode === "masonry" ? "mb-4 break-inside-avoid" : ""}`}
+                    >
+                      <div
+                        className="relative overflow-hidden rounded-xl border border-white/10 bg-white/5 cursor-pointer"
+                        onClick={() => setSelectedImage(img)}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={img.thumbnailUrl || img.imageUrl}
+                          alt={img.originalPrompt}
+                          className={`w-full object-cover transition-transform duration-300 group-hover:scale-105 ${
+                            viewMode === "grid" ? "aspect-video" : ""
+                          }`}
+                        />
+
+                        {/* Hover overlay */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="absolute bottom-0 left-0 right-0 p-4">
+                            <p className="text-sm text-white/90 line-clamp-2 mb-2">{img.originalPrompt}</p>
+                            <div className="flex items-center gap-2 text-xs text-white/50">
+                              {img.template && (
+                                <span className="px-2 py-0.5 rounded-full bg-white/10">{img.template.name}</span>
+                              )}
+                              <span>{formatDate(img.generatedAt)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Quick actions */}
+                        <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleFavorite(img); }}
+                            className={`p-2 rounded-lg backdrop-blur-xl transition-all ${
+                              img.isFavorite ? "bg-pink-500/80 text-white" : "bg-black/50 text-white/70 hover:text-white"
+                            }`}
+                          >
+                            <Heart className={`w-4 h-4 ${img.isFavorite ? "fill-current" : ""}`} />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDownload(img); }}
+                            className="p-2 rounded-lg bg-black/50 backdrop-blur-xl text-white/70 hover:text-white transition-all"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {img.isFavorite && (
+                          <div className="absolute top-3 left-3">
+                            <Heart className="w-4 h-4 text-pink-500 fill-current" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Load more */}
+                {pagination?.hasMore && (
+                  <div className="text-center mt-10">
+                    <button
+                      onClick={handleLoadMore}
+                      disabled={loadingMore}
+                      className="px-8 py-3 rounded-xl bg-white/10 hover:bg-white/20 transition-all font-medium flex items-center gap-2 mx-auto disabled:opacity-50"
+                    >
+                      {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronDown className="w-4 h-4" />}
+                      Load more images
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {/* ===== PORTRAITS TAB ===== */}
+        {tab === "portraits" && (
+          <>
+            {loadingPortraits ? (
+              <div className="flex items-center justify-center py-24">
+                <Loader2 className="w-8 h-8 animate-spin text-violet-400" />
+              </div>
+            ) : portraits.length === 0 ? (
+              <div className="text-center py-24">
+                <Camera className="w-16 h-16 text-white/20 mx-auto mb-4" />
+                <h3 className="text-xl font-light text-white/60 mb-2">No portraits yet</h3>
+                <p className="text-white/40 mb-6">
+                  Transform your photos into AI-generated art with Portrait Studio.
+                </p>
+                <Link
+                  href="/portraits/create"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 font-medium hover:from-violet-500 hover:to-fuchsia-500 transition-all"
+                >
+                  Create a portrait
+                </Link>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {portraits.map((portrait) => (
+                  <div key={portrait.id} className="group relative rounded-xl border border-white/10 bg-white/5 overflow-hidden">
+                    {/* Preview image */}
+                    <div className="aspect-square bg-gradient-to-br from-violet-900/30 to-pink-900/30 flex items-center justify-center">
+                      {portrait.previewImageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={portrait.previewImageUrl}
+                          alt={formatPortraitStyle(portrait)}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Camera className="w-12 h-12 text-white/20" />
+                      )}
+                    </div>
+
+                    {/* Info */}
+                    <div className="p-4">
+                      <div className="text-sm font-medium text-white mb-1 capitalize">
+                        {formatPortraitStyle(portrait)}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-white/40">
+                        <Calendar className="w-3 h-3" />
+                        {formatDate(portrait.createdAt)}
+                        {portrait.order && (
+                          <span className={`ml-auto px-2 py-0.5 rounded-full ${
+                            portrait.order.status === "paid" || portrait.order.status === "fulfilled" || portrait.order.status === "shipped"
+                              ? "bg-green-500/20 text-green-400"
+                              : portrait.order.status === "pending"
+                              ? "bg-yellow-500/20 text-yellow-400"
+                              : "bg-white/10 text-white/40"
+                          }`}>
+                            {portrait.order.type === "digital" ? "Digital" : "Print"} · {portrait.order.status}
                           </span>
                         )}
-                        <span>{formatDate(img.createdAt)}</span>
+                      </div>
+                    </div>
+
+                    {/* Hover overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/60">
+                      <div className="flex gap-2">
+                        <Link
+                          href={`/portraits/${portrait.id}/preview`}
+                          className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-all flex items-center gap-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          View portrait
+                        </Link>
                       </div>
                     </div>
                   </div>
-
-                  {/* Quick Actions */}
-                  <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleFavorite(img.id);
-                      }}
-                      className={`p-2 rounded-lg backdrop-blur-xl transition-all ${
-                        img.isFavorite
-                          ? "bg-pink-500/80 text-white"
-                          : "bg-black/50 text-white/70 hover:text-white"
-                      }`}
-                    >
-                      <Heart className={`w-4 h-4 ${img.isFavorite ? "fill-current" : ""}`} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDownload(img);
-                      }}
-                      className="p-2 rounded-lg bg-black/50 backdrop-blur-xl text-white/70 hover:text-white transition-all"
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {/* Favorite indicator */}
-                  {img.isFavorite && (
-                    <div className="absolute top-3 left-3">
-                      <Heart className="w-4 h-4 text-pink-500 fill-current" />
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            ))}
-          </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* Image Detail Modal */}
-      <AnimatePresence>
-        {selectedImage && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl"
-            onClick={() => setSelectedImage(null)}
+      {/* ===== IMAGE DETAIL MODAL ===== */}
+      {selectedImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl"
+          onClick={() => setSelectedImage(null)}
+        >
+          <div
+            className="relative max-w-5xl w-full max-h-[90vh] bg-[#12121a] rounded-2xl overflow-hidden border border-white/10"
+            onClick={(e) => e.stopPropagation()}
           >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="relative max-w-5xl w-full max-h-[90vh] bg-[#12121a] rounded-2xl overflow-hidden border border-white/10"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex flex-col lg:flex-row h-full max-h-[90vh]">
-                {/* Image */}
-                <div className="flex-1 flex items-center justify-center bg-black/50 p-4">
-                  <img
-                    src={selectedImage.imageUrl}
-                    alt={selectedImage.originalPrompt}
-                    className="max-w-full max-h-[60vh] lg:max-h-[80vh] object-contain rounded-lg"
-                  />
+            <div className="flex flex-col lg:flex-row h-full max-h-[90vh]">
+              {/* Image */}
+              <div className="flex-1 flex items-center justify-center bg-black/50 p-4">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={selectedImage.imageUrl}
+                  alt={selectedImage.originalPrompt}
+                  className="max-w-full max-h-[60vh] lg:max-h-[80vh] object-contain rounded-lg"
+                />
+              </div>
+
+              {/* Details */}
+              <div className="w-full lg:w-80 p-6 border-t lg:border-t-0 lg:border-l border-white/10 overflow-y-auto">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="font-medium">Image Details</h3>
+                  <button
+                    onClick={() => setSelectedImage(null)}
+                    className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-all"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
 
-                {/* Details */}
-                <div className="w-full lg:w-80 p-6 border-t lg:border-t-0 lg:border-l border-white/10 overflow-y-auto">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="font-medium">Image Details</h3>
-                    <button
-                      onClick={() => setSelectedImage(null)}
-                      className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-all"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+                {/* Meta */}
+                <div className="space-y-3 mb-6">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Calendar className="w-4 h-4 text-white/40" />
+                    <span className="text-white/60">{formatDate(selectedImage.generatedAt)}</span>
                   </div>
+                  <div className="text-xs text-white/40">
+                    {selectedImage.resolution} · {selectedImage.aspectRatio} · {selectedImage.creditsCost} credit{selectedImage.creditsCost > 1 ? "s" : ""}
+                  </div>
+                  {selectedImage.template && (
+                    <span className="inline-flex px-3 py-1 rounded-full bg-violet-500/20 text-violet-300 text-xs">
+                      {selectedImage.template.name}
+                    </span>
+                  )}
+                  {selectedImage.project && (
+                    <span className="inline-flex px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 text-xs ml-2">
+                      {selectedImage.project.name}
+                    </span>
+                  )}
+                </div>
 
-                  {/* Meta */}
-                  <div className="space-y-4 mb-6">
-                    <div className="flex items-center gap-2 text-sm">
-                      <Calendar className="w-4 h-4 text-white/40" />
-                      <span className="text-white/60">{formatDate(selectedImage.createdAt)}</span>
+                {/* Prompts */}
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-white/40 uppercase tracking-wider">Your prompt</span>
+                      <button onClick={() => copyPrompt(selectedImage.originalPrompt)} className="p-1 rounded hover:bg-white/10 transition-all">
+                        <Copy className="w-3 h-3 text-white/40" />
+                      </button>
                     </div>
-                    {selectedImage.templateName && (
-                      <div className="inline-flex px-3 py-1 rounded-full bg-violet-500/20 text-violet-300 text-sm">
-                        {selectedImage.templateName}
-                      </div>
-                    )}
-                    {selectedImage.projectName && (
-                      <div className="inline-flex ml-2 px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 text-sm">
-                        {selectedImage.projectName}
-                      </div>
-                    )}
+                    <p className="text-sm text-white/70">{selectedImage.originalPrompt}</p>
                   </div>
 
-                  {/* Prompts */}
-                  <div className="space-y-4">
+                  {selectedImage.enhancedPrompt && (
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-white/40 uppercase tracking-wider">
-                          Your Prompt
-                        </span>
-                        <button
-                          onClick={() => copyPrompt(selectedImage.originalPrompt)}
-                          className="p-1 rounded hover:bg-white/10 transition-all"
-                        >
+                        <span className="text-xs text-white/40 uppercase tracking-wider">Enhanced</span>
+                        <button onClick={() => copyPrompt(selectedImage.enhancedPrompt!)} className="p-1 rounded hover:bg-white/10 transition-all">
                           <Copy className="w-3 h-3 text-white/40" />
                         </button>
                       </div>
-                      <p className="text-sm text-white/70">{selectedImage.originalPrompt}</p>
+                      <p className="text-sm text-white/50 leading-relaxed line-clamp-6">{selectedImage.enhancedPrompt}</p>
                     </div>
+                  )}
+                </div>
 
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-white/40 uppercase tracking-wider">
-                          Enhanced Prompt
-                        </span>
-                        <button
-                          onClick={() => copyPrompt(selectedImage.enhancedPrompt)}
-                          className="p-1 rounded hover:bg-white/10 transition-all"
-                        >
-                          <Copy className="w-3 h-3 text-white/40" />
-                        </button>
-                      </div>
-                      <p className="text-sm text-white/50 leading-relaxed">
-                        {selectedImage.enhancedPrompt}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="mt-6 pt-6 border-t border-white/10 space-y-2">
+                {/* Actions */}
+                <div className="mt-6 pt-6 border-t border-white/10 space-y-2">
+                  <button
+                    onClick={() => handleDownload(selectedImage)}
+                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all flex items-center justify-center gap-2 font-medium"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download
+                  </button>
+                  <div className="flex gap-2">
                     <button
-                      onClick={() => handleDownload(selectedImage)}
-                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all flex items-center justify-center gap-2 font-medium"
+                      onClick={() => toggleFavorite(selectedImage)}
+                      className={`flex-1 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all ${
+                        selectedImage.isFavorite ? "bg-pink-500/20 text-pink-300" : "bg-white/5 text-white/60 hover:text-white"
+                      }`}
                     >
-                      <Download className="w-4 h-4" />
-                      Download
+                      <Heart className={`w-4 h-4 ${selectedImage.isFavorite ? "fill-current" : ""}`} />
+                      {selectedImage.isFavorite ? "Saved" : "Save"}
                     </button>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => toggleFavorite(selectedImage.id)}
-                        className={`flex-1 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all ${
-                          selectedImage.isFavorite
-                            ? "bg-pink-500/20 text-pink-300"
-                            : "bg-white/5 text-white/60 hover:text-white"
-                        }`}
-                      >
-                        <Heart
-                          className={`w-4 h-4 ${selectedImage.isFavorite ? "fill-current" : ""}`}
-                        />
-                        {selectedImage.isFavorite ? "Saved" : "Save"}
-                      </button>
-                      <button className="flex-1 py-2.5 rounded-xl bg-white/5 text-white/60 hover:text-white flex items-center justify-center gap-2 transition-all">
-                        <RefreshCw className="w-4 h-4" />
-                        Regenerate
-                      </button>
-                    </div>
-                    <button className="w-full py-2.5 rounded-xl bg-white/5 text-red-400 hover:bg-red-500/20 flex items-center justify-center gap-2 transition-all">
-                      <Trash2 className="w-4 h-4" />
-                      Delete
-                    </button>
+                    <Link
+                      href="/generate"
+                      className="flex-1 py-2.5 rounded-xl bg-white/5 text-white/60 hover:text-white flex items-center justify-center gap-2 transition-all text-sm"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      New image
+                    </Link>
                   </div>
                 </div>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

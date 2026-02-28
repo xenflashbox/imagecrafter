@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -9,7 +9,6 @@ import {
   Download,
   Zap,
   Calendar,
-  TrendingUp,
   Clock,
   Star,
   ChevronRight,
@@ -17,6 +16,8 @@ import {
   Sparkles,
   FolderKanban,
   History,
+  Camera,
+  Loader2,
 } from "lucide-react";
 
 // =============================================================================
@@ -48,42 +49,8 @@ interface QuickAction {
   color: string;
 }
 
-// =============================================================================
-// MOCK DATA - Replace with real API calls
-// =============================================================================
+// Quick actions (static config — no mock data)
 
-const mockStats: DashboardStats = {
-  imagesGenerated: 3,
-  imagesLimit: 5,
-  plan: "Free",
-  daysUntilReset: 18,
-  favoriteTemplate: "Blog Hero",
-  averageGenerationTime: 12,
-};
-
-const mockRecentImages: RecentImage[] = [
-  {
-    id: "1",
-    imageUrl: "https://picsum.photos/seed/dash1/400/300",
-    prompt: "A cozy coffee shop in autumn",
-    templateName: "Blog Hero",
-    createdAt: "2024-12-13T10:30:00Z",
-  },
-  {
-    id: "2",
-    imageUrl: "https://picsum.photos/seed/dash2/400/300",
-    prompt: "Tech startup team brainstorming",
-    templateName: "Social Media",
-    createdAt: "2024-12-12T15:45:00Z",
-  },
-  {
-    id: "3",
-    imageUrl: "https://picsum.photos/seed/dash3/400/300",
-    prompt: "Friendly turtle character with pink bow",
-    templateName: "Children's Book",
-    createdAt: "2024-12-11T09:15:00Z",
-  },
-];
 
 const quickActions: QuickAction[] = [
   {
@@ -94,7 +61,14 @@ const quickActions: QuickAction[] = [
     color: "from-violet-500 to-fuchsia-500",
   },
   {
-    label: "View Gallery",
+    label: "Portrait Studio",
+    href: "/portraits/create",
+    icon: Camera,
+    description: "Transform photos into art",
+    color: "from-pink-500 to-rose-500",
+  },
+  {
+    label: "Gallery",
     href: "/gallery",
     icon: ImageIcon,
     description: "Browse all your images",
@@ -107,13 +81,6 @@ const quickActions: QuickAction[] = [
     description: "Manage character consistency",
     color: "from-orange-500 to-pink-500",
   },
-  {
-    label: "History",
-    href: "/history",
-    icon: History,
-    description: "View past prompts",
-    color: "from-emerald-500 to-teal-500",
-  },
 ];
 
 // =============================================================================
@@ -121,10 +88,49 @@ const quickActions: QuickAction[] = [
 // =============================================================================
 
 export default function DashboardPage() {
-  const [stats] = useState<DashboardStats>(mockStats);
-  const [recentImages] = useState<RecentImage[]>(mockRecentImages);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [recentImages, setRecentImages] = useState<RecentImage[]>([]);
+  const [portraitCount, setPortraitCount] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const usagePercent = (stats.imagesGenerated / stats.imagesLimit) * 100;
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/usage").then((r) => r.json()),
+      fetch("/api/images?limit=6").then((r) => r.json()),
+      fetch("/api/portraits?userId=me&limit=1").then((r) => r.json()).catch((err) => { console.error("Portrait count fetch failed:", err); return null; }),
+    ]).then(([usageData, imagesData, portraitsData]) => {
+      if (usageData && !usageData.error) {
+        const daysLeft = usageData.creditsResetAt
+          ? Math.max(0, Math.ceil((new Date(usageData.creditsResetAt).getTime() - Date.now()) / 86400000))
+          : 30;
+        setStats({
+          imagesGenerated: usageData.used ?? 0,
+          imagesLimit: usageData.limit ?? 10,
+          plan: usageData.plan ?? "FREE",
+          daysUntilReset: daysLeft,
+          favoriteTemplate: "—",
+          averageGenerationTime: 18,
+        });
+      }
+      if (imagesData?.success && Array.isArray(imagesData.images)) {
+        setRecentImages(
+          imagesData.images.map((img: { id: string; imageUrl: string; originalPrompt: string; template?: { name: string } | null; generatedAt?: string; createdAt?: string }) => ({
+            id: img.id,
+            imageUrl: img.imageUrl,
+            prompt: img.originalPrompt,
+            templateName: img.template?.name,
+            createdAt: img.generatedAt || img.createdAt || new Date().toISOString(),
+          }))
+        );
+      }
+      if (portraitsData?.success) {
+        setPortraitCount(portraitsData.pagination?.total ?? portraitsData.portraits?.length ?? 0);
+      }
+      setLoading(false);
+    }).catch((err) => { console.error("Dashboard data fetch failed:", err); setLoading(false); });
+  }, []);
+
+  const usagePercent = stats ? (stats.imagesGenerated / stats.imagesLimit) * 100 : 0;
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -181,53 +187,66 @@ export default function DashboardPage() {
         <div className="grid md:grid-cols-4 gap-4 mb-8">
           {/* Usage Card */}
           <div className="md:col-span-2 bg-gradient-to-br from-violet-600/10 to-fuchsia-600/10 rounded-xl p-6 border border-violet-500/20">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <div className="text-sm text-white/60 mb-1">Monthly Usage</div>
-                <div className="text-3xl font-light">
-                  {stats.imagesGenerated}
-                  <span className="text-white/40 text-lg"> / {stats.imagesLimit}</span>
-                </div>
+            {loading || !stats ? (
+              <div className="flex items-center gap-3 text-white/40">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Loading usage...
               </div>
-              <div className="text-right">
-                <div className="text-xs px-2 py-1 rounded-full bg-white/10 inline-block mb-1">
-                  {stats.plan} Plan
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <div className="text-sm text-white/60 mb-1">Monthly Usage</div>
+                    <div className="text-3xl font-light">
+                      {stats.imagesGenerated}
+                      <span className="text-white/40 text-lg"> / {stats.imagesLimit}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs px-2 py-1 rounded-full bg-white/10 inline-block mb-1">
+                      {stats.plan} Plan
+                    </div>
+                    <div className="text-xs text-white/40">
+                      Resets in {stats.daysUntilReset} days
+                    </div>
+                  </div>
                 </div>
-                <div className="text-xs text-white/40">
-                  Resets in {stats.daysUntilReset} days
+                <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-3">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${usagePercent}%` }}
+                    className={`h-full rounded-full ${
+                      usagePercent > 80
+                        ? "bg-gradient-to-r from-orange-500 to-red-500"
+                        : "bg-gradient-to-r from-violet-500 to-fuchsia-500"
+                    }`}
+                  />
                 </div>
-              </div>
-            </div>
-            <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-3">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${usagePercent}%` }}
-                className={`h-full rounded-full ${
-                  usagePercent > 80
-                    ? "bg-gradient-to-r from-orange-500 to-red-500"
-                    : "bg-gradient-to-r from-violet-500 to-fuchsia-500"
-                }`}
-              />
-            </div>
-            {stats.plan === "Free" && (
-              <Link
-                href="/settings"
-                className="text-sm text-violet-400 hover:text-violet-300 flex items-center gap-1"
-              >
-                Upgrade for more images
-                <ChevronRight className="w-4 h-4" />
-              </Link>
+                {(stats.plan === "FREE" || stats.plan === "Free") && (
+                  <Link
+                    href="/settings"
+                    className="text-sm text-violet-400 hover:text-violet-300 flex items-center gap-1"
+                  >
+                    Upgrade for more images
+                    <ChevronRight className="w-4 h-4" />
+                  </Link>
+                )}
+              </>
             )}
           </div>
 
-          {/* Quick Stats */}
+          {/* Portrait count */}
           <div className="bg-white/5 rounded-xl p-6 border border-white/10">
             <div className="flex items-center gap-2 text-white/50 text-sm mb-2">
-              <Star className="w-4 h-4" />
-              Favorite Template
+              <Camera className="w-4 h-4" />
+              Portraits
             </div>
-            <div className="text-xl font-medium">{stats.favoriteTemplate}</div>
-            <div className="text-xs text-white/40 mt-1">Most used this month</div>
+            <div className="text-xl font-medium">
+              {loading ? <Loader2 className="w-5 h-5 animate-spin text-white/40" /> : (portraitCount ?? 0)}
+            </div>
+            <Link href="/gallery?tab=portraits" className="text-xs text-violet-400 hover:text-violet-300 mt-1 flex items-center gap-1">
+              View portrait history <ChevronRight className="w-3 h-3" />
+            </Link>
           </div>
 
           <div className="bg-white/5 rounded-xl p-6 border border-white/10">
@@ -235,7 +254,7 @@ export default function DashboardPage() {
               <Clock className="w-4 h-4" />
               Avg. Generation
             </div>
-            <div className="text-xl font-medium">{stats.averageGenerationTime}s</div>
+            <div className="text-xl font-medium">~18s</div>
             <div className="text-xs text-white/40 mt-1">Per image</div>
           </div>
         </div>
@@ -308,6 +327,7 @@ export default function DashboardPage() {
                 >
                   {/* Image */}
                   <div className="relative aspect-video">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={image.imageUrl}
                       alt={image.prompt}
