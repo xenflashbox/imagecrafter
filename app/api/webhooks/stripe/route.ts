@@ -14,6 +14,7 @@ import {
   sendDigitalPurchaseEmail,
   sendPrintPurchaseEmail,
 } from "@/lib/services/email-notification";
+import { createProdigiOrder } from "@/lib/services/print-fulfillment";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
@@ -225,11 +226,14 @@ async function handlePortraitCheckoutCompleted(
       portraitId: true,
       shippingName: true,
       printSize: true,
+      printProductSku: true,
+      printFrame: true,
       amount: true,
       currency: true,
       portrait: {
         select: {
           previewImageUrl: true,
+          hiResImageUrl: true,
           stylePackSlug: true,
           styleVariantSlug: true,
         },
@@ -350,6 +354,63 @@ async function handlePortraitCheckoutCompleted(
     });
 
     console.log(`[stripe-webhook] Print order ${orderId} paid — confirmation email sent to ${customerEmail}`);
+
+    // --- PRODIGI FULFILLMENT (Phase 4) ---
+    // Submit to Prodigi immediately after payment confirmed.
+    // Failures are logged but do NOT block the webhook response —
+    // the order can be re-submitted manually via /api/print/order.
+    const hiResUrl = order.portrait?.hiResImageUrl;
+    if (
+      hiResUrl &&
+      shippingAddress &&
+      shippingAddress.line1 &&
+      shippingAddress.city &&
+      shippingAddress.postal_code &&
+      shippingAddress.country
+    ) {
+      try {
+        const { prodigiOrderId, stage } = await createProdigiOrder({
+          orderId,
+          portraitId: order.portraitId,
+          hiResImageUrl: hiResUrl,
+          sku: order.printProductSku || "ART-8x10",
+          frame: order.printFrame || undefined,
+          recipient: {
+            name: session.shipping_details?.name || customerName || "Customer",
+            email: customerEmail,
+            line1: shippingAddress.line1,
+            line2: shippingAddress.line2 || undefined,
+            city: shippingAddress.city,
+            state: shippingAddress.state || undefined,
+            zip: shippingAddress.postal_code,
+            country: shippingAddress.country,
+          },
+        });
+
+        await prisma.order.update({
+          where: { id: orderId },
+          data: {
+            prodigiOrderId,
+            prodigiStatus: stage,
+            status: "fulfilled",
+          },
+        });
+
+        console.log(
+          `[stripe-webhook] Prodigi order ${prodigiOrderId} created for print order ${orderId}`
+        );
+      } catch (prodigiError) {
+        // Log but don't fail the webhook — order is paid, Prodigi can be retried
+        console.error(
+          `[stripe-webhook] Prodigi submission failed for order ${orderId}:`,
+          prodigiError
+        );
+      }
+    } else {
+      console.warn(
+        `[stripe-webhook] Skipping Prodigi submission for order ${orderId}: missing hi-res URL or shipping address`
+      );
+    }
   }
 }
 

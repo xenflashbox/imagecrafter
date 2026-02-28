@@ -22,20 +22,18 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import Stripe from "stripe";
 import { cookies } from "next/headers";
+import { PRINT_CATALOG, resolveSku } from "@/lib/services/print-fulfillment";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
 
-// Print pricing map: sku → { price cents, display name, size }
-const PRINT_PRODUCTS: Record<string, { amountCents: number; name: string; size: string }> = {
-  "GICLÉE_8x10":  { amountCents: 2995, name: '8×10" Fine Art Print',  size: '8×10"' },
-  "GICLÉE_12x16": { amountCents: 4995, name: '12×16" Fine Art Print', size: '12×16"' },
-  "GICLÉE_16x20": { amountCents: 7995, name: '16×20" Fine Art Print', size: '16×20"' },
-  "GICLÉE_24x36": { amountCents: 12995, name: '24×36" Fine Art Print', size: '24×36"' },
-};
-
 const DIGITAL_PRICE_CENTS = 1495;
 const SUBSCRIBER_DISCOUNT_PCT = 0.15; // 15% off for subscribers
+
+// All valid print SKUs (Phase 3 legacy + Phase 4 expanded catalog)
+const ALL_SKUS = new Set(PRINT_CATALOG.map((p) => p.sku).concat([
+  "GICLÉE_8x10", "GICLÉE_12x16", "GICLÉE_16x20", "GICLÉE_24x36", // legacy
+]));
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -57,9 +55,9 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (type === "print" && (!sku || !PRINT_PRODUCTS[sku])) {
+  if (type === "print" && (!sku || !ALL_SKUS.has(sku))) {
     return NextResponse.json(
-      { success: false, error: `Invalid print SKU. Valid: ${Object.keys(PRINT_PRODUCTS).join(", ")}` },
+      { success: false, error: `Invalid print SKU. See /api/print/products for valid SKUs.` },
       { status: 400 }
     );
   }
@@ -133,8 +131,9 @@ export async function GET(request: NextRequest) {
   }
 
   // --- Determine pricing ---
-  const product = type === "print" ? PRINT_PRODUCTS[sku!] : null;
-  const baseAmountCents = type === "digital" ? DIGITAL_PRICE_CENTS : product!.amountCents;
+  // Resolve SKU from catalog (supports both Phase 3 legacy and Phase 4 expanded)
+  const catalogProduct = type === "print" ? resolveSku(sku!) : null;
+  const baseAmountCents = type === "digital" ? DIGITAL_PRICE_CENTS : (catalogProduct?.priceUsd ?? 2995);
   const discountedAmountCents = isSubscriber
     ? Math.round(baseAmountCents * (1 - SUBSCRIBER_DISCOUNT_PCT))
     : baseAmountCents;
@@ -142,24 +141,30 @@ export async function GET(request: NextRequest) {
   const packLabel = portrait.stylePackSlug?.replace(/-/g, " ") || "Portrait";
   const variantLabel = portrait.styleVariantSlug?.replace(/-/g, " ") || "";
 
+  // Frame/wrap from print-options page
+  const frameParam = searchParams.get("frame") || catalogProduct?.defaultFrame || null;
+  const wrapParam = searchParams.get("wrap") || catalogProduct?.defaultWrap || null;
+
   const productName =
     type === "digital"
       ? `Portrait Digital Download`
-      : product!.name;
+      : (catalogProduct?.name || "Fine Art Print");
   const productDescription =
     type === "digital"
       ? `${packLabel} / ${variantLabel} — Full 4K resolution, no watermark`
-      : `${packLabel} / ${variantLabel} — ${product!.size} museum-quality print`;
+      : `${packLabel} / ${variantLabel} — ${catalogProduct?.size || ""} museum-quality print`;
 
   // --- Create Order record (pending) ---
   const order = await prisma.order.create({
     data: {
       portraitId: portrait.id,
       userId: userId || null,
-      email: userEmail || "pending@checkout",  // will be updated by webhook
+      email: userEmail || "pending@checkout",  // updated by webhook from Stripe
       type,
-      printProductSku: sku || null,
-      printSize: product?.size || null,
+      printProductSku: type === "print" ? (catalogProduct?.sku || sku) : null,
+      printSize: catalogProduct?.size || null,
+      printFrame: frameParam,
+      printFormat: catalogProduct?.format || null,
       amount: discountedAmountCents,
       currency: "usd",
       status: "pending",
