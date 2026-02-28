@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   History as HistoryIcon,
@@ -13,9 +13,10 @@ import {
   ChevronDown,
   Image as ImageIcon,
   Check,
-  Filter,
   Calendar,
+  Loader2,
 } from "lucide-react";
+import Link from "next/link";
 
 // ============================================================================
 // TYPES
@@ -23,147 +24,133 @@ import {
 
 interface PromptHistoryItem {
   id: string;
-  originalPrompt: string;
-  enhancedPrompt: string;
-  templateSlug?: string;
-  templateName?: string;
-  presetName?: string;
-  aspectRatio: string;
-  imageUrl?: string;
+  originalPrompt: string | null;
+  enhancedPrompt: string | null;
+  prompt: string;
+  templateSlug: string | null;
+  aspectRatio: string | null;
   wasSuccessful: boolean;
   isSaved: boolean;
-  timesReused: number;
+  timesUsed: number;
   createdAt: string;
 }
 
-// ============================================================================
-// MOCK DATA
-// ============================================================================
-
-const mockHistory: PromptHistoryItem[] = [
-  {
-    id: "1",
-    originalPrompt: "A cozy coffee shop in autumn",
-    enhancedPrompt:
-      "Warm editorial photograph of artisan coffee being poured in cozy autumn cafe, morning light streaming through windows, fall leaves visible outside, steam rising from cup, lifestyle photography style",
-    templateSlug: "blog-hero",
-    templateName: "Blog Hero",
-    presetName: "Lifestyle",
-    aspectRatio: "16:9",
-    imageUrl: "https://picsum.photos/seed/hist1/200/112",
-    wasSuccessful: true,
-    isSaved: true,
-    timesReused: 3,
-    createdAt: "2024-12-13T10:30:00Z",
-  },
-  {
-    id: "2",
-    originalPrompt: "Friendly green turtle with pink bow",
-    enhancedPrompt:
-      "Tina Tortoise: A friendly sea turtle with sage-green shell, pink satin bow on head, large expressive brown eyes, warm cream underbelly, soft watercolor children's book illustration style",
-    templateSlug: "childrens-book",
-    templateName: "Children's Book",
-    presetName: "Classic Watercolor",
-    aspectRatio: "4:3",
-    imageUrl: "https://picsum.photos/seed/hist2/200/150",
-    wasSuccessful: true,
-    isSaved: true,
-    timesReused: 5,
-    createdAt: "2024-12-12T15:45:00Z",
-  },
-  {
-    id: "3",
-    originalPrompt: "Tech startup team brainstorming",
-    enhancedPrompt:
-      "Modern flat illustration of diverse tech team collaborating around holographic display, blue and purple gradient, geometric shapes, innovative startup aesthetic",
-    templateSlug: "blog-hero",
-    templateName: "Blog Hero",
-    presetName: "Technology",
-    aspectRatio: "16:9",
-    imageUrl: "https://picsum.photos/seed/hist3/200/112",
-    wasSuccessful: true,
-    isSaved: false,
-    timesReused: 1,
-    createdAt: "2024-12-11T09:15:00Z",
-  },
-  {
-    id: "4",
-    originalPrompt: "Abstract AI visualization",
-    enhancedPrompt:
-      "Futuristic neural network visualization, flowing data streams in cyan and purple, glowing nodes on dark background, cinematic lighting",
-    templateSlug: "blog-hero",
-    templateName: "Blog Hero",
-    presetName: "Technology",
-    aspectRatio: "16:9",
-    wasSuccessful: false,
-    isSaved: false,
-    timesReused: 0,
-    createdAt: "2024-12-10T14:20:00Z",
-  },
-  {
-    id: "5",
-    originalPrompt: "Professional headshot background blue",
-    enhancedPrompt:
-      "Professional corporate background, subtle navy blue gradient, soft geometric shapes in corners, ample center space, headshot photography backdrop",
-    templateSlug: "profile-background",
-    templateName: "Profile Background",
-    presetName: "Corporate Blue",
-    aspectRatio: "1:1",
-    imageUrl: "https://picsum.photos/seed/hist5/200/200",
-    wasSuccessful: true,
-    isSaved: false,
-    timesReused: 2,
-    createdAt: "2024-12-09T11:00:00Z",
-  },
-];
+interface HistoryApiResponse {
+  items: PromptHistoryItem[];
+  total: number;
+  page: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}
 
 // ============================================================================
 // COMPONENT
 // ============================================================================
 
 export default function HistoryPage() {
-  const [history, setHistory] = useState<PromptHistoryItem[]>(mockHistory);
+  const [items, setItems] = useState<PromptHistoryItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSaved, setFilterSaved] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // Filter history
-  const filteredHistory = history.filter((item) => {
-    const matchesSearch =
-      searchQuery === "" ||
-      item.originalPrompt.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.templateName?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesSaved = !filterSaved || item.isSaved;
-    return matchesSearch && matchesSaved;
-  });
+  const fetchHistory = useCallback(async (pg: number, search: string, saved: boolean) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams({
+        page: String(pg),
+        limit: "20",
+        ...(search ? { search } : {}),
+        ...(saved ? { saved: "true" } : {}),
+      });
+      const res = await fetch(`/api/prompts/history?${params.toString()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data: HistoryApiResponse = await res.json();
+      setItems(data.items);
+      setTotal(data.total);
+      setPage(data.page);
+      setTotalPages(data.totalPages);
+    } catch (err) {
+      console.error("History fetch failed:", err);
+      setError("Failed to load prompt history. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchHistory(1, searchQuery, filterSaved);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, filterSaved, fetchHistory]);
 
   // Group by date
-  const groupedHistory = filteredHistory.reduce(
+  const groupedItems = items.reduce(
     (groups, item) => {
       const date = new Date(item.createdAt).toLocaleDateString("en-US", {
         weekday: "long",
         month: "long",
         day: "numeric",
       });
-      if (!groups[date]) {
-        groups[date] = [];
-      }
+      if (!groups[date]) groups[date] = [];
       groups[date].push(item);
       return groups;
     },
     {} as Record<string, PromptHistoryItem[]>
   );
 
-  const toggleSaved = (id: string) => {
-    setHistory((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, isSaved: !item.isSaved } : item))
-    );
+  const toggleSaved = async (id: string) => {
+    setActionLoading(id);
+    try {
+      const res = await fetch("/api/prompts/history", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action: "toggleSave" }),
+      });
+      if (!res.ok) throw new Error("Toggle failed");
+      const updated: { id: string; isSaved: boolean } = await res.json();
+      setItems((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, isSaved: updated.isSaved } : item))
+      );
+    } catch (err) {
+      console.error("Toggle saved failed:", err);
+    } finally {
+      setActionLoading(null);
+    }
   };
 
-  const copyPrompt = (prompt: string, id: string) => {
-    navigator.clipboard.writeText(prompt);
-    setCopiedId(id);
+  const deleteItem = async (id: string) => {
+    if (!confirm("Delete this prompt from history?")) return;
+    setActionLoading(id + "-delete");
+    try {
+      const res = await fetch("/api/prompts/history", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action: "delete" }),
+      });
+      if (!res.ok) throw new Error("Delete failed");
+      setItems((prev) => prev.filter((item) => item.id !== id));
+      setTotal((prev) => prev - 1);
+    } catch (err) {
+      console.error("Delete failed:", err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const copyPrompt = (prompt: string, copyId: string) => {
+    navigator.clipboard.writeText(prompt).catch(console.error);
+    setCopiedId(copyId);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
@@ -174,6 +161,12 @@ export default function HistoryPage() {
     });
   };
 
+  const displayPrompt = (item: PromptHistoryItem) =>
+    item.originalPrompt || item.prompt;
+
+  const displayEnhanced = (item: PromptHistoryItem) =>
+    item.enhancedPrompt || item.prompt;
+
   return (
     <div className="min-h-screen bg-[#08080c]">
       {/* Header */}
@@ -182,7 +175,9 @@ export default function HistoryPage() {
           <div className="flex flex-col md:flex-row md:items-center gap-4">
             <div className="flex-1">
               <h1 className="text-2xl font-light">Prompt History</h1>
-              <p className="text-sm text-white/40">{filteredHistory.length} prompts</p>
+              <p className="text-sm text-white/40">
+                {loading ? "Loading…" : `${total} prompts`}
+              </p>
             </div>
 
             {/* Search */}
@@ -213,32 +208,50 @@ export default function HistoryPage() {
         </div>
       </div>
 
-      {/* History List */}
+      {/* Content */}
       <div className="max-w-4xl mx-auto px-6 py-8">
-        {Object.keys(groupedHistory).length === 0 ? (
+        {loading && items.length === 0 ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
+          </div>
+        ) : error ? (
+          <div className="text-center py-20">
+            <p className="text-red-400 mb-4">{error}</p>
+            <button
+              onClick={() => fetchHistory(page, searchQuery, filterSaved)}
+              className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-sm"
+            >
+              Retry
+            </button>
+          </div>
+        ) : Object.keys(groupedItems).length === 0 ? (
           <div className="text-center py-20">
             <HistoryIcon className="w-16 h-16 text-white/20 mx-auto mb-4" />
             <h3 className="text-xl font-light text-white/60 mb-2">No prompts found</h3>
-            <p className="text-white/40">
+            <p className="text-white/40 mb-6">
               {searchQuery || filterSaved
                 ? "Try adjusting your search or filters"
-                : "Your prompt history will appear here"}
+                : "Your prompt history will appear here after you generate images"}
             </p>
+            <Link
+              href="/generate"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all font-medium text-sm"
+            >
+              Create Your First Image
+            </Link>
           </div>
         ) : (
           <div className="space-y-8">
-            {Object.entries(groupedHistory).map(([date, items]) => (
+            {Object.entries(groupedItems).map(([date, dateItems]) => (
               <div key={date}>
-                {/* Date Header */}
                 <div className="flex items-center gap-3 mb-4">
                   <Calendar className="w-4 h-4 text-white/30" />
                   <span className="text-sm text-white/40">{date}</span>
                   <div className="flex-1 h-px bg-white/10" />
                 </div>
 
-                {/* Items */}
                 <div className="space-y-3">
-                  {items.map((item, index) => (
+                  {dateItems.map((item, index) => (
                     <motion.div
                       key={item.id}
                       initial={{ opacity: 0, y: 10 }}
@@ -252,38 +265,30 @@ export default function HistoryPage() {
                         onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
                       >
                         <div className="flex items-start gap-4">
-                          {/* Thumbnail */}
-                          <div className="w-16 h-16 rounded-lg bg-white/10 flex-shrink-0 overflow-hidden">
-                            {item.imageUrl ? (
-                              <img
-                                src={item.imageUrl}
-                                alt=""
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center">
-                                <ImageIcon className="w-6 h-6 text-white/20" />
-                              </div>
-                            )}
+                          {/* Icon */}
+                          <div className="w-12 h-12 rounded-lg bg-white/10 flex-shrink-0 flex items-center justify-center">
+                            <ImageIcon className="w-5 h-5 text-white/20" />
                           </div>
 
                           {/* Content */}
                           <div className="flex-1 min-w-0">
-                            <p className="text-white/90 line-clamp-2 mb-2">{item.originalPrompt}</p>
+                            <p className="text-white/90 line-clamp-2 mb-2">
+                              {displayPrompt(item)}
+                            </p>
                             <div className="flex flex-wrap items-center gap-2 text-xs">
-                              {item.templateName && (
+                              {item.templateSlug && (
                                 <span className="px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300">
-                                  {item.templateName}
+                                  {item.templateSlug}
                                 </span>
                               )}
-                              {item.presetName && (
+                              {item.aspectRatio && (
                                 <span className="px-2 py-0.5 rounded-full bg-white/10 text-white/50">
-                                  {item.presetName}
+                                  {item.aspectRatio}
                                 </span>
                               )}
                               <span className="text-white/30">{formatTime(item.createdAt)}</span>
-                              {item.timesReused > 0 && (
-                                <span className="text-white/30">• Reused {item.timesReused}x</span>
+                              {item.timesUsed > 1 && (
+                                <span className="text-white/30">• Used {item.timesUsed}×</span>
                               )}
                               {!item.wasSuccessful && (
                                 <span className="px-2 py-0.5 rounded-full bg-red-500/20 text-red-300">
@@ -300,13 +305,16 @@ export default function HistoryPage() {
                                 e.stopPropagation();
                                 toggleSaved(item.id);
                               }}
+                              disabled={actionLoading === item.id}
                               className={`p-2 rounded-lg transition-all ${
                                 item.isSaved
                                   ? "bg-violet-500/20 text-violet-300"
                                   : "bg-white/5 text-white/40 hover:text-white"
                               }`}
                             >
-                              {item.isSaved ? (
+                              {actionLoading === item.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : item.isSaved ? (
                                 <BookmarkCheck className="w-4 h-4" />
                               ) : (
                                 <Bookmark className="w-4 h-4" />
@@ -315,7 +323,7 @@ export default function HistoryPage() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                copyPrompt(item.originalPrompt, item.id);
+                                copyPrompt(displayPrompt(item), item.id);
                               }}
                               className="p-2 rounded-lg bg-white/5 text-white/40 hover:text-white transition-all"
                             >
@@ -345,51 +353,56 @@ export default function HistoryPage() {
                           >
                             <div className="p-4 space-y-4">
                               {/* Enhanced Prompt */}
-                              <div>
-                                <div className="flex items-center justify-between mb-2">
-                                  <span className="text-xs text-white/40 uppercase tracking-wider">
-                                    Enhanced Prompt
-                                  </span>
-                                  <button
-                                    onClick={() =>
-                                      copyPrompt(item.enhancedPrompt, `${item.id}-enhanced`)
-                                    }
-                                    className="text-xs text-white/40 hover:text-white flex items-center gap-1 transition-all"
-                                  >
-                                    {copiedId === `${item.id}-enhanced` ? (
-                                      <>
-                                        <Check className="w-3 h-3 text-green-400" />
-                                        Copied
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Copy className="w-3 h-3" />
-                                        Copy
-                                      </>
-                                    )}
-                                  </button>
-                                </div>
-                                <p className="text-sm text-white/50 leading-relaxed bg-white/5 rounded-lg p-3">
-                                  {item.enhancedPrompt}
-                                </p>
-                              </div>
-
-                              {/* Settings */}
-                              <div className="flex flex-wrap gap-4 text-sm">
+                              {displayEnhanced(item) !== displayPrompt(item) && (
                                 <div>
-                                  <span className="text-white/40">Aspect:</span>{" "}
-                                  <span className="text-white/70">{item.aspectRatio}</span>
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs text-white/40 uppercase tracking-wider">
+                                      Enhanced Prompt
+                                    </span>
+                                    <button
+                                      onClick={() =>
+                                        copyPrompt(displayEnhanced(item), `${item.id}-enhanced`)
+                                      }
+                                      className="text-xs text-white/40 hover:text-white flex items-center gap-1 transition-all"
+                                    >
+                                      {copiedId === `${item.id}-enhanced` ? (
+                                        <>
+                                          <Check className="w-3 h-3 text-green-400" />
+                                          Copied
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Copy className="w-3 h-3" />
+                                          Copy
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                  <p className="text-sm text-white/50 leading-relaxed bg-white/5 rounded-lg p-3">
+                                    {displayEnhanced(item)}
+                                  </p>
                                 </div>
-                              </div>
+                              )}
 
                               {/* Action Buttons */}
                               <div className="flex gap-2 pt-2">
-                                <button className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all flex items-center justify-center gap-2 font-medium">
+                                <Link
+                                  href={`/generate?prompt=${encodeURIComponent(displayPrompt(item))}`}
+                                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all flex items-center justify-center gap-2 font-medium text-sm"
+                                >
                                   <Play className="w-4 h-4" />
                                   Run Again
-                                </button>
-                                <button className="py-2.5 px-4 rounded-xl bg-white/5 hover:bg-white/10 transition-all text-red-400">
-                                  <Trash2 className="w-4 h-4" />
+                                </Link>
+                                <button
+                                  onClick={() => deleteItem(item.id)}
+                                  disabled={actionLoading === `${item.id}-delete`}
+                                  className="py-2.5 px-4 rounded-xl bg-white/5 hover:bg-red-500/20 hover:text-red-400 transition-all text-white/40"
+                                >
+                                  {actionLoading === `${item.id}-delete` ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-4 h-4" />
+                                  )}
                                 </button>
                               </div>
                             </div>
@@ -401,6 +414,29 @@ export default function HistoryPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && !loading && (
+          <div className="flex items-center justify-center gap-3 mt-10">
+            <button
+              onClick={() => fetchHistory(page - 1, searchQuery, filterSaved)}
+              disabled={page <= 1}
+              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm"
+            >
+              ← Previous
+            </button>
+            <span className="text-white/40 text-sm">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              onClick={() => fetchHistory(page + 1, searchQuery, filterSaved)}
+              disabled={page >= totalPages}
+              className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm"
+            >
+              Next →
+            </button>
           </div>
         )}
       </div>
