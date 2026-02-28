@@ -35,6 +35,8 @@ model User {
   prompts           PromptHistory[]
   usageRecords      UsageRecord[]
   reviews           Review[]
+  portraits         Portrait[]
+  orders            Order[]
 
   @@index([email])
   @@index([stripeCustomerId])
@@ -498,4 +500,175 @@ model WaitlistEntry {
   @@index([email])
   @@index([isInvited])
   @@map("ic_WaitlistEntry")
+}
+
+// =============================================================================
+// PORTRAIT STUDIO MODELS
+// =============================================================================
+
+model Portrait {
+  id                String    @id @default(cuid())
+  userId            String?   // nullable — guest portraits have no user
+  sessionId         String    // browser session ID for guest tracking
+  sourceImageUrl    String    // original uploaded photo (S3/R2)
+  sourceImageKey    String    // storage key for cleanup
+  previewImageUrl   String?   // watermarked preview (generated)
+  hiResImageUrl     String?   // full-res, unwatermarked (generated)
+  stylePackSlug     String    // FK to StylePack.slug
+  styleVariantSlug  String    // specific variant within the pack
+  subjectType       String    // "pet" | "person" | "couple" | "family" | "group"
+  subjectAnalysis   Json      // Claude Vision output (features, description)
+  enhancedPrompt    String    // final prompt sent to Gemini
+  status            String    @default("pending") // pending | analyzing | generating | preview | purchased | failed
+  errorMessage      String?   // populated on failure
+  generationTimeMs  Int?      // track performance
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user              User?     @relation(fields: [userId], references: [id])
+  order             Order?
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("ic_Portrait")
+}
+
+model Order {
+  id                String    @id @default(cuid())
+  portraitId        String    @unique
+  userId            String?   // nullable for guest orders
+  email             String    // always required — guest provides at checkout
+  name              String?   // customer name for shipping
+  type              String    // "digital" | "print"
+
+  // Digital delivery
+  downloadUrl       String?   // secure, time-limited download link
+  downloadCount     Int       @default(0)
+  maxDownloads      Int       @default(5)
+  downloadExpiresAt DateTime? // link expiry
+
+  // Print fulfillment (Prodigi)
+  printProductSku   String?   // Prodigi product SKU
+  printSize         String?   // "8x10", "12x16", "16x20", "24x36"
+  printFrame        String?   // "none", "black", "white", "natural", "gold", "silver"
+  printFormat       String?   // "canvas", "framed_print", "art_print"
+  prodigiOrderId    String?   // Prodigi's order reference
+  prodigiStatus     String?   // Prodigi fulfillment status
+  trackingNumber    String?   // shipping tracking
+  trackingUrl       String?   // carrier tracking URL
+
+  // Shipping address (print orders only)
+  shippingName      String?
+  shippingLine1     String?
+  shippingLine2     String?
+  shippingCity      String?
+  shippingState     String?
+  shippingZip       String?
+  shippingCountry   String?
+
+  // Payment
+  stripePaymentIntentId  String?
+  stripeSessionId        String?
+  amount                 Int       // total in cents
+  currency               String    @default("usd")
+  status                 String    @default("pending") // pending | paid | fulfilled | shipped | delivered | refunded | failed
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  portrait          Portrait  @relation(fields: [portraitId], references: [id])
+  user              User?     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([email])
+  @@index([status])
+  @@index([prodigiOrderId])
+  @@map("ic_Order")
+}
+
+model StylePack {
+  id              String    @id @default(cuid())
+  slug            String    @unique
+  name            String    // display name
+  tagline         String    // short hook for the card
+  description     String    // longer description for the detail view
+  category        String    // "classic" | "masterpiece" | "time-travel" | "fantasy" | "pop-culture" | "fine-art"
+  sortOrder       Int       @default(0)
+  thumbnailUrl    String    // hero image for the pack card
+  isActive        Boolean   @default(true)
+  isPremium       Boolean   @default(false) // Pro subscribers or higher per-portrait price
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  variants        StyleVariant[]
+
+  @@index([category])
+  @@index([isActive])
+  @@map("ic_StylePack")
+}
+
+model StyleVariant {
+  id              String    @id @default(cuid())
+  stylePackId     String
+  slug            String    // unique within parent pack
+  name            String    // display name
+  description     String    // what this variant produces
+  promptTemplate  String    @db.Text // full prompt template with {{subject}} and {{style_modifiers}}
+  styleModifiers  Json      // default modifiers for this variant
+  sampleImageUrl  String    // example output for preview
+  sortOrder       Int       @default(0)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  stylePack       StylePack @relation(fields: [stylePackId], references: [id], onDelete: Cascade)
+
+  @@unique([stylePackId, slug])
+  @@index([stylePackId])
+  @@map("ic_StyleVariant")
+}
+
+// =============================================================================
+// BLOG MODELS
+// =============================================================================
+
+model BlogPost {
+  id              String    @id @default(cuid())
+  slug            String    @unique
+  title           String
+  excerpt         String    // for meta description + cards
+  content         String    @db.Text // MDX or HTML
+  coverImageUrl   String?
+  categoryId      String?
+  tags            String[]  // array of tag strings
+  status          String    @default("draft") // draft | published | archived
+  publishedAt     DateTime?
+  metaTitle       String?   // SEO override
+  metaDescription String?   // SEO override
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  category        BlogCategory? @relation(fields: [categoryId], references: [id])
+
+  @@index([slug])
+  @@index([status])
+  @@index([publishedAt])
+  @@index([categoryId])
+  @@map("ic_BlogPost")
+}
+
+model BlogCategory {
+  id              String    @id @default(cuid())
+  slug            String    @unique
+  name            String
+  description     String?
+  sortOrder       Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  posts           BlogPost[]
+
+  @@map("ic_BlogCategory")
 }

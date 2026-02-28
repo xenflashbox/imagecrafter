@@ -37,10 +37,11 @@ yarn-error.log*
 next-env.d.ts
 
 # prisma
-/prisma/migrations
+# /prisma/migrations - removed: migrations should be tracked
 
 # Original archive
 imagecrafter.zip
 .claude/memory_backups/*
 .claude/secrets/*
 .claude/IMAGECRAFTER_CLUSTER_CONFIGS.md
+docs/*
