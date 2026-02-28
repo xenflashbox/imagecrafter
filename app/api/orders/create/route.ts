@@ -1,0 +1,226 @@
+/**
+ * GET /api/orders/create
+ *
+ * Creates an Order record and a Stripe Checkout Session,
+ * then redirects the browser to Stripe's hosted checkout.
+ *
+ * DUAL-FLOW:
+ * - Guest:       email required in query params; no Stripe Customer created
+ * - Subscriber:  email from Clerk; stripeCustomerId used; 15% discount applied
+ *
+ * Query params:
+ *   portraitId  — required
+ *   type        — "digital" | "print"
+ *   sku         — required when type=print (e.g. "GICLÉE_8x10")
+ *   email       — required for guests (Stripe will also collect it)
+ *
+ * Ownership verified via sessionId cookie (guest) or Clerk userId (subscriber).
+ */
+
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
+import { prisma } from "@/lib/prisma";
+import Stripe from "stripe";
+import { cookies } from "next/headers";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
+
+// Print pricing map: sku → { price cents, display name, size }
+const PRINT_PRODUCTS: Record<string, { amountCents: number; name: string; size: string }> = {
+  "GICLÉE_8x10":  { amountCents: 2995, name: '8×10" Fine Art Print',  size: '8×10"' },
+  "GICLÉE_12x16": { amountCents: 4995, name: '12×16" Fine Art Print', size: '12×16"' },
+  "GICLÉE_16x20": { amountCents: 7995, name: '16×20" Fine Art Print', size: '16×20"' },
+  "GICLÉE_24x36": { amountCents: 12995, name: '24×36" Fine Art Print', size: '24×36"' },
+};
+
+const DIGITAL_PRICE_CENTS = 1495;
+const SUBSCRIBER_DISCOUNT_PCT = 0.15; // 15% off for subscribers
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const portraitId = searchParams.get("portraitId");
+  const type = searchParams.get("type") as "digital" | "print" | null;
+  const sku = searchParams.get("sku");
+
+  if (!portraitId || !type) {
+    return NextResponse.json(
+      { success: false, error: "portraitId and type are required" },
+      { status: 400 }
+    );
+  }
+
+  if (type !== "digital" && type !== "print") {
+    return NextResponse.json(
+      { success: false, error: "type must be 'digital' or 'print'" },
+      { status: 400 }
+    );
+  }
+
+  if (type === "print" && (!sku || !PRINT_PRODUCTS[sku])) {
+    return NextResponse.json(
+      { success: false, error: `Invalid print SKU. Valid: ${Object.keys(PRINT_PRODUCTS).join(", ")}` },
+      { status: 400 }
+    );
+  }
+
+  // --- Auth: optional ---
+  let userId: string | null = null;
+  let userEmail: string | null = null;
+  let stripeCustomerId: string | null = null;
+  let isSubscriber = false;
+
+  try {
+    const { userId: clerkUserId } = await auth();
+    if (clerkUserId) {
+      userId = clerkUserId;
+      const user = await prisma.user.findUnique({
+        where: { id: clerkUserId },
+        select: { email: true, stripeCustomerId: true, subscription: { select: { plan: true } } },
+      });
+      if (user) {
+        userEmail = user.email;
+        stripeCustomerId = user.stripeCustomerId;
+        isSubscriber = user.subscription?.plan !== "FREE" && user.subscription?.plan != null;
+      }
+    }
+  } catch {
+    // Guest
+  }
+
+  // --- Session ID (guest ownership) ---
+  const cookieStore = await cookies();
+  const sessionId = cookieStore.get("portrait_session_id")?.value;
+
+  // --- Load portrait and verify ownership ---
+  const portrait = await prisma.portrait.findUnique({
+    where: { id: portraitId },
+    select: {
+      id: true,
+      userId: true,
+      sessionId: true,
+      status: true,
+      previewImageUrl: true,
+      stylePackSlug: true,
+      styleVariantSlug: true,
+      order: { select: { id: true } },
+    },
+  });
+
+  if (!portrait) {
+    return NextResponse.json({ success: false, error: "Portrait not found" }, { status: 404 });
+  }
+
+  const isOwner =
+    (userId && portrait.userId === userId) ||
+    (sessionId && portrait.sessionId === sessionId);
+
+  if (!isOwner) {
+    return NextResponse.json({ success: false, error: "Not authorized" }, { status: 403 });
+  }
+
+  // Already purchased — redirect to success page
+  if (portrait.status === "purchased" && portrait.order?.id) {
+    return NextResponse.redirect(`${BASE_URL}/portraits/${portraitId}/success?orderId=${portrait.order.id}`);
+  }
+
+  // Portrait must have a preview
+  if (!portrait.previewImageUrl) {
+    return NextResponse.json(
+      { success: false, error: "Portrait has no preview. Please generate it first." },
+      { status: 422 }
+    );
+  }
+
+  // --- Determine pricing ---
+  const product = type === "print" ? PRINT_PRODUCTS[sku!] : null;
+  const baseAmountCents = type === "digital" ? DIGITAL_PRICE_CENTS : product!.amountCents;
+  const discountedAmountCents = isSubscriber
+    ? Math.round(baseAmountCents * (1 - SUBSCRIBER_DISCOUNT_PCT))
+    : baseAmountCents;
+
+  const packLabel = portrait.stylePackSlug?.replace(/-/g, " ") || "Portrait";
+  const variantLabel = portrait.styleVariantSlug?.replace(/-/g, " ") || "";
+
+  const productName =
+    type === "digital"
+      ? `Portrait Digital Download`
+      : product!.name;
+  const productDescription =
+    type === "digital"
+      ? `${packLabel} / ${variantLabel} — Full 4K resolution, no watermark`
+      : `${packLabel} / ${variantLabel} — ${product!.size} museum-quality print`;
+
+  // --- Create Order record (pending) ---
+  const order = await prisma.order.create({
+    data: {
+      portraitId: portrait.id,
+      userId: userId || null,
+      email: userEmail || "pending@checkout",  // will be updated by webhook
+      type,
+      printProductSku: sku || null,
+      printSize: product?.size || null,
+      amount: discountedAmountCents,
+      currency: "usd",
+      status: "pending",
+      maxDownloads: parseInt(process.env.PORTRAIT_MAX_DOWNLOADS || "5"),
+      updatedAt: new Date(),
+    },
+  });
+
+  // --- Build Stripe Checkout Session ---
+  const sessionConfig: Stripe.Checkout.SessionCreateParams = {
+    mode: "payment",
+    line_items: [
+      {
+        price_data: {
+          currency: "usd",
+          product_data: {
+            name: productName,
+            description: productDescription,
+            images: [portrait.previewImageUrl],
+          },
+          unit_amount: discountedAmountCents,
+        },
+        quantity: 1,
+      },
+    ],
+    metadata: {
+      orderId: order.id,
+      portraitId: portrait.id,
+      orderType: type,
+    },
+    success_url: `${BASE_URL}/portraits/${portrait.id}/success?session_id={CHECKOUT_SESSION_ID}&orderId=${order.id}`,
+    cancel_url: `${BASE_URL}/portraits/${portrait.id}/preview?cancelled=true`,
+  };
+
+  // Subscriber: use existing Stripe customer
+  if (isSubscriber && stripeCustomerId) {
+    sessionConfig.customer = stripeCustomerId;
+  } else {
+    // Guest or free subscriber: collect email at checkout
+    if (userEmail) {
+      sessionConfig.customer_email = userEmail;
+    }
+    // else: Stripe will prompt for email at checkout
+  }
+
+  // Print orders: collect shipping address
+  if (type === "print") {
+    sessionConfig.shipping_address_collection = {
+      allowed_countries: ["US", "CA", "GB", "AU", "DE", "FR", "IT", "ES", "NL"],
+    };
+    sessionConfig.phone_number_collection = { enabled: false };
+  }
+
+  const checkoutSession = await stripe.checkout.sessions.create(sessionConfig);
+
+  // Save Stripe session ID to order
+  await prisma.order.update({
+    where: { id: order.id },
+    data: { stripeSessionId: checkoutSession.id },
+  });
+
+  // Redirect to Stripe Checkout
+  return NextResponse.redirect(checkoutSession.url!);
+}

@@ -9,6 +9,11 @@ import { headers } from "next/headers";
 import Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 import type { PlanTier, SubscriptionStatus } from "@prisma/client";
+import { buildDownloadUrl } from "@/lib/services/download-token";
+import {
+  sendDigitalPurchaseEmail,
+  sendPrintPurchaseEmail,
+} from "@/lib/services/email-notification";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
@@ -144,6 +149,18 @@ export async function POST(request: NextRequest) {
         await handleInvoiceFailed(event.data.object as Stripe.Invoice);
         break;
 
+      case "checkout.session.expired": {
+        // Mark portrait order as failed if the session expires
+        const expiredSession = event.data.object as Stripe.Checkout.Session;
+        const failedOrderId = expiredSession.metadata?.orderId;
+        if (failedOrderId) {
+          await prisma.order
+            .update({ where: { id: failedOrderId }, data: { status: "failed" } })
+            .catch((err) => console.error("Failed to mark order expired:", err));
+        }
+        break;
+      }
+
       default:
         console.log(`Unhandled event type: ${event.type}`);
     }
@@ -156,12 +173,26 @@ export async function POST(request: NextRequest) {
 }
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+  const orderId = session.metadata?.orderId;
+
+  // -------------------------------------------------------------------------
+  // PORTRAIT PURCHASE FLOW
+  // Detected by presence of orderId in metadata (set by /api/orders/create)
+  // -------------------------------------------------------------------------
+  if (orderId) {
+    await handlePortraitCheckoutCompleted(session, orderId);
+    return;
+  }
+
+  // -------------------------------------------------------------------------
+  // SUBSCRIPTION FLOW (existing behavior)
+  // -------------------------------------------------------------------------
   const userId = session.metadata?.userId;
   const customerId = session.customer as string;
   const subscriptionId = session.subscription as string;
 
   if (!userId) {
-    console.error("No userId in checkout session metadata");
+    console.error("No userId in checkout session metadata — not a portrait order or subscription");
     return;
   }
 
@@ -174,6 +205,152 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   // Fetch the subscription details
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
   await handleSubscriptionUpdated(subscription);
+}
+
+async function handlePortraitCheckoutCompleted(
+  session: Stripe.Checkout.Session,
+  orderId: string
+) {
+  const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
+  const MAX_DOWNLOADS = parseInt(process.env.PORTRAIT_MAX_DOWNLOADS || "5");
+  const EXPIRY_HOURS = parseInt(process.env.PORTRAIT_DOWNLOAD_EXPIRY_HOURS || "72");
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true,
+      type: true,
+      email: true,
+      name: true,
+      portraitId: true,
+      shippingName: true,
+      printSize: true,
+      amount: true,
+      currency: true,
+      portrait: {
+        select: {
+          previewImageUrl: true,
+          stylePackSlug: true,
+          styleVariantSlug: true,
+        },
+      },
+    },
+  });
+
+  if (!order) {
+    console.error(`[stripe-webhook] Order not found: ${orderId}`);
+    return;
+  }
+
+  // Resolve customer email — Stripe captures it at checkout even for guests
+  const customerEmail =
+    session.customer_details?.email || order.email;
+  const customerName =
+    session.customer_details?.name || order.name || undefined;
+
+  const stylePackLabel = (order.portrait?.stylePackSlug || "Portrait").replace(/-/g, " ");
+  const styleVariantLabel = (order.portrait?.styleVariantSlug || "").replace(/-/g, " ");
+
+  if (order.type === "digital") {
+    // --- DIGITAL ORDER ---
+    const downloadExpiresAt = new Date(Date.now() + EXPIRY_HOURS * 3600 * 1000);
+
+    // Mark order as paid, set download expiry, update email
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: "paid",
+        email: customerEmail,
+        name: customerName || null,
+        maxDownloads: MAX_DOWNLOADS,
+        downloadExpiresAt,
+        stripePaymentIntentId: session.payment_intent as string || null,
+      },
+    });
+
+    // Mark portrait as purchased
+    await prisma.portrait.update({
+      where: { id: order.portraitId },
+      data: { status: "purchased" },
+    });
+
+    // Generate download token and send email
+    const downloadUrl = buildDownloadUrl(orderId, BASE_URL);
+    await sendDigitalPurchaseEmail({
+      to: customerEmail,
+      name: customerName,
+      orderRef: orderId.slice(0, 8).toUpperCase(),
+      downloadUrl,
+      downloadExpiresHours: EXPIRY_HOURS,
+      maxDownloads: MAX_DOWNLOADS,
+      stylePackName: stylePackLabel,
+      styleVariantName: styleVariantLabel,
+      previewImageUrl: order.portrait?.previewImageUrl || undefined,
+      amount: order.amount,
+      currency: order.currency,
+    });
+
+    console.log(`[stripe-webhook] Digital order ${orderId} paid — download email sent to ${customerEmail}`);
+  } else {
+    // --- PRINT ORDER ---
+    const shippingAddress = session.shipping_details?.address;
+
+    const updateData: Parameters<typeof prisma.order.update>[0]["data"] = {
+      status: "paid",
+      email: customerEmail,
+      name: customerName || null,
+      stripePaymentIntentId: session.payment_intent as string || null,
+    };
+
+    // Persist shipping address from Stripe
+    if (shippingAddress) {
+      Object.assign(updateData, {
+        shippingName: session.shipping_details?.name || null,
+        shippingLine1: shippingAddress.line1 || null,
+        shippingLine2: shippingAddress.line2 || null,
+        shippingCity: shippingAddress.city || null,
+        shippingState: shippingAddress.state || null,
+        shippingZip: shippingAddress.postal_code || null,
+        shippingCountry: shippingAddress.country || null,
+      });
+    }
+
+    await prisma.order.update({ where: { id: orderId }, data: updateData });
+
+    // Mark portrait as purchased
+    await prisma.portrait.update({
+      where: { id: order.portraitId },
+      data: { status: "purchased" },
+    });
+
+    // Send print confirmation email (Prodigi fulfillment happens in Phase 4)
+    const shippingDisplayAddress = shippingAddress
+      ? [
+          shippingAddress.line1,
+          shippingAddress.line2,
+          `${shippingAddress.city}, ${shippingAddress.state} ${shippingAddress.postal_code}`,
+          shippingAddress.country,
+        ]
+          .filter(Boolean)
+          .join("\n")
+      : "Shipping address pending";
+
+    await sendPrintPurchaseEmail({
+      to: customerEmail,
+      name: customerName,
+      orderRef: orderId.slice(0, 8).toUpperCase(),
+      stylePackName: stylePackLabel,
+      styleVariantName: styleVariantLabel,
+      printSize: order.printSize || "Custom",
+      amount: order.amount,
+      currency: order.currency,
+      shippingName: session.shipping_details?.name || customerName || "",
+      shippingAddress: shippingDisplayAddress,
+      previewImageUrl: order.portrait?.previewImageUrl || undefined,
+    });
+
+    console.log(`[stripe-webhook] Print order ${orderId} paid — confirmation email sent to ${customerEmail}`);
+  }
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
