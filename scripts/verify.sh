@@ -7,39 +7,43 @@ cd "${SCRIPT_DIR}/.."
 echo "🔍 Verifying ImageCrafter deployment..."
 echo ""
 
-# ── HTTP health checks ────────────────────────────────────────────────────────
-python3 - <<'PY'
-import json, urllib.request, sys
+fail(){ echo "❌ $*" >&2; FAILED=1; }
+ok(){ echo "✅ $*"; }
+FAILED=0
 
-d = json.load(open(".xenco/meta.json"))
-dep = d.get("deploy", {})
-all_ok = True
+# ── Read meta ─────────────────────────────────────────────────────────────────
+HEALTH_URL="$(python3 -c "import json; d=json.load(open('.xenco/meta.json')); print(d['deploy'].get('health_url',''))")"
+VERSION_URL="$(python3 -c "import json; d=json.load(open('.xenco/meta.json')); print(d['deploy'].get('version_url',''))")"
+SERVICE="$(python3 -c "import json; d=json.load(open('.xenco/meta.json')); print(d['deploy']['swarm_service'])")"
 
-for key in ("health_url", "version_url"):
-    url = dep.get(key)
-    if not url:
-        print(f"⚠️  Missing {key} in .xenco/meta.json")
-        continue
-    try:
-        with urllib.request.urlopen(url, timeout=15) as r:
-            status = r.status
-            body = r.read(2000).decode("utf-8", "ignore")
-        if status == 200:
-            print(f"✅ {key}: HTTP {status} — {url}")
-            if key == "version_url" and body:
-                print(f"   {body[:300].strip()}")
-        else:
-            print(f"⚠️  {key}: HTTP {status} — {url}")
-    except Exception as e:
-        print(f"❌ {key} failed: {url} → {e}")
-        all_ok = False
+# ── HTTP health checks (curl handles Cloudflare) ──────────────────────────────
+check_url() {
+  local label="$1"
+  local url="$2"
+  if [[ -z "$url" ]]; then
+    echo "⚠️  Missing ${label} in .xenco/meta.json"
+    return
+  fi
 
-sys.exit(0 if all_ok else 1)
-PY
+  HTTP_CODE="$(curl -s -o /tmp/verify_body.txt -w "%{http_code}" --max-time 15 \
+    -A "imagecrafter-healthcheck/1.0" "${url}" 2>/dev/null || echo "000")"
+
+  if [[ "$HTTP_CODE" == "200" ]]; then
+    ok "${label}: HTTP ${HTTP_CODE} — ${url}"
+    if [[ "$label" == "version_url" ]]; then
+      head -c 300 /tmp/verify_body.txt | tr -d '\r'
+      echo ""
+    fi
+  else
+    fail "${label}: HTTP ${HTTP_CODE} — ${url}"
+  fi
+}
+
+check_url "health_url"  "${HEALTH_URL}"
+check_url "version_url" "${VERSION_URL}"
 
 # ── Swarm service status ──────────────────────────────────────────────────────
 echo ""
-SERVICE="$(python3 -c "import json; d=json.load(open('.xenco/meta.json')); print(d['deploy']['swarm_service'])")"
 echo "🐳 Swarm service: ${SERVICE}"
 docker service ps "${SERVICE}" \
   --filter desired-state=running \
@@ -47,4 +51,9 @@ docker service ps "${SERVICE}" \
   2>/dev/null || echo "  (could not query swarm service — ensure you are on a manager node)"
 
 echo ""
-echo "✅ Verification complete."
+if [[ "$FAILED" -eq 0 ]]; then
+  echo "✅ Verification complete — all checks passed."
+else
+  echo "❌ Verification complete — some checks FAILED."
+  exit 1
+fi
