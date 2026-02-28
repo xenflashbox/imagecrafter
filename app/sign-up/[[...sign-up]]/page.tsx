@@ -4,6 +4,7 @@ export default function SignUpPage() {
   return (
     <div className="min-h-screen bg-[#06060a] flex items-center justify-center">
       <SignUp
+        afterSignUpUrl="/dashboard"
         appearance={{
           elements: {
             rootBox: "mx-auto",
