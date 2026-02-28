@@ -20,10 +20,19 @@ const PRICE_TO_PLAN: Record<string, PlanTier> = {
   [process.env.STRIPE_PRICE_TEAM!]: "TEAM",
 };
 
-// Plan configurations
+// Plan configurations — sets both credit system and legacy fields
 const PLAN_CONFIG: Record<
   PlanTier,
   {
+    // Credit system (current)
+    creditsLimit: number;
+    maxResolution: string;
+    hasProjects: boolean;
+    hasBatchMode: boolean;
+    hasApiAccess: boolean;
+    hasWatermark: boolean;
+    hasPriorityQueue: boolean;
+    // Legacy fields (kept for backwards compat)
     monthlyImageLimit: number;
     canUsePro: boolean;
     canUseBatch: boolean;
@@ -33,7 +42,14 @@ const PLAN_CONFIG: Record<
   }
 > = {
   FREE: {
-    monthlyImageLimit: 5,
+    creditsLimit: 10,
+    maxResolution: "1K",
+    hasProjects: false,
+    hasBatchMode: false,
+    hasApiAccess: false,
+    hasWatermark: true,
+    hasPriorityQueue: false,
+    monthlyImageLimit: 10,
     canUsePro: false,
     canUseBatch: false,
     canUse4K: false,
@@ -41,7 +57,14 @@ const PLAN_CONFIG: Record<
     maxProjectCount: 0,
   },
   STARTER: {
-    monthlyImageLimit: 100,
+    creditsLimit: 150,
+    maxResolution: "2K",
+    hasProjects: false,
+    hasBatchMode: true,
+    hasApiAccess: false,
+    hasWatermark: false,
+    hasPriorityQueue: false,
+    monthlyImageLimit: 150,
     canUsePro: false,
     canUseBatch: true,
     canUse4K: false,
@@ -49,7 +72,14 @@ const PLAN_CONFIG: Record<
     maxProjectCount: 0,
   },
   PRO: {
-    monthlyImageLimit: 500,
+    creditsLimit: 400,
+    maxResolution: "4K",
+    hasProjects: true,
+    hasBatchMode: true,
+    hasApiAccess: false,
+    hasWatermark: false,
+    hasPriorityQueue: true,
+    monthlyImageLimit: 400,
     canUsePro: true,
     canUseBatch: true,
     canUse4K: true,
@@ -57,7 +87,14 @@ const PLAN_CONFIG: Record<
     maxProjectCount: 10,
   },
   TEAM: {
-    monthlyImageLimit: 2000,
+    creditsLimit: 1200,
+    maxResolution: "4K",
+    hasProjects: true,
+    hasBatchMode: true,
+    hasApiAccess: true,
+    hasWatermark: false,
+    hasPriorityQueue: true,
+    monthlyImageLimit: 1200,
     canUsePro: true,
     canUseBatch: true,
     canUse4K: true,
@@ -229,7 +266,9 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
     await prisma.subscription.update({
       where: { id: subscription.id },
       data: {
-        imagesUsedThisPeriod: 0, // Reset counter for new period
+        creditsUsed: 0,
+        imagesUsedThisPeriod: 0,
+        creditsResetAt: new Date(),
       },
     });
   }
