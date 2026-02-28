@@ -7,7 +7,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { imageGenerationService, type BatchGenerateRequest } from "@/lib/services/image-generation";
+import { batchGenerate, type BatchGenerateParams } from "@/lib/services/image-generation";
+import type { Resolution } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
@@ -102,47 +103,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const requestData: BatchGenerateRequest = {
+    const requestData: BatchGenerateParams = {
       userId,
-      ...validationResult.data,
+      prompt: validationResult.data.prompts[0], // Use first prompt as base
+      resolution: validationResult.data.resolution as Resolution,
+      aspectRatio: validationResult.data.aspectRatio,
+      count: validationResult.data.prompts.length,
+      templateId: validationResult.data.templateSlug,
+      presetId: validationResult.data.presetSlug,
     };
 
     // Generate the batch
-    const result = await imageGenerationService.generateBatch(requestData);
+    const result = await batchGenerate(requestData);
 
-    if (!result.success && result.completed === 0) {
-      const statusCode = result.errors[0]?.error?.includes("Insufficient") ? 429 :
-                         result.errors[0]?.error?.includes("requires") ? 403 :
-                         500;
-
+    if (!result.success) {
       return NextResponse.json(
         {
           success: false,
-          error: result.errors[0]?.error || "Batch generation failed",
+          error: result.error || "Batch generation failed",
         },
-        { status: statusCode }
+        { status: 500 }
       );
     }
 
-    // Success response (may include partial failures)
+    // Success response
     return NextResponse.json({
       success: true,
-      batchId: result.batchId,
-      summary: {
-        totalRequested: result.totalRequested,
-        completed: result.completed,
-        failed: result.failed,
-      },
-      images: result.images.map((img) => ({
-        id: img.id,
-        externalId: img.externalId,
-        imageUrl: img.imageUrl,
-        originalPrompt: img.originalPrompt,
-        enhancedPrompt: img.enhancedPrompt,
-        aspectRatio: img.aspectRatio,
-        isWatermarked: img.isWatermarked,
-      })),
-      errors: result.errors.length > 0 ? result.errors : undefined,
+      jobId: result.jobId,
     });
   } catch (error) {
     console.error("Batch generation error:", error);

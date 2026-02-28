@@ -1,7 +1,8 @@
 {
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
-    "dm-mini"
+    "dm-mini",
+    "chrome-devtools"
   ],
   "permissions": {
     "allow": [
@@ -31,7 +32,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/xen/docker/apps/xenco-orchestrator/.venv/bin/python /home/xen/docker/apps/xenco-orchestrator/.claude/hooks/pre_tool.py"
+            "command": ".claude/hooks/pre_tool.py"
           }
         ]
       }
@@ -42,7 +43,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/xen/docker/apps/xenco-orchestrator/.venv/bin/python /home/xen/docker/apps/xenco-orchestrator/.claude/hooks/post_tool.py"
+            "command": ".claude/hooks/post_tool.py"
           },
           {
             "type": "command",

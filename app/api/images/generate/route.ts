@@ -7,7 +7,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { imageGenerationService, type GenerateImageRequest } from "@/lib/services/image-generation";
+import { generateImage, type GenerateImageParams } from "@/lib/services/image-generation";
+import type { Resolution } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
@@ -106,13 +107,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const requestData: GenerateImageRequest = {
+    const requestData: GenerateImageParams = {
       userId,
-      ...validationResult.data,
+      prompt: validationResult.data.prompt,
+      resolution: validationResult.data.resolution as Resolution,
+      aspectRatio: validationResult.data.aspectRatio,
+      templateId: validationResult.data.templateSlug,
+      presetId: validationResult.data.presetSlug,
+      projectId: validationResult.data.projectId,
     };
 
     // Generate the image
-    const result = await imageGenerationService.generateImage(requestData);
+    const result = await generateImage(requestData);
 
     if (!result.success) {
       // Determine appropriate status code
@@ -134,17 +140,15 @@ export async function POST(request: NextRequest) {
       success: true,
       image: {
         id: result.image!.id,
-        externalId: result.image!.externalId,
         imageUrl: result.image!.imageUrl,
-        originalPrompt: result.image!.originalPrompt,
-        enhancedPrompt: result.image!.enhancedPrompt,
-        aspectRatio: result.image!.aspectRatio,
+        thumbnailUrl: result.image!.thumbnailUrl,
+        width: result.image!.width,
+        height: result.image!.height,
         resolution: result.image!.resolution,
-        isWatermarked: result.image!.isWatermarked,
-        createdAt: result.image!.generatedAt,
+        creditsCost: result.image!.creditsCost,
+        hasWatermark: result.image!.hasWatermark,
       },
-      usageRemaining: result.usageRemaining,
-      recommendations: result.recommendations,
+      creditsRemaining: result.creditsRemaining,
     });
   } catch (error) {
     console.error("Image generation error:", error);

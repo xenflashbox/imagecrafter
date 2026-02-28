@@ -1,0 +1,22 @@
+{
+    "mcpServers": {
+        "chrome-devtools": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "chrome-devtools-mcp@latest", "--browser-url=http://127.0.0.1:9222"],
+            "env": {}
+        },
+        "dm-mini": {
+            "type": "stdio",
+            "command": "node",
+            "args": [
+            "/home/xen/dm-mini-mcp/dist/index.js"
+            ],
+            "env": {
+            "DM_MEMORY_URL": "https://dm-memory.devmaestro.io",
+            "DEBUG_API_KEY": "sk-local-apps-server14-memory-2025"
+            }
+        }
+    }
+}
+  
