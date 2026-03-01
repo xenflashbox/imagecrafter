@@ -20,10 +20,14 @@ import { analyzePortraitPhoto, buildSubjectDescription } from "./portrait-analys
 import { applyWatermark, prepareHiResImage } from "./watermark";
 import { uploadPortraitPreview, uploadPortraitHiRes } from "./file-storage";
 import {
+  isFacePreservationAvailable,
+  generateWithKontextPro,
+  buildKontextStylePrompt,
+  // Legacy aliases for backwards compatibility
   isInstantIDAvailable,
   generateWithInstantID,
   buildInstantIDPrompt,
-} from "./replicate-instantid";
+} from "./replicate-portrait";
 
 // =============================================================================
 // TYPES

@@ -226,6 +226,7 @@ if [[ "$SKIP_DEPLOY" == false ]]; then
     export SMTP_SERVER SMTP_PORT LOGIN BREVO_PAYLOAD_SMTP_API_KEY EMAIL_FROM
     export PRODIGI_API_KEY PRODIGI_SANDBOX_API_KEY PRODIGI_API_URL PRODIGI_SANDBOX_URL
     export PRODIGI_WEBHOOK_SECRET USE_PRODIGI_SANDBOX
+    export REPLICATE_API_TOKEN ENABLE_FACE_PRESERVATION
 
     docker stack deploy -c docker-compose.yml "${STACK_NAME}"
     ok "Stack deployed. Run 'docker service ls | grep ${STACK_NAME}' to monitor."
