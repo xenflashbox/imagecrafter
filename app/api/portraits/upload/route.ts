@@ -14,6 +14,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+
+// Route segment config - increase body size limit for image uploads
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import {

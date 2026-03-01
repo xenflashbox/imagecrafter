@@ -52,24 +52,29 @@ const AI_GATEWAY_URL =
   "https://research.xencolabs.com/api/ai/chat/completions";
 const AI_GATEWAY_KEY =
   process.env.AI_GATEWAY_API_KEY || process.env.DEVMAESTRO_API_KEY || "";
-const AI_MODEL = process.env.AI_MODEL || "claude-3-5-sonnet";
+const AI_MODEL = process.env.AI_MODEL || "claude-sonnet-4-20250514";
 const IMAGE_GEN_URL =
   process.env.IMAGE_GEN_API_URL || "https://image-gen.xencolabs.com";
 const IMAGE_GEN_KEY = process.env.IMAGE_GEN_API_KEY || "";
 
 // Custom scene enhancement system prompt (PRD section 4.5)
-const CUSTOM_SCENE_SYSTEM_PROMPT = `You are a creative director for an AI portrait generation service. 
-A user has uploaded a photo and described a custom scene they want 
+const CUSTOM_SCENE_SYSTEM_PROMPT = `You are a creative director for an AI portrait generation service.
+A user has uploaded a photo and described a custom scene they want
 their subject placed into.
 
-Your job is to transform their description into a detailed, 
+Your job is to transform their description into a detailed,
 high-quality image generation prompt that:
 
 1. Preserves the subject description exactly as provided (do not alter it)
 2. Expands the user's scene description into vivid, specific visual detail
-3. Adds appropriate artistic style, lighting, composition, and atmosphere
+3. Adds appropriate lighting, composition, and atmosphere
 4. Ensures the subject is the clear focal point of the scene
-5. Includes technical quality descriptors (resolution, detail level, etc.)
+5. CRITICAL: Emphasize that the subject's face must be PHOTOREALISTICALLY accurate
+6. The portrait must be immediately recognizable as the specific individual
+
+IMPORTANT: While the scene can be artistic or fantastical, the subject's face
+and identifying features MUST remain photorealistic. Apply artistic style to
+the environment, clothing, and lighting - NOT to facial features.
 
 Return ONLY the enhanced prompt. No explanation, no preamble.`;
 
@@ -86,10 +91,25 @@ function buildPromptFromTemplate(
     .map(([k, v]) => `${k}: ${v}`)
     .join(", ");
 
-  return promptTemplate
+  // Build the base prompt from template
+  let prompt = promptTemplate
     .replace(/\{\{subject\}\}/g, subjectDescription)
     .replace(/\{\{style_modifiers\}\}/g, modifierText)
     .replace(/\{\{user_details\}\}/g, "");
+
+  // Add strong identity preservation instruction - CRITICAL for face accuracy
+  // This ensures the AI prioritizes facial likeness over artistic interpretation
+  prompt += `
+
+CRITICAL IDENTITY PRESERVATION REQUIREMENTS:
+- The subject's face MUST be photorealistically accurate and immediately recognizable
+- Maintain EXACT facial proportions, bone structure, and all unique identifying features
+- Eyes, nose, mouth shape, and facial expressions must match the reference precisely
+- Apply artistic style to ENVIRONMENT, CLOTHING, and LIGHTING only
+- Face rendering should be 90% photorealistic even in stylized scenes
+- This portrait should be instantly recognizable as the specific individual`;
+
+  return prompt;
 }
 
 async function enhanceCustomScenePrompt(
@@ -129,12 +149,17 @@ async function enhanceCustomScenePrompt(
 
 async function callImageGen(
   prompt: string,
-  aspectRatio: string = "1:1"
+  aspectRatio: string = "1:1",
+  seed?: number
 ): Promise<{ imageUrl: string } | null> {
   const [w, h] = aspectRatio.split(":").map(Number);
   const baseSize = 1024; // Preview resolution
   const width = w >= h ? baseSize : Math.round(baseSize * (w / h));
   const height = h >= w ? baseSize : Math.round(baseSize * (h / w));
+
+  // Generate a random seed if not provided - ensures each generation is unique
+  const finalSeed = seed ?? Math.floor(Math.random() * 2147483647);
+  console.log(`[PortraitGen] Generating with seed: ${finalSeed}`);
 
   try {
     const response = await fetch(`${IMAGE_GEN_URL}/api/v1/generate`, {
@@ -143,7 +168,7 @@ async function callImageGen(
         "Content-Type": "application/json",
         ...(IMAGE_GEN_KEY && { Authorization: `Bearer ${IMAGE_GEN_KEY}` }),
       },
-      body: JSON.stringify({ prompt, width, height }),
+      body: JSON.stringify({ prompt, width, height, seed: finalSeed }),
     });
 
     if (!response.ok) {
@@ -335,16 +360,24 @@ export async function generatePortrait(
     };
   }
 
-  // --- Step 11: Store hi-res (unwatermarked) ---
+  // --- Step 11: Calculate version number for cache busting ---
+  // Count how many times this portrait has been generated (for regeneration)
+  const existingVersions = portrait.previewImageUrl
+    ? (portrait.previewImageUrl.match(/-v(\d+)-preview/) || [null, "0"])[1]
+    : "0";
+  const newVersion = parseInt(existingVersions || "0", 10) + 1;
+  console.log(`[PortraitGen] Generating version ${newVersion} for portrait ${portraitId}`);
+
+  // --- Step 12: Store hi-res (unwatermarked) ---
   const hiResBuffer = await prepareHiResImage(imageBuffer);
   let hiResImageUrl: string | undefined;
   if (hiResBuffer.success && hiResBuffer.buffer) {
-    const hiResUpload = await uploadPortraitHiRes(hiResBuffer.buffer, portraitId);
+    const hiResUpload = await uploadPortraitHiRes(hiResBuffer.buffer, portraitId, newVersion);
     if (hiResUpload.success) hiResImageUrl = hiResUpload.url;
   }
 
-  // --- Step 12: Upload watermarked preview to R2 ---
-  const previewUpload = await uploadPortraitPreview(watermarkResult.buffer, portraitId);
+  // --- Step 13: Upload watermarked preview to R2 ---
+  const previewUpload = await uploadPortraitPreview(watermarkResult.buffer, portraitId, newVersion);
   if (!previewUpload.success || !previewUpload.url) {
     await prisma.portrait.update({
       where: { id: portraitId },
@@ -357,7 +390,7 @@ export async function generatePortrait(
     };
   }
 
-  // --- Step 13: Update portrait record as complete ---
+  // --- Step 14: Update portrait record as complete ---
   const generationTimeMs = Date.now() - startTime;
   await prisma.portrait.update({
     where: { id: portraitId },

@@ -105,17 +105,21 @@ export async function uploadPortraitSource(
 
 /**
  * Upload a generated portrait preview (watermarked) to R2.
- * Path: portraits/previews/{portraitId}-preview.png
+ * Path: portraits/previews/{portraitId}-v{version}-preview.png
+ *
+ * Uses versioned filenames to bust browser cache on regeneration.
  */
 export async function uploadPortraitPreview(
   buffer: Buffer,
-  portraitId: string
+  portraitId: string,
+  version: number = 1
 ): Promise<UploadPortraitResult> {
   if (!isR2Available() || !r2Client) {
     return { success: false, error: "Storage is not configured" };
   }
 
-  const key = `portraits/previews/${portraitId}-preview.png`;
+  // Include version in filename to bust cache on regeneration
+  const key = `portraits/previews/${portraitId}-v${version}-preview.png`;
 
   try {
     const command = new PutObjectCommand({
@@ -123,8 +127,9 @@ export async function uploadPortraitPreview(
       Key: key,
       Body: buffer,
       ContentType: "image/png",
-      CacheControl: "public, max-age=3600",
-      Metadata: { portraitId, type: "preview" },
+      // Shorter cache since we use versioned URLs now
+      CacheControl: "public, max-age=86400",
+      Metadata: { portraitId, type: "preview", version: String(version) },
     });
 
     await r2Client.send(command);
@@ -145,17 +150,19 @@ export async function uploadPortraitPreview(
 
 /**
  * Upload the purchased hi-res portrait (no watermark) to R2.
- * Path: portraits/hires/{portraitId}-hires.png (private — not publicly linked until purchased)
+ * Path: portraits/hires/{portraitId}-v{version}-hires.png (private — not publicly linked until purchased)
  */
 export async function uploadPortraitHiRes(
   buffer: Buffer,
-  portraitId: string
+  portraitId: string,
+  version: number = 1
 ): Promise<UploadPortraitResult> {
   if (!isR2Available() || !r2Client) {
     return { success: false, error: "Storage is not configured" };
   }
 
-  const key = `portraits/hires/${portraitId}-hires.png`;
+  // Include version in filename for consistency with preview
+  const key = `portraits/hires/${portraitId}-v${version}-hires.png`;
 
   try {
     const command = new PutObjectCommand({

@@ -24,7 +24,7 @@ import type { CharacterProfile, Template, TemplatePreset } from "@prisma/client"
 const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || "https://api.reresume.app/api/ai/chat/completions";
 // Use AI_GATEWAY_API_KEY if available, fall back to DEVMAESTRO_API_KEY
 const AI_GATEWAY_KEY = process.env.AI_GATEWAY_API_KEY || process.env.DEVMAESTRO_API_KEY || "";
-const AI_MODEL = process.env.AI_MODEL || "claude-3-5-sonnet";
+const AI_MODEL = process.env.AI_MODEL || "claude-sonnet-4-20250514";
 // Enable fallback mode when AI gateway is unavailable
 const AI_ENHANCEMENT_REQUIRED = process.env.AI_ENHANCEMENT_REQUIRED === "true";
 

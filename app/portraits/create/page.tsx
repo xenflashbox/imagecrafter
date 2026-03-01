@@ -6,9 +6,11 @@
 
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -226,12 +228,26 @@ function PreviewSection({
   isGenerating,
   error,
   generationStep,
+  onRegenerate,
+  onChangeStyle,
+  onNewPhoto,
+  onSaveToAccount,
+  isAuthenticated,
+  isSaved,
+  isSaving,
 }: {
   portraitId: string | null;
   previewUrl: string | null;
   isGenerating: boolean;
   error: string | null;
   generationStep: string;
+  onRegenerate?: () => void;
+  onChangeStyle?: () => void;
+  onNewPhoto?: () => void;
+  onSaveToAccount?: () => void;
+  isAuthenticated?: boolean;
+  isSaved?: boolean;
+  isSaving?: boolean;
 }) {
   if (isGenerating) {
     return (
@@ -260,12 +276,32 @@ function PreviewSection({
           <p className="text-lg font-semibold text-slate-900 mb-2">Generation failed</p>
           <p className="text-sm text-slate-600">{error}</p>
         </div>
-        <button
-          onClick={() => window.location.reload()}
-          className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
-        >
-          Try Again
-        </button>
+        <div className="flex flex-wrap gap-2 justify-center">
+          {onRegenerate && (
+            <button
+              onClick={onRegenerate}
+              className="rounded-lg bg-purple-600 hover:bg-purple-700 px-4 py-2 text-sm text-white font-medium"
+            >
+              🔄 Try Again
+            </button>
+          )}
+          {onChangeStyle && (
+            <button
+              onClick={onChangeStyle}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              🎨 Different Style
+            </button>
+          )}
+          {onNewPhoto && (
+            <button
+              onClick={onNewPhoto}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              📷 New Photo
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -282,6 +318,62 @@ function PreviewSection({
             </div>
           </div>
         </div>
+
+        {/* Action Buttons */}
+        <div className="flex flex-wrap gap-2 justify-center">
+          {onRegenerate && (
+            <button
+              onClick={onRegenerate}
+              className="rounded-lg bg-slate-100 hover:bg-slate-200 px-4 py-2 text-sm text-slate-700 font-medium transition-colors flex items-center gap-1.5"
+            >
+              🔄 Regenerate
+            </button>
+          )}
+          {onChangeStyle && (
+            <button
+              onClick={onChangeStyle}
+              className="rounded-lg bg-slate-100 hover:bg-slate-200 px-4 py-2 text-sm text-slate-700 font-medium transition-colors flex items-center gap-1.5"
+            >
+              🎨 Change Style
+            </button>
+          )}
+          {onNewPhoto && (
+            <button
+              onClick={onNewPhoto}
+              className="rounded-lg bg-slate-100 hover:bg-slate-200 px-4 py-2 text-sm text-slate-700 font-medium transition-colors flex items-center gap-1.5"
+            >
+              📷 New Photo
+            </button>
+          )}
+          {onSaveToAccount && (
+            <button
+              onClick={onSaveToAccount}
+              disabled={isSaved || isSaving}
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                isSaved
+                  ? "bg-green-100 text-green-700 cursor-default"
+                  : isSaving
+                  ? "bg-slate-100 text-slate-400 cursor-wait"
+                  : isAuthenticated
+                  ? "bg-blue-100 hover:bg-blue-200 text-blue-700"
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+              }`}
+            >
+              {isSaving ? (
+                <>⟳ Saving...</>
+              ) : isSaved ? (
+                <>✅ Saved</>
+              ) : isAuthenticated ? (
+                <>💾 Save to Account</>
+              ) : (
+                <>🔐 Sign In to Save</>
+              )}
+            </button>
+          )}
+        </div>
+        <p className="text-center text-xs text-slate-400">
+          Regenerate for a different version · Change style or photo to start fresh
+        </p>
 
         <div className="rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-100 p-6">
           <h3 className="text-lg font-bold text-slate-900 mb-1">Love your portrait?</h3>
@@ -346,7 +438,11 @@ function StepIndicator({ current }: { current: Step }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-export default function CreatePortraitPage() {
+function CreatePortraitContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { isSignedIn, userId } = useAuth();
+
   const [step, setStep] = useState<Step>("upload");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -362,8 +458,82 @@ export default function CreatePortraitPage() {
   const [generationStep, setGenerationStep] = useState("Analyzing your photo…");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const stepIdx = step === "upload" ? 0 : step === "style" ? 1 : 2;
+
+  // Restore session state from sessionStorage on mount
+  useEffect(() => {
+    const savedPortraitId = searchParams.get("portraitId") || sessionStorage.getItem("ic_portraitId");
+    const savedSessionId = sessionStorage.getItem("ic_sessionId");
+    const savedPreviewUrl = sessionStorage.getItem("ic_previewUrl");
+    const savedSourceUrl = sessionStorage.getItem("ic_sourceUrl");
+
+    if (savedPortraitId && savedPreviewUrl) {
+      setPortraitId(savedPortraitId);
+      setSessionId(savedSessionId);
+      setPreviewUrl(savedPreviewUrl);
+      setPhotoPreview(savedSourceUrl);
+      setStep("generate");
+    } else if (savedPortraitId && savedSourceUrl) {
+      setPortraitId(savedPortraitId);
+      setSessionId(savedSessionId);
+      setPhotoPreview(savedSourceUrl);
+      // Load style packs and go to style step
+      loadStylePacks().then(() => setStep("style"));
+    }
+  }, [searchParams]);
+
+  // Save session state to sessionStorage when it changes
+  useEffect(() => {
+    if (portraitId) sessionStorage.setItem("ic_portraitId", portraitId);
+    if (sessionId) sessionStorage.setItem("ic_sessionId", sessionId);
+    if (previewUrl) sessionStorage.setItem("ic_previewUrl", previewUrl);
+    if (photoPreview) sessionStorage.setItem("ic_sourceUrl", photoPreview);
+  }, [portraitId, sessionId, previewUrl, photoPreview]);
+
+  // Helper to load style packs
+  const loadStylePacks = async () => {
+    setPacksLoading(true);
+    try {
+      const packsRes = await fetch("/api/portraits/style-packs");
+      const packsData = await packsRes.json();
+      if (packsData.success && packsData.stylePacks.length > 0) {
+        setStylePacks(packsData.stylePacks);
+        setSelectedPack(packsData.stylePacks[0]);
+        setSelectedVariant(packsData.stylePacks[0].variants[0] || null);
+      }
+    } finally {
+      setPacksLoading(false);
+    }
+  };
+
+  // Handle retry/change style - go back to style selection, keep the uploaded photo
+  // Clears preview URL so regeneration creates a fresh version
+  const handleRetry = () => {
+    setGenerationError(null);
+    setPreviewUrl(null);
+    setIsSaved(false);
+    sessionStorage.removeItem("ic_previewUrl");
+    // Reset selected style to force user to pick again
+    setSelectedPack(stylePacks[0] || null);
+    setSelectedVariant(stylePacks[0]?.variants[0] || null);
+    setStep("style");
+  };
+
+  // Clear all session data and start fresh
+  const handleStartOver = () => {
+    // Clear sessionStorage FIRST
+    sessionStorage.removeItem("ic_portraitId");
+    sessionStorage.removeItem("ic_sessionId");
+    sessionStorage.removeItem("ic_previewUrl");
+    sessionStorage.removeItem("ic_sourceUrl");
+
+    // Replace URL immediately (before state changes trigger re-renders)
+    // Using window.location for a clean navigation that won't restore state
+    window.location.href = "/portraits/create";
+  };
 
   // Upload photo and proceed to style selection
   const handleUploadAndContinue = async () => {
@@ -379,21 +549,16 @@ export default function CreatePortraitPage() {
       setPortraitId(data.portraitId);
       setSessionId(data.sessionId);
 
+      // Update URL with portraitId for session persistence
+      router.replace(`/portraits/create?portraitId=${data.portraitId}`, { scroll: false });
+
       // Load style packs
-      setPacksLoading(true);
-      const packsRes = await fetch("/api/portraits/style-packs");
-      const packsData = await packsRes.json();
-      if (packsData.success && packsData.stylePacks.length > 0) {
-        setStylePacks(packsData.stylePacks);
-        setSelectedPack(packsData.stylePacks[0]);
-        setSelectedVariant(packsData.stylePacks[0].variants[0] || null);
-      }
+      await loadStylePacks();
       setStep("style");
     } catch {
       setUploadError("Network error. Please check your connection and try again.");
     } finally {
       setIsUploading(false);
-      setPacksLoading(false);
     }
   };
 
@@ -436,6 +601,46 @@ export default function CreatePortraitPage() {
     } finally {
       clearInterval(interval);
       setIsGenerating(false);
+    }
+  };
+
+  // Regenerate - same style, new generation
+  const handleRegenerate = async () => {
+    if (!portraitId || !selectedPack || !selectedVariant) return;
+    // Clear preview and regenerate
+    setPreviewUrl(null);
+    setIsSaved(false);
+    sessionStorage.removeItem("ic_previewUrl");
+    await handleGenerate();
+  };
+
+  // Save portrait to user account
+  const handleSaveToAccount = async () => {
+    if (!portraitId || !sessionId) return;
+
+    if (!isSignedIn) {
+      // Redirect to sign in with return URL
+      router.push(`/sign-in?redirect_url=${encodeURIComponent(`/portraits/create?portraitId=${portraitId}`)}`);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/portraits/${portraitId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setIsSaved(true);
+      } else {
+        console.error("Failed to save portrait:", data.error);
+      }
+    } catch (err) {
+      console.error("Error saving portrait:", err);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -541,20 +746,30 @@ export default function CreatePortraitPage() {
               isGenerating={isGenerating}
               error={generationError}
               generationStep={generationStep}
+              onRegenerate={handleRegenerate}
+              onChangeStyle={handleRetry}
+              onNewPhoto={handleStartOver}
+              onSaveToAccount={handleSaveToAccount}
+              isAuthenticated={isSignedIn}
+              isSaved={isSaved}
+              isSaving={isSaving}
             />
-            {generationError && (
-              <div className="flex gap-3">
-                <button onClick={() => setStep("style")} className="flex-1 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold py-3 text-sm transition-colors">
-                  ← Different Style
-                </button>
-                <button onClick={() => setStep("upload")} className="flex-1 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold py-3 text-sm transition-colors">
-                  Change Photo
-                </button>
-              </div>
-            )}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+// Wrap in Suspense for useSearchParams
+export default function CreatePortraitPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="h-12 w-12 rounded-full border-4 border-purple-100 border-t-purple-600 animate-spin" />
+      </div>
+    }>
+      <CreatePortraitContent />
+    </Suspense>
   );
 }

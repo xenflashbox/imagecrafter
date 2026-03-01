@@ -25,6 +25,7 @@ services:
       - AI_GATEWAY_URL=${AI_GATEWAY_URL}
       - AI_MODEL=${AI_MODEL}
       - AI_ENHANCEMENT_REQUIRED=${AI_ENHANCEMENT_REQUIRED:-false}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
     networks:
       - traefik_proxy_v2

@@ -112,7 +112,7 @@ NEXT_PUBLIC_APP_URL="$(require_env NEXT_PUBLIC_APP_URL)"
 # AI_GATEWAY_API_KEY is optional - fallback mode works without it
 AI_GATEWAY_API_KEY="${AI_GATEWAY_API_KEY:-}"
 AI_GATEWAY_URL="$(require_env AI_GATEWAY_URL)"
-AI_MODEL="$(require_env AI_MODEL "claude-3-5-sonnet")"
+AI_MODEL="$(require_env AI_MODEL "claude-sonnet-4-20250514")"
 AI_ENHANCEMENT_REQUIRED="${AI_ENHANCEMENT_REQUIRED:-false}"
 
 # Portrait Studio — Phase 2/3 settings
