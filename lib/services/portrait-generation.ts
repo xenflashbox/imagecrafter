@@ -19,6 +19,11 @@ import { prisma } from "@/lib/prisma";
 import { analyzePortraitPhoto, buildSubjectDescription } from "./portrait-analysis";
 import { applyWatermark, prepareHiResImage } from "./watermark";
 import { uploadPortraitPreview, uploadPortraitHiRes } from "./file-storage";
+import {
+  isInstantIDAvailable,
+  generateWithInstantID,
+  buildInstantIDPrompt,
+} from "./replicate-instantid";
 
 // =============================================================================
 // TYPES
@@ -189,6 +194,34 @@ async function callImageGen(
   }
 }
 
+/**
+ * Generate portrait using InstantID for TRUE face preservation.
+ * Uses face embeddings from source image to maintain identity.
+ */
+async function callInstantID(
+  faceImageUrl: string,
+  stylePrompt: string,
+  identityStrength: number = 0.8
+): Promise<{ imageUrl: string } | null> {
+  console.log("[PortraitGen] Using InstantID for face-preserving generation");
+
+  const result = await generateWithInstantID({
+    faceImageUrl,
+    stylePrompt,
+    identityStrength,
+    numSteps: 30,
+    guidanceScale: 5.0,
+  });
+
+  if (!result.success || !result.imageUrl) {
+    console.error("[PortraitGen] InstantID failed:", result.error);
+    return null;
+  }
+
+  console.log(`[PortraitGen] InstantID completed in ${result.processingTimeMs}ms`);
+  return { imageUrl: result.imageUrl };
+}
+
 // =============================================================================
 // MAIN GENERATION PIPELINE
 // =============================================================================
@@ -312,7 +345,39 @@ export async function generatePortrait(
   });
 
   // --- Step 8: Generate image ---
-  const genResult = await callImageGen(enhancedPrompt, "1:1");
+  // Try InstantID first for TRUE face preservation, fall back to text-to-image
+  let genResult: { imageUrl: string } | null = null;
+  let usedInstantID = false;
+
+  if (isInstantIDAvailable()) {
+    console.log("[PortraitGen] InstantID available - using face-preserving generation");
+
+    // Build InstantID prompt focused on style/scene (face is preserved from source image)
+    const instantIDPrompt = buildInstantIDPrompt(
+      variant.promptTemplate
+        .replace(/\{\{subject\}\}/g, "") // Remove subject placeholder - InstantID handles face
+        .replace(/\{\{style_modifiers\}\}/g, "")
+        .replace(/\{\{user_details\}\}/g, userScene || "")
+        .trim(),
+      variant.styleModifiers as Record<string, string>
+    );
+
+    // Use stronger identity preservation (0.85) for better face matching
+    genResult = await callInstantID(portrait.sourceImageUrl, instantIDPrompt, 0.85);
+
+    if (genResult) {
+      usedInstantID = true;
+      console.log("[PortraitGen] InstantID generation successful");
+    } else {
+      console.log("[PortraitGen] InstantID failed, falling back to text-to-image");
+    }
+  }
+
+  // Fall back to standard text-to-image generation
+  if (!genResult) {
+    console.log("[PortraitGen] Using standard text-to-image generation");
+    genResult = await callImageGen(enhancedPrompt, "1:1");
+  }
 
   if (!genResult) {
     await prisma.portrait.update({
@@ -325,6 +390,10 @@ export async function generatePortrait(
       errorType: "generation",
     };
   }
+
+  // Log which method was used for debugging
+  console.log(`[PortraitGen] Generation complete. Method: ${usedInstantID ? "InstantID" : "Text-to-Image"}`);
+
 
   // --- Step 9: Fetch generated image ---
   let imageBuffer: Buffer;
