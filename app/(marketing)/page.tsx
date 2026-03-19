@@ -137,7 +137,7 @@ export default async function LandingPage() {
   const [stylePacks] = await Promise.all([
     getStylePacks().catch((err) => {
       console.error("StylePack fetch failed:", err);
-      return [];
+      return [] as Awaited<ReturnType<typeof getStylePacks>>;
     }),
   ]);
 
