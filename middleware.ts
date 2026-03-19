@@ -6,6 +6,11 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
 
+  // SEO metadata routes (must bypass auth)
+  "/robots.txt",
+  "/sitemap.xml",
+  "/site.webmanifest",
+
   // Health check (public — used by guardrails verify.sh)
   "/api/health",
 
