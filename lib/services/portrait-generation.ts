@@ -27,6 +27,7 @@ import {
   isInstantIDAvailable,
   generateWithInstantID,
   buildInstantIDPrompt,
+  type PortraitGenerationParams,
 } from "./replicate-portrait";
 
 // =============================================================================
@@ -199,31 +200,48 @@ async function callImageGen(
 }
 
 /**
- * Generate portrait using InstantID for TRUE face preservation.
- * Uses face embeddings from source image to maintain identity.
+ * Generate portrait using Kontext Pro for TRUE face preservation.
+ * Supports both single-person and group photos.
+ *
+ * @param sourceImageUrl - URL of the source photo
+ * @param stylePrompt - Style transformation prompt
+ * @param subjectCount - Number of subjects detected by Claude Vision
+ * @param subjectDescription - Description from Claude Vision (e.g., "a family of four")
  */
+async function callKontextPro(
+  sourceImageUrl: string,
+  stylePrompt: string,
+  subjectCount: number = 1,
+  subjectDescription?: string
+): Promise<{ imageUrl: string } | null> {
+  console.log("[PortraitGen] Using Kontext Pro for face-preserving generation");
+  console.log(`[PortraitGen] Subject count: ${subjectCount}, description: ${subjectDescription || "single subject"}`);
+
+  const result = await generateWithKontextPro({
+    sourceImageUrl,
+    stylePrompt,
+    numSteps: 28,
+    guidanceScale: 3.5,
+    subjectCount,
+    subjectDescription,
+  });
+
+  if (!result.success || !result.imageUrl) {
+    console.error("[PortraitGen] Kontext Pro failed:", result.error);
+    return null;
+  }
+
+  console.log(`[PortraitGen] Kontext Pro completed in ${result.processingTimeMs}ms`);
+  return { imageUrl: result.imageUrl };
+}
+
+// Legacy alias - kept for backwards compatibility but now routes through Kontext Pro
 async function callInstantID(
   faceImageUrl: string,
   stylePrompt: string,
   identityStrength: number = 0.8
 ): Promise<{ imageUrl: string } | null> {
-  console.log("[PortraitGen] Using InstantID for face-preserving generation");
-
-  const result = await generateWithInstantID({
-    faceImageUrl,
-    stylePrompt,
-    identityStrength,
-    numSteps: 30,
-    guidanceScale: 5.0,
-  });
-
-  if (!result.success || !result.imageUrl) {
-    console.error("[PortraitGen] InstantID failed:", result.error);
-    return null;
-  }
-
-  console.log(`[PortraitGen] InstantID completed in ${result.processingTimeMs}ms`);
-  return { imageUrl: result.imageUrl };
+  return callKontextPro(faceImageUrl, stylePrompt, 1);
 }
 
 // =============================================================================
@@ -349,31 +367,40 @@ export async function generatePortrait(
   });
 
   // --- Step 8: Generate image ---
-  // Try InstantID first for TRUE face preservation, fall back to text-to-image
+  // Try Kontext Pro first for TRUE face preservation, fall back to text-to-image
   let genResult: { imageUrl: string } | null = null;
-  let usedInstantID = false;
+  let usedFacePreservation = false;
 
-  if (isInstantIDAvailable()) {
-    console.log("[PortraitGen] InstantID available - using face-preserving generation");
+  // Extract subject info from Claude Vision analysis for group handling
+  const subjectCount = analysis.subjectCount || 1;
+  const groupDescription = buildSubjectDescription(analysis);
 
-    // Build InstantID prompt focused on style/scene (face is preserved from source image)
-    const instantIDPrompt = buildInstantIDPrompt(
-      variant.promptTemplate
-        .replace(/\{\{subject\}\}/g, "") // Remove subject placeholder - InstantID handles face
-        .replace(/\{\{style_modifiers\}\}/g, "")
-        .replace(/\{\{user_details\}\}/g, userScene || "")
-        .trim(),
-      variant.styleModifiers as Record<string, string>
+  console.log(`[PortraitGen] Detected ${subjectCount} subject(s): ${groupDescription}`);
+
+  if (isFacePreservationAvailable()) {
+    console.log("[PortraitGen] Face preservation available - using Kontext Pro generation");
+
+    // Build style prompt focused on transformation (face is preserved from source image)
+    // For Kontext Pro, we pass the raw template and let buildKontextPrompt handle
+    // the group transformation based on subject count
+    const stylePrompt = variant.promptTemplate
+      .replace(/\{\{style_modifiers\}\}/g, "")
+      .replace(/\{\{user_details\}\}/g, userScene || "")
+      .trim();
+
+    // Pass subject count and description for dynamic prompt transformation
+    genResult = await callKontextPro(
+      portrait.sourceImageUrl,
+      stylePrompt,
+      subjectCount,
+      groupDescription
     );
 
-    // Use stronger identity preservation (0.85) for better face matching
-    genResult = await callInstantID(portrait.sourceImageUrl, instantIDPrompt, 0.85);
-
     if (genResult) {
-      usedInstantID = true;
-      console.log("[PortraitGen] InstantID generation successful");
+      usedFacePreservation = true;
+      console.log("[PortraitGen] Kontext Pro generation successful");
     } else {
-      console.log("[PortraitGen] InstantID failed, falling back to text-to-image");
+      console.log("[PortraitGen] Kontext Pro failed, falling back to text-to-image");
     }
   }
 
@@ -396,7 +423,7 @@ export async function generatePortrait(
   }
 
   // Log which method was used for debugging
-  console.log(`[PortraitGen] Generation complete. Method: ${usedInstantID ? "InstantID" : "Text-to-Image"}`);
+  console.log(`[PortraitGen] Generation complete. Method: ${usedFacePreservation ? "KontextPro" : "Text-to-Image"}`);
 
 
   // --- Step 9: Fetch generated image ---

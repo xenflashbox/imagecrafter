@@ -28,6 +28,10 @@ export interface PortraitGenerationParams {
   numSteps?: number;
   /** Guidance scale for prompt adherence */
   guidanceScale?: number;
+  /** Number of subjects detected by Claude Vision (for group handling) */
+  subjectCount?: number;
+  /** Subject description from Claude Vision (e.g., "a family of four") */
+  subjectDescription?: string;
 }
 
 export interface PortraitGenerationResult {
@@ -123,9 +127,15 @@ export async function generateWithKontextPro(
     console.log("[KontextPro] Starting face-preserving generation");
     console.log("[KontextPro] Source image:", params.sourceImageUrl);
     console.log("[KontextPro] Style prompt:", params.stylePrompt.substring(0, 100) + "...");
+    console.log("[KontextPro] Subject count:", params.subjectCount ?? 1);
+    console.log("[KontextPro] Subject description:", params.subjectDescription ?? "single subject");
 
-    // Build the transformation prompt with explicit multi-face preservation
-    const transformPrompt = buildKontextPrompt(params.stylePrompt);
+    // Build the transformation prompt - handles both single and group photos
+    const transformPrompt = buildKontextPrompt(
+      params.stylePrompt,
+      params.subjectCount ?? 1,
+      params.subjectDescription
+    );
 
     console.log("[KontextPro] Full prompt:", transformPrompt.substring(0, 200) + "...");
 
@@ -268,26 +278,100 @@ function extractUrlFromOutput(output: unknown): string | undefined {
 }
 
 /**
- * Build a Kontext Pro prompt optimized for multi-face preservation.
+ * Transform a style prompt for group/multi-person photos.
+ *
+ * This function adapts single-person style templates to work correctly
+ * with group photos by:
+ * 1. Replacing {{subject}} with group-aware language
+ * 2. Stripping singular framing language
+ * 3. Adding group preservation instructions
+ *
+ * @param stylePrompt - The original style template prompt
+ * @param subjectCount - Number of people detected by Claude Vision
+ * @param subjectDescription - Description from Claude Vision (e.g., "a family of four: two adults and two children")
+ */
+function transformPromptForGroup(
+  stylePrompt: string,
+  subjectCount: number,
+  subjectDescription: string
+): string {
+  // Replace {{subject}} placeholder with group-aware language
+  // Key shift: "a person IS something" → "all people ARE something"
+  let prompt = stylePrompt
+    // Replace the {{subject}} placeholder with group language
+    .replace(/\{\{subject\}\}/g, `all ${subjectCount} people in this group portrait`)
+    // Replace singular "portrait" with group variants
+    .replace(/\ba portrait of\b/gi, `a group portrait of`)
+    .replace(/\bportrait of\b/gi, `group portrait of`)
+    // Replace singular positioning language with group alternatives
+    .replace(/\bposed in a three-quarter view\b/gi, "in a natural group arrangement")
+    .replace(/\bposed in three-quarter view\b/gi, "in a natural group arrangement")
+    .replace(/\bin a three-quarter view\b/gi, "in a natural group arrangement")
+    // Replace singular references
+    .replace(/\ba single\b/gi, "each")
+    .replace(/\bthe subject\b/gi, `all ${subjectCount} people`)
+    .replace(/\bthe person\b/gi, `all ${subjectCount} people`)
+    .replace(/\ba figure\b/gi, `the group`)
+    .replace(/\bsingle figure\b/gi, `group of ${subjectCount}`)
+    // Handle "as a/an" patterns that imply singular subject
+    // e.g., "{{subject}} as a steampunk inventor" → "all people are steampunk inventors"
+    .replace(/as a ([a-zA-Z]+)\b/gi, (match, noun) => {
+      // Attempt simple pluralization (works for most cases)
+      const plural = noun.endsWith("s") ? noun : noun + "s";
+      return `are ${plural}`;
+    })
+    .replace(/as an ([a-zA-Z]+)\b/gi, (match, noun) => {
+      const plural = noun.endsWith("s") ? noun : noun + "s";
+      return `are ${plural}`;
+    });
+
+  // Prepend group preservation instruction (highest priority for Kontext Pro)
+  prompt = `IMPORTANT: This is a group photo of ${subjectDescription}. Transform ALL ${subjectCount} people together. Keep every person visible with their exact face preserved. ` + prompt;
+
+  // Append reinforcement
+  prompt += ` Maintain all ${subjectCount} people's exact facial features, positions, and identities from the original photo.`;
+
+  // Add quality boosters for group shots
+  prompt += " High quality, detailed, professional group portrait, sharp focus on all faces.";
+
+  return prompt;
+}
+
+/**
+ * Build a Kontext Pro prompt optimized for face preservation.
+ *
+ * This function handles BOTH single-person and group photos:
+ * - Single person (subjectCount <= 1): Uses style template as-is with minimal framing
+ * - Group/family (subjectCount > 1): Transforms prompt with group-aware language
  *
  * CRITICAL: Kontext Pro prompts should:
- * 1. PREPEND multi-face preservation (highest priority)
+ * 1. For groups: PREPEND multi-face preservation (highest priority)
  * 2. Describe the TRANSFORMATION to apply, not the people
  * 3. Focus on style, clothing, environment changes
+ *
+ * @param stylePrompt - The style template prompt
+ * @param subjectCount - Number of people (default 1 for backwards compatibility)
+ * @param subjectDescription - Description from Claude Vision (optional for single person)
  */
-function buildKontextPrompt(stylePrompt: string): string {
-  // PREPEND multi-face preservation instruction - this MUST come first for highest priority
-  // This is CRITICAL for family portraits, couples, and group photos
-  let prompt = `IMPORTANT: Keep ALL people from the original photo. Preserve every person's face, identity, and position. This is a group/family portrait - do NOT remove anyone. `;
+function buildKontextPrompt(
+  stylePrompt: string,
+  subjectCount: number = 1,
+  subjectDescription?: string
+): string {
+  // For group photos (2+ people), use the group transformation
+  if (subjectCount > 1 && subjectDescription) {
+    return transformPromptForGroup(stylePrompt, subjectCount, subjectDescription);
+  }
 
-  // Add the style transformation
-  prompt += stylePrompt;
+  // For single-person photos, use a simpler approach
+  // No need for group preservation instructions - they can be confusing for single portraits
+  let prompt = stylePrompt;
 
-  // Reinforce multi-face preservation at the end
-  prompt += ` Maintain the exact same faces, facial features, and identities of ALL people in the original photo.`;
+  // Add quality boosters appropriate for single subject
+  prompt += " High quality, detailed, professional portrait, sharp focus on face.";
 
-  // Add quality boosters
-  prompt += " High quality, detailed, professional portrait, sharp focus on all faces.";
+  // Add identity preservation for single person
+  prompt += " Maintain the exact facial features and identity from the original photo.";
 
   return prompt;
 }
