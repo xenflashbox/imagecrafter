@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // standalone output is for Docker/self-hosted deployments only
+  // Vercel sets VERCEL=1 automatically; Docker deploy sets NEXT_OUTPUT_STANDALONE=true
+  ...(process.env.VERCEL !== "1" && { output: "standalone" }),
   images: {
     remotePatterns: [
       {

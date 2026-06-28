@@ -11,15 +11,14 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getMauticApiUrl, requireEnv } from "@/lib/env";
 
-const MAUTIC_URL =
-  process.env.MAUTIC_API_URL || "http://mautic:8080";
 const MAUTIC_USER = process.env.MAUTIC_USER || "admin";
-const MAUTIC_PASS = process.env.MAUTIC_PASS || "";
 
 /** Basic auth header for Mautic REST API */
 function mauticAuthHeader(): string {
-  return "Basic " + Buffer.from(`${MAUTIC_USER}:${MAUTIC_PASS}`).toString("base64");
+  const pass = requireEnv("MAUTIC_PASS");
+  return "Basic " + Buffer.from(`${MAUTIC_USER}:${pass}`).toString("base64");
 }
 
 /** Push contact to Mautic with newsletter tag */
@@ -30,7 +29,7 @@ async function createMauticContact(params: {
 }): Promise<{ success: boolean; contactId?: number; error?: string }> {
   const { email, firstname, source = "imagecrafter_blog" } = params;
 
-  const mauticApiUrl = `${MAUTIC_URL}/api/contacts/new`;
+  const mauticApiUrl = `${getMauticApiUrl()}/api/contacts/new`;
 
   const body = {
     email,

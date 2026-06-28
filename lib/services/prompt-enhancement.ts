@@ -15,13 +15,13 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { getAiGatewayUrl } from "@/lib/env";
 import type { CharacterProfile, Template, TemplatePreset } from "@prisma/client";
 
 // ============================================================================
 // AI GATEWAY CONFIGURATION
 // ============================================================================
 
-const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || "https://api.reresume.app/api/ai/chat/completions";
 // Use AI_GATEWAY_API_KEY if available, fall back to DEVMAESTRO_API_KEY
 const AI_GATEWAY_KEY = process.env.AI_GATEWAY_API_KEY || process.env.DEVMAESTRO_API_KEY || "";
 const AI_MODEL = process.env.AI_MODEL || "claude-sonnet-4-20250514";
@@ -99,9 +99,12 @@ export class PromptEnhancementService {
   private model: string;
 
   constructor() {
-    this.gatewayUrl = AI_GATEWAY_URL;
     this.apiKey = AI_GATEWAY_KEY;
     this.model = AI_MODEL;
+    // Resolve gateway URL lazily — only required when apiKey is set and a call is actually made.
+    // If apiKey is missing we stay in fallback mode and never read AI_GATEWAY_URL,
+    // so a missing URL surfaces the moment AI enhancement is actually attempted.
+    this.gatewayUrl = this.apiKey ? getAiGatewayUrl() : "";
 
     if (!this.apiKey) {
       console.warn(
