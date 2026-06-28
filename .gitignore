@@ -47,3 +47,13 @@ imagecrafter.zip
 .claude/secrets/*
 .claude/IMAGECRAFTER_CLUSTER_CONFIGS.md
 docs/*
+
+# Architect direction artifacts (operational, not source)
+ASSESSMENT-DIRECTIVE-*.md
+STAGE-*.md
+STATE-OF-THE-UNION-*.md
+CVE-DECISION-*.md
+NEXT-CLERK-*.md
+PRE-MERGE-*.md
+PATH-A-DIRECTION-*.md
+MIGRATION-DIRECTION-*.md
