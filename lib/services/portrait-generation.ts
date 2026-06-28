@@ -57,9 +57,8 @@ export interface GeneratePortraitResult {
 // AI GATEWAY (for prompt enhancement)
 // =============================================================================
 
-const AI_GATEWAY_URL =
-  process.env.AI_GATEWAY_URL ||
-  "https://research.xencolabs.com/api/ai/chat/completions";
+import { getAiGatewayUrl } from "@/lib/env";
+
 const AI_GATEWAY_KEY =
   process.env.AI_GATEWAY_API_KEY || process.env.DEVMAESTRO_API_KEY || "";
 const AI_MODEL = process.env.AI_MODEL || "claude-sonnet-4-20250514";
@@ -129,7 +128,7 @@ async function enhanceCustomScenePrompt(
   if (!AI_GATEWAY_KEY) return null;
 
   try {
-    const response = await fetch(AI_GATEWAY_URL, {
+    const response = await fetch(getAiGatewayUrl(), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${AI_GATEWAY_KEY}`,

@@ -63,7 +63,6 @@ export type InstantIDResult = PortraitGenerationResult;
 // CONFIGURATION
 // =============================================================================
 
-const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN || "";
 // Support both old and new env var names during migration
 const ENABLE_FACE_PRESERVATION =
   process.env.ENABLE_FACE_PRESERVATION === "true" ||
@@ -74,10 +73,20 @@ const ENABLE_FACE_PRESERVATION =
 const KONTEXT_MODEL = "black-forest-labs/flux-kontext-pro";
 const KONTEXT_VERSION = "897a70f5a7dbd8a0611413b3b98cf417b45f266bd595c571a22947619d9ae462";
 
-// Initialize Replicate client
-const replicate = REPLICATE_API_TOKEN
-  ? new Replicate({ auth: REPLICATE_API_TOKEN })
-  : null;
+// Initialize Replicate client — fail loud when face preservation is enabled
+// but the token is missing, so prod misconfiguration is obvious instead of
+// silently returning "not configured" errors deep in the request flow.
+const replicate = (() => {
+  if (!ENABLE_FACE_PRESERVATION) return null;
+  const token = process.env.REPLICATE_API_TOKEN;
+  if (!token) {
+    throw new Error(
+      "REPLICATE_API_TOKEN env var is required when ENABLE_FACE_PRESERVATION=true. " +
+        "Set it in Vercel project env (or .env for local) and redeploy."
+    );
+  }
+  return new Replicate({ auth: token });
+})();
 
 // =============================================================================
 // SERVICE
