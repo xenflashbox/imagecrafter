@@ -19,6 +19,12 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { generatePortrait } from "@/lib/services/portrait-generation";
 
+// The synchronous pipeline (analysis → stand-in + fidelity gate → swap →
+// acceptance gate, each leg with retries) routinely exceeds the project's
+// 300s default — a live run died at FUNCTION_INVOCATION_TIMEOUT mid-stand-in
+// (2026-07-12). 800s is the Fluid compute maximum on this plan.
+export const maxDuration = 800;
+
 export async function POST(request: NextRequest) {
   try {
     // --- Auth: optional ---
