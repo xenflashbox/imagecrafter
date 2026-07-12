@@ -1,0 +1,26 @@
+{
+  "before": {
+    "full": "https://images.imagecrafter.app/gallery/v1/before/adult-face.png",
+    "thumb": "https://images.imagecrafter.app/gallery/v1/before/adult-face-thumb.jpg"
+  },
+  "renaissance": {
+    "full": "https://images.imagecrafter.app/gallery/v1/after/renaissance.png",
+    "thumb": "https://images.imagecrafter.app/gallery/v1/thumbs/renaissance.jpg"
+  },
+  "starry-night": {
+    "full": "https://images.imagecrafter.app/gallery/v1/after/starry-night.png",
+    "thumb": "https://images.imagecrafter.app/gallery/v1/thumbs/starry-night.jpg"
+  },
+  "egyptian": {
+    "full": "https://images.imagecrafter.app/gallery/v1/after/egyptian.png",
+    "thumb": "https://images.imagecrafter.app/gallery/v1/thumbs/egyptian.jpg"
+  },
+  "elven": {
+    "full": "https://images.imagecrafter.app/gallery/v1/after/elven.png",
+    "thumb": "https://images.imagecrafter.app/gallery/v1/thumbs/elven.jpg"
+  },
+  "comic-hero": {
+    "full": "https://images.imagecrafter.app/gallery/v1/after/comic-hero.png",
+    "thumb": "https://images.imagecrafter.app/gallery/v1/thumbs/comic-hero.jpg"
+  }
+}

@@ -35,7 +35,6 @@ export async function GET(request: NextRequest) {
       "images.imagecrafter.app", // R2 custom domain
       "r2.cloudflarestorage.com", // R2 direct URLs
       "r2.dev", // R2.dev subdomain
-      "picsum.photos", // For dev/testing
     ];
 
     const parsedUrl = new URL(url);

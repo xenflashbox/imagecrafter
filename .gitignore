@@ -57,3 +57,8 @@ NEXT-CLERK-*.md
 PRE-MERGE-*.md
 PATH-A-DIRECTION-*.md
 MIGRATION-DIRECTION-*.md
+# Face-swap timebox — REAL faces (incl. children); never commit
+scripts/faceswap-timebox/input/
+scripts/faceswap-timebox/output/
+# Smoke outputs — real generated faces; never commit
+scripts/smoke/output/

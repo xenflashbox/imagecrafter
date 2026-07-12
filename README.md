@@ -2,7 +2,7 @@
 
 AI Image Generation Made Simple. Turn simple descriptions into stunning images without learning complex prompts.
 
-![ImageCrafter](https://picsum.photos/seed/imagecrafter/1200/600)
+![ImageCrafter — real production output, Starry Night style](https://images.imagecrafter.app/gallery/v1/thumbs/starry-night.jpg)
 
 ## Features
 

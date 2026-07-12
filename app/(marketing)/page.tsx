@@ -79,6 +79,18 @@ const websiteSchema = {
   },
 };
 
+// Real before/after pairs — actual production two-step pipeline outputs,
+// hosted on R2 CDN (gallery v1). Not stock, not mock.
+const GALLERY_CDN = "https://images.imagecrafter.app/gallery/v1";
+const BEFORE_PHOTO = `${GALLERY_CDN}/before/adult-face-thumb.jpg`;
+const AFTER_GALLERY = [
+  { slug: "renaissance", name: "Renaissance", pack: "Royal Gallery" },
+  { slug: "starry-night", name: "Starry Night", pack: "Masterpiece" },
+  { slug: "egyptian", name: "Ancient Egyptian", pack: "Time Traveler" },
+  { slug: "elven", name: "Elven Royalty", pack: "Fantasy Realm" },
+  { slug: "comic-hero", name: "Comic Book Hero", pack: "Pop Culture" },
+].map((s) => ({ ...s, url: `${GALLERY_CDN}/thumbs/${s.slug}.jpg` }));
+
 // =============================================================================
 // DATA FETCHING
 // =============================================================================
@@ -317,7 +329,62 @@ export default async function LandingPage() {
         </section>
 
         {/* ================================================================
-            PATH C — STYLE PACK GALLERY (all 7 packs)
+            BEFORE / AFTER — real production pipeline outputs
+        ================================================================ */}
+        <section id="results" className="py-24 px-6 border-t border-white/5">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-14">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-green-500/15 border border-green-500/25 text-green-300 text-sm mb-4">
+                <Camera className="w-3.5 h-3.5" />
+                Real results — one photo, five styles
+              </div>
+              <h2 className="text-4xl md:text-5xl font-light mb-4">
+                From One Photo to Any Style
+              </h2>
+              <p className="text-white/50 max-w-xl mx-auto">
+                Every image below was generated from the single photo on the left —
+                the same pipeline your photo goes through.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 items-start">
+              {/* Before */}
+              <div className="rounded-2xl overflow-hidden border-2 border-violet-500/50 relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={BEFORE_PHOTO}
+                  alt="Original photo before transformation"
+                  className="w-full aspect-[3/4] object-cover"
+                />
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-3">
+                  <p className="text-xs font-medium text-violet-300">Original photo</p>
+                </div>
+              </div>
+
+              {/* Afters */}
+              {AFTER_GALLERY.map((item) => (
+                <div
+                  key={item.slug}
+                  className="rounded-2xl overflow-hidden border border-white/10 relative group"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={item.url}
+                    alt={`${item.name} style portrait generated from the original photo`}
+                    className="w-full aspect-[3/4] object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-3">
+                    <p className="text-xs font-medium">{item.name}</p>
+                    <p className="text-[10px] text-white/50">{item.pack}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ================================================================
+            PATH C — STYLE PACK GALLERY (active packs)
         ================================================================ */}
         <section id="styles" className="py-24 px-6 border-t border-white/5">
           <div className="max-w-6xl mx-auto">

@@ -1,13 +1,22 @@
 /**
  * POST /api/images/generate
  *
- * Main image generation endpoint for ImageCraft
- * Handles both single image generation and provides enhanced prompts
+ * Main image generation endpoint for ImageCraft.
+ *
+ * mode: "single" (default) — one image via the service's single endpoint.
+ * mode: "dual" (Pro only)  — one request, two provider results persisted under
+ *                            one GenerationRequest; the client then POSTs the
+ *                            winner to /api/images/requests/[id]/select.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
-import { generateImage, type GenerateImageParams } from "@/lib/services/image-generation";
+import {
+  generateImage,
+  generateDual,
+  type GenerateImageParams,
+  type GenerationResult,
+} from "@/lib/services/image-generation";
 import type { Resolution } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
@@ -15,6 +24,7 @@ import { z } from "zod";
 // Request validation schema
 const generateRequestSchema = z.object({
   prompt: z.string().min(1).max(2000),
+  mode: z.enum(["single", "dual"]).default("single"),
   projectId: z.string().optional(),
   templateSlug: z.string().optional(),
   presetSlug: z.string().optional(),
@@ -107,48 +117,78 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const requestData: GenerateImageParams = {
-      userId,
-      prompt: validationResult.data.prompt,
-      resolution: validationResult.data.resolution as Resolution,
-      aspectRatio: validationResult.data.aspectRatio,
-      templateId: validationResult.data.templateSlug,
-      presetId: validationResult.data.presetSlug,
-      projectId: validationResult.data.projectId,
-    };
+    const data = validationResult.data;
 
-    // Generate the image
-    const result = await generateImage(requestData);
+    let result: GenerationResult;
+    if (data.mode === "dual") {
+      // Pro-only dual compare. The dual endpoint takes no resolution param —
+      // the service layer runs it at 1K and gates on the PRO plan itself.
+      result = await generateDual({
+        userId,
+        prompt: data.prompt,
+        aspectRatio: data.aspectRatio,
+        templateId: data.templateSlug,
+        presetId: data.presetSlug,
+        projectId: data.projectId,
+      });
+    } else {
+      const requestData: GenerateImageParams = {
+        userId,
+        prompt: data.prompt,
+        resolution: data.resolution as Resolution,
+        aspectRatio: data.aspectRatio,
+        templateId: data.templateSlug,
+        presetId: data.presetSlug,
+        projectId: data.projectId,
+      };
+      result = await generateImage(requestData);
+    }
 
     if (!result.success) {
       // Determine appropriate status code
-      const statusCode = result.error?.includes("limit") ? 429 : 
-                         result.error?.includes("requires") ? 403 : 
-                         500;
+      const statusCode = result.error?.includes("credits") ? 429 :
+                         result.error?.includes("requires") ? 403 :
+                         502; // service failure — honest upstream error
 
       return NextResponse.json(
         {
           success: false,
+          requestId: result.requestId,
+          mode: result.mode,
+          status: result.status,
+          failedProviders: result.failedProviders,
           error: result.error,
         },
         { status: statusCode }
       );
     }
 
-    // Success response
+    const primary = result.images[0];
+
+    // Success response. `image` preserves the legacy single-image shape;
+    // `images`/`requestId`/`status` are the request-level shape (dual pick,
+    // partial results) consumed by the new UI.
     return NextResponse.json({
       success: true,
-      image: {
-        id: result.image!.id,
-        imageUrl: result.image!.imageUrl,
-        thumbnailUrl: result.image!.thumbnailUrl,
-        width: result.image!.width,
-        height: result.image!.height,
-        resolution: result.image!.resolution,
-        creditsCost: result.image!.creditsCost,
-        hasWatermark: result.image!.hasWatermark,
-      },
+      requestId: result.requestId,
+      mode: result.mode,
+      status: result.status,
+      images: result.images,
+      failedProviders: result.failedProviders,
+      creditsCharged: result.creditsCharged,
       creditsRemaining: result.creditsRemaining,
+      image: primary
+        ? {
+            id: primary.id,
+            imageUrl: primary.imageUrl,
+            thumbnailUrl: primary.thumbnailUrl,
+            width: primary.width,
+            height: primary.height,
+            resolution: primary.resolution,
+            creditsCost: primary.creditsCost,
+            hasWatermark: primary.hasWatermark,
+          }
+        : undefined,
     });
   } catch (error) {
     console.error("Image generation error:", error);

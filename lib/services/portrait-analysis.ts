@@ -25,6 +25,10 @@ export interface PortraitSubjectAnalysis {
     keyFeatures: string[];
     coloring: string;
     expression: string;
+    /** e.g. "toddler", "child around 8", "adult in their 30s" — drives the stand-in's age */
+    ageBracket?: string;
+    /** apparent gender presentation for humans, if evident */
+    genderPresentation?: string;
   };
   additionalSubjects?: Array<{
     description: string;
@@ -69,6 +73,8 @@ Analyze the photo and return a JSON object with the following structure:
     "keyFeatures": ["array", "of", "5-8", "HIGHLY SPECIFIC", "identifying", "features", "that make this individual unique"],
     "coloring": "PRECISE description of colors - exact hair/fur color (e.g., 'warm chestnut brown with subtle auburn highlights' not just 'brown'), skin tone, eye color with specific shading",
     "expression": "description of their facial expression/mood",
+    "ageBracket": "approximate age bracket, e.g. 'toddler', 'child around 8 years old', 'teenager', 'adult in their 30s', 'senior' (for pets: 'puppy', 'adult dog', etc.)",
+    "genderPresentation": "for humans: apparent gender presentation, e.g. 'man', 'woman', 'boy', 'girl' (omit if unclear or for pets)",
     "faceShape": "specific face shape and proportions",
     "uniqueMarks": "any unique identifying marks: freckles, moles, dimples, scars, birthmarks, asymmetries"
   },
@@ -103,8 +109,12 @@ Return ONLY valid JSON, no explanation or preamble.`;
 // ANTHROPIC CLIENT (Direct API for Vision)
 // =============================================================================
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
-const VISION_MODEL = process.env.AI_VISION_MODEL || "claude-sonnet-4-20250514";
+// IMAGECRAFTER_ANTHROPIC_API_KEY is ImageCrafter's DEDICATED credential
+// (Infisical vault `imagecrafter-production` + Vercel). Never a shared
+// gateway key — a production pipeline must not share a credential with
+// exploratory tooling (2026-07 incident).
+const ANTHROPIC_API_KEY = process.env.IMAGECRAFTER_ANTHROPIC_API_KEY || "";
+const VISION_MODEL = process.env.AI_VISION_MODEL || "claude-sonnet-4-5-20250929";
 
 // Initialize Anthropic client
 const anthropic = ANTHROPIC_API_KEY ? new Anthropic({ apiKey: ANTHROPIC_API_KEY }) : null;
@@ -215,13 +225,19 @@ export async function analyzePortraitPhoto(
   if (!anthropic) {
     return {
       success: false,
-      error: "AI analysis service is not configured (missing ANTHROPIC_API_KEY)",
+      error: "AI analysis service is not configured (missing IMAGECRAFTER_ANTHROPIC_API_KEY)",
     };
   }
 
   try {
     // Fetch and convert image to base64 for Anthropic API
-    console.log("[PortraitAnalysis] Fetching image:", imageUrl);
+    // Never log data URIs — that would dump the customer's photo into logs.
+    console.log(
+      "[PortraitAnalysis] Fetching image:",
+      imageUrl.startsWith("data:")
+        ? `<data URI, ${imageUrl.length} chars>`
+        : imageUrl
+    );
     const { base64, mediaType } = await fetchImageAsBase64(imageUrl);
     console.log("[PortraitAnalysis] Image fetched, media type:", mediaType);
 
@@ -291,6 +307,193 @@ export async function analyzePortraitPhoto(
       success: false,
       error: error instanceof Error ? error.message : "Analysis failed",
     };
+  }
+}
+
+// =============================================================================
+// STYLE-PRESENCE CHECK (two-step production rule, results doc §5)
+// =============================================================================
+
+export type StylePresence = "styled" | "photoreal" | "unknown";
+
+/**
+ * Check whether a generated image actually carries the artistic style.
+ * ~1-in-N identity swaps nondeterministically discard the style scene and
+ * return a photorealistic render (measured in the two-step test); production
+ * retries the swap once when that happens.
+ *
+ * FAIL-CLOSED: "unknown" (vision unavailable or errored) must BLOCK the
+ * output at the caller — a gate that silently goes inert manufactures the
+ * appearance of verification (2026-07 gallery incident). The caller in
+ * portrait-generation only accepts "styled".
+ */
+export async function checkStylePresence(
+  imageUrl: string,
+  styleDescription: string
+): Promise<StylePresence> {
+  if (!anthropic) return "unknown";
+  try {
+    const { base64, mediaType } = await fetchImageAsBase64(imageUrl);
+    const response = await anthropic.messages.create({
+      model: VISION_MODEL,
+      max_tokens: 16,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+                data: base64,
+              },
+            },
+            {
+              type: "text",
+              text: `Is this image rendered as stylized artwork in the style of "${styleDescription}" (painting, comic, illustration, etc.), or is it essentially a photorealistic photograph with no artistic style applied? Answer with exactly one word: STYLED or PHOTOREAL.`,
+            },
+          ],
+        },
+      ],
+    });
+    const textContent = response.content.find((block) => block.type === "text");
+    const answer =
+      (textContent && "text" in textContent ? textContent.text : "").trim().toUpperCase();
+    if (answer.startsWith("STYLED")) return "styled";
+    if (answer.startsWith("PHOTOREAL")) return "photoreal";
+    return "unknown";
+  } catch (error) {
+    console.error("[StylePresence] Check failed:", error);
+    return "unknown";
+  }
+}
+
+// =============================================================================
+// IDENTITY-PRESENCE CHECK (fix directive P2.1 — the core gate)
+// =============================================================================
+
+export type IdentityPresence = "same" | "different" | "unknown";
+
+/**
+ * Assert the generated output depicts the SAME PERSON (or pet) as the source
+ * photo. This is the gate that never existed: the 2026-07 gallery shipped a
+ * blonde blue-eyed elf and a green-eyed Egyptian queen for a dark-haired,
+ * brown-eyed subject because only style was ever asserted.
+ *
+ * FAIL-CLOSED: "unknown" must BLOCK at the caller. Only "same" passes.
+ */
+export async function checkIdentityPresence(
+  sourceImageUrl: string,
+  outputImageUrl: string
+): Promise<IdentityPresence> {
+  if (!anthropic) return "unknown";
+  try {
+    const [source, output] = await Promise.all([
+      fetchImageAsBase64(sourceImageUrl),
+      fetchImageAsBase64(outputImageUrl),
+    ]);
+    const toBlock = (img: { base64: string; mediaType: string }) => ({
+      type: "image" as const,
+      source: {
+        type: "base64" as const,
+        media_type: img.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+        data: img.base64,
+      },
+    });
+    const response = await anthropic.messages.create({
+      model: VISION_MODEL,
+      max_tokens: 16,
+      messages: [
+        {
+          role: "user",
+          content: [
+            toBlock(source),
+            toBlock(output),
+            {
+              type: "text",
+              text: `Image 1 is a real photo of a subject. Image 2 is a stylized artistic portrait. Ignoring the artistic style, costume, and setting: does image 2 depict the SAME individual as image 1 — same facial structure, same hair color, same eye color, same skin tone, same apparent age and gender? A different hair color, eye color, or skin tone means DIFFERENT. Answer with exactly one word: SAME or DIFFERENT.`,
+            },
+          ],
+        },
+      ],
+    });
+    const textContent = response.content.find((block) => block.type === "text");
+    const answer =
+      (textContent && "text" in textContent ? textContent.text : "").trim().toUpperCase();
+    if (answer.startsWith("SAME")) return "same";
+    if (answer.startsWith("DIFFERENT")) return "different";
+    return "unknown";
+  } catch (error) {
+    console.error("[IdentityPresence] Check failed:", error);
+    return "unknown";
+  }
+}
+
+// =============================================================================
+// STAND-IN FIDELITY CHECK (fix directive P2.2 — before the swap)
+// =============================================================================
+
+export type StandInFidelity = "match" | "mismatch" | "unknown";
+
+/**
+ * Compare the rendered stand-in's coloring/demographics against the analysis
+ * JSON BEFORE the face swap. The swap can only bridge what the stand-in
+ * already resembles: a blonde blue-eyed stand-in for a dark-haired brown-eyed
+ * subject fails here and is regenerated — it never reaches the swap.
+ * Automates the human QA bar that made the Jul-7 test 15/15.
+ *
+ * FAIL-CLOSED: "unknown" must ABORT the generation at the caller (never burn
+ * regeneration spend while the verifier is blind).
+ */
+export async function checkStandInFidelity(
+  standInImageUrl: string,
+  analysis: PortraitSubjectAnalysis
+): Promise<StandInFidelity> {
+  if (!anthropic) return "unknown";
+  const p = analysis.primarySubject || ({} as PortraitSubjectAnalysis["primarySubject"]);
+  const expectations = [
+    p.coloring ? `coloring: ${p.coloring}` : "",
+    p.genderPresentation ? `gender presentation: ${p.genderPresentation}` : "",
+    p.ageBracket ? `age bracket: ${p.ageBracket}` : "",
+  ]
+    .filter(Boolean)
+    .join("; ");
+  if (!expectations) return "unknown";
+  try {
+    const { base64, mediaType } = await fetchImageAsBase64(standInImageUrl);
+    const response = await anthropic.messages.create({
+      model: VISION_MODEL,
+      max_tokens: 16,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+                data: base64,
+              },
+            },
+            {
+              type: "text",
+              text: `This is a stylized rendering of a subject who should have these real-world traits: ${expectations}. Allowing for the artistic style, does the depicted subject's hair color, eye color, skin tone, apparent gender, and apparent age plausibly MATCH those traits? A clearly different hair color, eye color, or skin tone means MISMATCH. Answer with exactly one word: MATCH or MISMATCH.`,
+            },
+          ],
+        },
+      ],
+    });
+    const textContent = response.content.find((block) => block.type === "text");
+    const answer =
+      (textContent && "text" in textContent ? textContent.text : "").trim().toUpperCase();
+    if (answer.startsWith("MATCH")) return "match";
+    if (answer.startsWith("MISMATCH")) return "mismatch";
+    return "unknown";
+  } catch (error) {
+    console.error("[StandInFidelity] Check failed:", error);
+    return "unknown";
   }
 }
 

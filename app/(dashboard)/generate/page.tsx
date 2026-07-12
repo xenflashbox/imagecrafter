@@ -32,6 +32,10 @@ import {
   Settings2,
 } from "lucide-react";
 import Link from "next/link";
+import DualPickPanel, {
+  type DualImage,
+  type FailedProvider,
+} from "./DualPickPanel";
 
 // =============================================================================
 // TYPES (from /api/templates response)
@@ -73,6 +77,22 @@ interface GeneratedImage {
   resolution: string;
   creditsCost: number;
   hasWatermark: boolean;
+}
+
+/** Image entry from the request-level API response (/api/images/generate). */
+interface ApiImage extends DualImage {
+  resolution: string;
+  creditsCost: number;
+  hasWatermark: boolean;
+}
+
+interface DualResult {
+  requestId: string;
+  status: "COMPLETED" | "PARTIAL";
+  images: ApiImage[];
+  failedProviders?: FailedProvider[];
+  /** Auto-selected server-side when only one provider returned (PARTIAL). */
+  selectedImageId: string | null;
 }
 
 interface UserCredits {
@@ -157,10 +177,14 @@ export default function GeneratePage() {
   const [resolution, setResolution] = useState<Resolution>("1K");
   const [aspectRatio, setAspectRatio] = useState("1:1");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // Dual-engine compare (Pro): the service generates with two providers and
+  // the user picks the winner side-by-side. Dual runs at 1K only.
+  const [dualMode, setDualMode] = useState(false);
 
   // --- Generation State ---
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<GeneratedImage | null>(null);
+  const [dualResult, setDualResult] = useState<DualResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -206,6 +230,7 @@ export default function GeneratePage() {
     setStep(s);
     setError(null);
     setGeneratedImage(null);
+    setDualResult(null);
   }, []);
 
   const handleSelectCategory = (cat: DisplayCategory) => {
@@ -260,15 +285,30 @@ export default function GeneratePage() {
     return order.indexOf(res) <= order.indexOf(credits.maxResolution);
   };
 
-  const creditCost = CREDIT_COSTS[resolution];
-  const canGenerate = credits.remaining >= creditCost && isResolutionAvailable(resolution);
+  const isPro = credits.plan === "PRO";
+  // Dual compare: 2 images at 1K = 2 credits (charged per image the service
+  // actually returns — a failed provider is refunded server-side).
+  const creditCost = dualMode ? 2 * CREDIT_COSTS["1K"] : CREDIT_COSTS[resolution];
+  const canGenerate =
+    credits.remaining >= creditCost &&
+    (dualMode || isResolutionAvailable(resolution));
+
+  const handleToggleDual = () => {
+    if (!isPro) return;
+    setDualMode((prev) => {
+      const next = !prev;
+      if (next) setResolution("1K"); // dual endpoint runs at 1K only
+      return next;
+    });
+  };
 
   const handleGenerate = async () => {
     if (!prompt.trim() || !canGenerate) return;
     setIsGenerating(true);
     setError(null);
     setGeneratedImage(null);
-    goToStep(5);
+    setDualResult(null);
+    setStep(5);
 
     try {
       const res = await fetch("/api/images/generate", {
@@ -276,6 +316,7 @@ export default function GeneratePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt,
+          mode: dualMode ? "dual" : "single",
           resolution,
           aspectRatio,
           templateSlug: selectedTemplate?.slug,
@@ -286,7 +327,30 @@ export default function GeneratePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Generation failed");
 
-      setGeneratedImage(data.image);
+      if (data.mode === "DUAL") {
+        const images: ApiImage[] = data.images ?? [];
+        setDualResult({
+          requestId: data.requestId,
+          status: data.status === "PARTIAL" ? "PARTIAL" : "COMPLETED",
+          images,
+          failedProviders: data.failedProviders,
+          // The server auto-selects when only one provider returned.
+          selectedImageId: images.length === 1 ? images[0].id : null,
+        });
+        if (images.length === 1) {
+          setGeneratedImage({
+            id: images[0].id,
+            imageUrl: images[0].imageUrl,
+            prompt,
+            resolution: images[0].resolution,
+            creditsCost: images[0].creditsCost,
+            hasWatermark: images[0].hasWatermark,
+          });
+        }
+      } else {
+        setGeneratedImage(data.image);
+      }
+
       if (data.creditsRemaining !== undefined) {
         setCredits((prev) => ({
           ...prev,
@@ -300,6 +364,21 @@ export default function GeneratePage() {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleWinnerSelected = (image: DualImage) => {
+    const full = dualResult?.images.find((i) => i.id === image.id);
+    setDualResult((prev) =>
+      prev ? { ...prev, selectedImageId: image.id } : prev
+    );
+    setGeneratedImage({
+      id: image.id,
+      imageUrl: image.imageUrl,
+      prompt,
+      resolution: full?.resolution ?? "1K",
+      creditsCost: full?.creditsCost ?? 1,
+      hasWatermark: full?.hasWatermark ?? false,
+    });
   };
 
   const handleDownload = async () => {
@@ -570,6 +649,36 @@ export default function GeneratePage() {
                   </div>
                 )}
 
+                {/* Dual-engine compare (Pro) */}
+                {isPro && (
+                  <div className="mt-4 p-4 rounded-xl bg-white/5 border border-white/10 flex items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Crown className="w-4 h-4 text-amber-400" />
+                        Dual-engine compare
+                      </div>
+                      <p className="text-xs text-white/40 mt-1">
+                        Generate with two AI engines side-by-side and pick the
+                        winner. Runs at 1K · 2 credits.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleToggleDual}
+                      role="switch"
+                      aria-checked={dualMode}
+                      className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
+                        dualMode ? "bg-violet-600" : "bg-white/15"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                          dualMode ? "translate-x-[22px]" : "translate-x-0.5"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                )}
+
                 {/* Advanced Settings (collapsible) */}
                 <div className="mt-4">
                   <button
@@ -588,7 +697,11 @@ export default function GeneratePage() {
                         <label className="text-xs text-white/50 block mb-2">Resolution</label>
                         <div className="grid grid-cols-3 gap-2">
                           {(["1K", "2K", "4K"] as Resolution[]).map((res) => {
-                            const available = isResolutionAvailable(res);
+                            // Dual compare runs at 1K only (service contract:
+                            // the dual endpoint takes no resolution param).
+                            const available =
+                              isResolutionAvailable(res) &&
+                              (!dualMode || res === "1K");
                             const cost = CREDIT_COSTS[res];
                             const info = RESOLUTION_INFO[res];
                             return (
@@ -606,7 +719,11 @@ export default function GeneratePage() {
                               >
                                 <div className="font-medium">{info.label}</div>
                                 <div className="text-white/40">{cost}cr</div>
-                                {!available && <div className="text-amber-400">Pro+</div>}
+                                {!available && (
+                                  <div className="text-amber-400">
+                                    {dualMode ? "1K only" : "Pro"}
+                                  </div>
+                                )}
                               </button>
                             );
                           })}
@@ -672,7 +789,15 @@ export default function GeneratePage() {
             {step === 5 && (
               <div>
                 <h2 className="text-lg font-medium mb-4">
-                  {isGenerating ? "Generating your image..." : generatedImage ? "Your image is ready!" : "Generation complete"}
+                  {isGenerating
+                    ? dualMode
+                      ? "Generating with two engines..."
+                      : "Generating your image..."
+                    : dualResult && dualResult.images.length > 1
+                    ? "Pick your favorite"
+                    : generatedImage
+                    ? "Your image is ready!"
+                    : "Generation complete"}
                 </h2>
 
                 {isGenerating && (
@@ -681,12 +806,58 @@ export default function GeneratePage() {
                       <div className="w-20 h-20 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 animate-pulse" />
                       <Loader2 className="w-10 h-10 animate-spin absolute inset-0 m-auto text-white" />
                     </div>
-                    <p className="text-white/50 mt-6 text-sm">Building enhanced prompt → generating image...</p>
-                    <p className="text-white/30 text-xs mt-2">This takes 15–30 seconds</p>
+                    <p className="text-white/50 mt-6 text-sm">
+                      {dualMode
+                        ? "Two AI engines are generating in parallel..."
+                        : "Building enhanced prompt → generating image..."}
+                    </p>
+                    <p className="text-white/30 text-xs mt-2">
+                      {dualMode ? "This can take up to a minute" : "This takes 15–30 seconds"}
+                    </p>
                   </div>
                 )}
 
-                {!isGenerating && generatedImage && (
+                {/* DUAL result: side-by-side pick */}
+                {!isGenerating && dualResult && dualResult.images.length > 0 && (
+                  <div className="space-y-4">
+                    <DualPickPanel
+                      requestId={dualResult.requestId}
+                      images={dualResult.images}
+                      failedProviders={dualResult.failedProviders}
+                      initialSelectedImageId={dualResult.selectedImageId}
+                      onWinnerSelected={handleWinnerSelected}
+                    />
+
+                    {generatedImage && (
+                      <div className="flex gap-3">
+                        <button
+                          onClick={handleDownload}
+                          disabled={isDownloading}
+                          className="flex-1 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all flex items-center justify-center gap-2 font-medium disabled:opacity-50"
+                        >
+                          {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                          Download pick
+                        </button>
+                        <button
+                          onClick={() => { setPrompt(""); goToStep(4); }}
+                          className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/20 transition-all flex items-center justify-center gap-2 font-medium"
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                          Generate again
+                        </button>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => { setStep(1); setSelectedCategory(null); setSelectedTemplate(null); setSelectedPreset(null); setPrompt(""); setGeneratedImage(null); setDualResult(null); }}
+                      className="w-full py-2.5 rounded-xl bg-white/5 text-white/50 hover:text-white transition-all text-sm"
+                    >
+                      Start a new image
+                    </button>
+                  </div>
+                )}
+
+                {!isGenerating && !dualResult && generatedImage && (
                   <div className="space-y-4">
                     {/* Enhanced prompt */}
                     {generatedImage.enhancedPrompt && (

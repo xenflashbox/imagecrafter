@@ -19,11 +19,19 @@ import { createProdigiOrder } from "@/lib/services/print-fulfillment";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
-// Map Stripe price IDs to plan tiers
+// Map Stripe price IDs to plan tiers.
+// 2026-07-05 tier collapse (Amendment A3): only FREE/PRO exist. Legacy
+// STARTER/TEAM Stripe prices map to PRO so grandfathered subscribers renewing
+// on old price IDs keep resolving to a real tier (DB rows were migrated by
+// prisma/migrations/20260705_generation_request_dual_engine_tier_collapse.sql).
 const PRICE_TO_PLAN: Record<string, PlanTier> = {
-  [process.env.STRIPE_PRICE_STARTER!]: "STARTER",
   [process.env.STRIPE_PRICE_PRO!]: "PRO",
-  [process.env.STRIPE_PRICE_TEAM!]: "TEAM",
+  ...(process.env.STRIPE_PRICE_STARTER
+    ? { [process.env.STRIPE_PRICE_STARTER]: "PRO" as PlanTier }
+    : {}),
+  ...(process.env.STRIPE_PRICE_TEAM
+    ? { [process.env.STRIPE_PRICE_TEAM]: "PRO" as PlanTier }
+    : {}),
 };
 
 // Plan configurations — sets both credit system and legacy fields
@@ -62,50 +70,21 @@ const PLAN_CONFIG: Record<
     canUseProjects: false,
     maxProjectCount: 0,
   },
-  STARTER: {
-    creditsLimit: 150,
-    maxResolution: "2K",
-    hasProjects: false,
-    hasBatchMode: true,
-    hasApiAccess: false,
-    hasWatermark: false,
-    hasPriorityQueue: false,
-    monthlyImageLimit: 150,
-    canUsePro: false,
-    canUseBatch: true,
-    canUse4K: false,
-    canUseProjects: false,
-    maxProjectCount: 0,
-  },
   PRO: {
     creditsLimit: 400,
     maxResolution: "4K",
     hasProjects: true,
-    hasBatchMode: true,
+    // Batch is founder confirmation #1 — off until that decision lands.
+    hasBatchMode: false,
     hasApiAccess: false,
     hasWatermark: false,
     hasPriorityQueue: true,
     monthlyImageLimit: 400,
     canUsePro: true,
-    canUseBatch: true,
+    canUseBatch: false,
     canUse4K: true,
     canUseProjects: true,
     maxProjectCount: 10,
-  },
-  TEAM: {
-    creditsLimit: 1200,
-    maxResolution: "4K",
-    hasProjects: true,
-    hasBatchMode: true,
-    hasApiAccess: true,
-    hasWatermark: false,
-    hasPriorityQueue: true,
-    monthlyImageLimit: 1200,
-    canUsePro: true,
-    canUseBatch: true,
-    canUse4K: true,
-    canUseProjects: true,
-    maxProjectCount: 50,
   },
 };
 

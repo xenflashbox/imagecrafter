@@ -38,45 +38,6 @@ interface Project {
   updatedAt: string;
 }
 
-// ============================================================================
-// MOCK DATA
-// ============================================================================
-
-const mockProjects: Project[] = [
-  {
-    id: "1",
-    name: "Tina Tortoise Adventures",
-    description: "Children's book series about a friendly turtle learning life lessons",
-    type: "CHILDRENS_BOOK",
-    imageCount: 12,
-    thumbnailUrl: "https://picsum.photos/seed/proj1/400/300",
-    characterName: "Tina Tortoise",
-    characterThumbnail: "https://picsum.photos/seed/char1/100/100",
-    createdAt: "2024-12-01T10:00:00Z",
-    updatedAt: "2024-12-13T15:30:00Z",
-  },
-  {
-    id: "2",
-    name: "Product Launch Video",
-    description: "Storyboard for Q1 product launch video",
-    type: "STORYBOARD",
-    imageCount: 8,
-    thumbnailUrl: "https://picsum.photos/seed/proj2/400/300",
-    createdAt: "2024-12-05T14:00:00Z",
-    updatedAt: "2024-12-10T09:15:00Z",
-  },
-  {
-    id: "3",
-    name: "Investor Deck 2025",
-    description: "Visual assets for annual investor presentation",
-    type: "PRESENTATION",
-    imageCount: 15,
-    thumbnailUrl: "https://picsum.photos/seed/proj3/400/300",
-    createdAt: "2024-12-08T11:00:00Z",
-    updatedAt: "2024-12-12T16:45:00Z",
-  },
-];
-
 const projectTypes = [
   {
     type: "CHILDRENS_BOOK",
@@ -113,7 +74,7 @@ const projectTypes = [
 // ============================================================================
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>(mockProjects);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [showNewProject, setShowNewProject] = useState(false);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [newProjectName, setNewProjectName] = useState("");

@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 export const metadata: Metadata = {
   title: "Portrait Studio — Transform Your Photo Into Art | ImageCrafter",
   description:
-    "Upload your photo and receive a stunning AI-generated artistic portrait in 50+ styles. Oil paintings, anime, fantasy, masterpieces. Guest checkout — no account required.",
+    "Upload your photo and receive a stunning AI-generated artistic portrait in five signature styles — Renaissance royalty, Starry Night, Ancient Egyptian, Elven fantasy, and comic book hero. Guest checkout — no account required.",
 };
 
 async function getStylePacks() {
@@ -38,7 +38,7 @@ export default async function PortraitsPage() {
       <section className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 py-24 px-4">
         <div className="relative mx-auto max-w-4xl text-center">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm text-white/80">
-            ✨ 50+ artistic styles · Guest checkout · Digital + Print
+            ✨ 5 signature styles · Guest checkout · Digital + Print
           </div>
           <h1 className="mb-6 text-5xl font-bold tracking-tight text-white md:text-6xl">
             Your Photo,{" "}
@@ -47,9 +47,9 @@ export default async function PortraitsPage() {
             </span>
           </h1>
           <p className="mb-8 text-xl text-white/70 max-w-2xl mx-auto">
-            Upload your photo — pet, person, family — and our AI transforms it into a
-            stunning artistic portrait. Choose from oil paintings, masterpieces, fantasy
-            art, anime, and more.
+            Upload a photo with one clear subject — person or pet — and our AI transforms
+            it into a stunning artistic portrait. Choose from Renaissance, Starry Night,
+            Ancient Egyptian, Elven, and Comic Book Hero styles.
           </p>
           <Link
             href="/portraits/create"
@@ -71,8 +71,8 @@ export default async function PortraitsPage() {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
-              { step: "1", icon: "📷", title: "Upload your photo", desc: "Any photo with a clear subject — pet, person, family. JPEG or PNG up to 10MB." },
-              { step: "2", icon: "🎨", title: "Choose your style", desc: "Pick from 50+ artistic styles across 7 style packs. Oil paintings, anime, fantasy, and more." },
+              { step: "1", icon: "📷", title: "Upload your photo", desc: "Any photo with one clear subject — a person or pet. JPEG or PNG up to 10MB." },
+              { step: "2", icon: "🎨", title: "Choose your style", desc: "Pick from five signature styles — Renaissance royalty to comic book hero." },
               { step: "3", icon: "⬇️", title: "Download or print", desc: "Get your portrait as a high-res digital download or order a museum-quality print." },
             ].map((item) => (
               <div key={item.step} className="text-center">
