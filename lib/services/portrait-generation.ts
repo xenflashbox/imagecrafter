@@ -194,17 +194,20 @@ async function enhanceCustomScenePrompt(
 // Style→engine is a MEASURED assignment from the Jul-7 bake-off (15/15), not
 // an auto-route. The bake-off ran via Higgsfield MCP generators; mapping to
 // the image-gen service's REST providers:
-//   "Kling" winner   → provider "kling", model omitted → the service's
-//                      kling-v3 founder default (the omni models require
-//                      reference images; the stand-in is pure text-to-image)
+//   "Kling" winner   → provider "kling", model "kling-v3" — the model MUST be
+//                      sent explicitly: the async layer fills the GLOBAL default
+//                      (gemini-2.5-flash-image) when model is omitted, which the
+//                      Kling provider rejects (verified live 2026-07-12). The
+//                      omni models require reference images; the stand-in is
+//                      pure text-to-image, so kling-v3.
 //   "Nano Banana"    → provider "higgsfield", model "nano_banana_pro"
 // Pinning requires the ASYNC endpoint: the sync /api/v1/generate request
 // enum is frozen by service design — new providers are reached by routing,
 // never by widening request enums. Unmapped styles auto-route as before.
 const STYLE_ENGINE: Record<string, { provider: string; model?: string }> = {
-  renaissance: { provider: "kling" },
-  egyptian: { provider: "kling" },
-  elven: { provider: "kling" },
+  renaissance: { provider: "kling", model: "kling-v3" },
+  egyptian: { provider: "kling", model: "kling-v3" },
+  elven: { provider: "kling", model: "kling-v3" },
   "starry-night": { provider: "higgsfield", model: "nano_banana_pro" },
   "comic-hero": { provider: "higgsfield", model: "nano_banana_pro" },
 };
