@@ -144,10 +144,13 @@ export function buildStandInScenePrompt(
 
   // Stand-in framing rules (test findings): the stand-in face must be a
   // viable swap surface, and pet scenes must not hide extra figures.
+  // Generous headroom is a generation-time requirement (fix directive,
+  // mobile framing): narrow viewports crop-scale the image, so a head
+  // touching the top edge clips at 375px. Never fixed with CSS.
   prompt +=
     analysis.subjectType === "pet"
-      ? ` The ${analysis.primarySubject.species || "animal"} is the ONLY living figure in the scene — no faces or figures hidden in trees, bark, or background. Its face is large in the frame, clearly visible, and well-lit.`
-      : " Waist-up framing. The subject's face is large in the frame, clearly visible, unobstructed, and well-lit.";
+      ? ` The ${analysis.primarySubject.species || "animal"} is the ONLY living figure in the scene — no faces or figures hidden in trees, bark, or background. Its face is large in the frame, clearly visible, and well-lit. Classical portrait composition with generous headroom: the entire head fully inside the frame with clear space above it — nothing cropped by the top edge.`
+      : " Waist-up framing. The subject's face is large in the frame, clearly visible, unobstructed, and well-lit. Classical portrait composition with generous headroom: the entire head, including hair and any headwear, fully inside the frame with clear space above it — nothing cropped by the top edge.";
 
   return prompt;
 }
@@ -713,6 +716,9 @@ export async function generatePortrait(
       previewImageUrl: previewUpload.url,
       hiResImageUrl: hiResImageUrl || null,
       generationTimeMs,
+      // Clear any failure message from a previous attempt — a successful
+      // regeneration otherwise leaves stale error text on a "preview" row.
+      errorMessage: null,
       updatedAt: new Date(),
     },
   });

@@ -49,10 +49,26 @@ async function main(): Promise<void> {
   });
   console.log(`templates: egyptian=${eg.count} comic-hero=${ch.count}`);
 
-  // 2. Shipping packs + variants: real R2 URLs
+  // 2. Shipping packs + variants: real R2 URLs. A style with no manifest
+  // entry failed the gates this run — HOLD IT BACK (deactivate) rather than
+  // ship a stranger or a stale pre-gate asset.
   for (const [packSlug, variantSlug] of Object.entries(SHIPPING)) {
     const urls = manifest[variantSlug];
-    if (!urls) throw new Error(`No manifest entry for ${variantSlug}`);
+    if (!urls) {
+      console.warn(`⚠ ${variantSlug} HELD BACK — deactivating pack ${packSlug}`);
+      const heldPack = await prisma.stylePack.update({
+        where: { slug: packSlug },
+        data: { isActive: false, thumbnailUrl: "" },
+        include: { variants: true },
+      });
+      for (const v of heldPack.variants) {
+        await prisma.styleVariant.update({
+          where: { id: v.id },
+          data: { isActive: false, sampleImageUrl: "" },
+        });
+      }
+      continue;
+    }
 
     const pack = await prisma.stylePack.update({
       where: { slug: packSlug },
@@ -110,9 +126,11 @@ async function main(): Promise<void> {
   console.log(`\npicsum remaining: variants=${picsumVars} packs=${picsumPacks} templates=${picsumTemplates}`);
   if (picsumVars + picsumPacks + picsumTemplates > 0) throw new Error("picsum still present in DB");
 
+  const shipped = Object.values(SHIPPING).filter((s) => manifest[s]).length;
   const activeVars = await prisma.styleVariant.count({ where: { isActive: true } });
   const activePacks = await prisma.stylePack.count({ where: { isActive: true } });
-  console.log(`active: packs=${activePacks} (expect 5), variants=${activeVars} (expect 5)`);
+  console.log(`active: packs=${activePacks} (expect ${shipped}), variants=${activeVars} (expect ${shipped})`);
+  if (activePacks !== shipped || activeVars !== shipped) throw new Error("active counts do not match shipped styles");
   console.log("✓ Prod DB updated: real R2 gallery, zero picsum");
 }
 

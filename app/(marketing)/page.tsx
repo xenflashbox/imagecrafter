@@ -80,13 +80,14 @@ const websiteSchema = {
 };
 
 // Real before/after pairs — actual production two-step pipeline outputs,
-// hosted on R2 CDN (gallery v1). Not stock, not mock.
-const GALLERY_CDN = "https://images.imagecrafter.app/gallery/v1";
+// hosted on R2 CDN (gallery v2: gate-passing P4 regeneration). Not stock, not
+// mock. Egyptian is held back (failed the identity acceptance gate) and is
+// intentionally absent — never ship a stranger.
+const GALLERY_CDN = "https://images.imagecrafter.app/gallery/v2";
 const BEFORE_PHOTO = `${GALLERY_CDN}/before/adult-face-thumb.jpg`;
 const AFTER_GALLERY = [
   { slug: "renaissance", name: "Renaissance", pack: "Royal Gallery" },
   { slug: "starry-night", name: "Starry Night", pack: "Masterpiece" },
-  { slug: "egyptian", name: "Ancient Egyptian", pack: "Time Traveler" },
   { slug: "elven", name: "Elven Royalty", pack: "Fantasy Realm" },
   { slug: "comic-hero", name: "Comic Book Hero", pack: "Pop Culture" },
 ].map((s) => ({ ...s, url: `${GALLERY_CDN}/thumbs/${s.slug}.jpg` }));

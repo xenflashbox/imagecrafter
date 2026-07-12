@@ -24,6 +24,10 @@ const BEFORE_PHOTO = path.join(ROOT, "scripts/faceswap-timebox/input/adult-face.
 
 const STYLES = ["renaissance", "starry-night", "egyptian", "elven", "comic-hero"];
 
+// v2: the P4 regeneration (gated pipeline outputs, 2026-07-12). v1 assets are
+// cached immutable for 1yr, so replaced content MUST get new keys.
+const GALLERY_PREFIX = "gallery/v2";
+
 async function main(): Promise<void> {
   const { uploadToR2, generateThumbnail, isR2Available } = await import("../../lib/r2");
   if (!isR2Available()) throw new Error("R2 not configured (R2_* env vars)");
@@ -33,13 +37,13 @@ async function main(): Promise<void> {
   const beforeBuf = fs.readFileSync(BEFORE_PHOTO);
   const beforeRes = await uploadToR2({
     buffer: beforeBuf,
-    key: "gallery/v1/before/adult-face.png",
+    key: `${GALLERY_PREFIX}/before/adult-face.png`,
     contentType: "image/png",
   });
   if (!beforeRes.success || !beforeRes.url) throw new Error(`before upload failed: ${beforeRes.error}`);
   const beforeThumbRes = await uploadToR2({
     buffer: await generateThumbnail(beforeBuf, { maxWidth: 800, maxHeight: 800, quality: 82 }),
-    key: "gallery/v1/before/adult-face-thumb.jpg",
+    key: `${GALLERY_PREFIX}/before/adult-face-thumb.jpg`,
     contentType: "image/jpeg",
   });
   if (!beforeThumbRes.success || !beforeThumbRes.url) throw new Error(`before thumb upload failed: ${beforeThumbRes.error}`);
@@ -48,17 +52,22 @@ async function main(): Promise<void> {
 
   for (const style of STYLES) {
     const file = path.join(GALLERY_DIR, `adult-face-${style}.png`);
-    if (!fs.existsSync(file)) throw new Error(`Missing verified output: ${file}`);
+    if (!fs.existsSync(file)) {
+      // Gate-failed styles never produce a file — they are HELD BACK, not
+      // uploaded. The DB update step deactivates them.
+      console.warn(`⚠ HELD BACK (no gate-passing output): ${style}`);
+      continue;
+    }
     const buf = fs.readFileSync(file);
     const fullRes = await uploadToR2({
       buffer: buf,
-      key: `gallery/v1/after/${style}.png`,
+      key: `${GALLERY_PREFIX}/after/${style}.png`,
       contentType: "image/png",
     });
     if (!fullRes.success || !fullRes.url) throw new Error(`${style} upload failed: ${fullRes.error}`);
     const thumbRes = await uploadToR2({
       buffer: await generateThumbnail(buf, { maxWidth: 800, maxHeight: 800, quality: 82 }),
-      key: `gallery/v1/thumbs/${style}.jpg`,
+      key: `${GALLERY_PREFIX}/thumbs/${style}.jpg`,
       contentType: "image/jpeg",
     });
     if (!thumbRes.success || !thumbRes.url) throw new Error(`${style} thumb upload failed: ${thumbRes.error}`);

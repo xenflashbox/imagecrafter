@@ -57,9 +57,12 @@ async function main(): Promise<void> {
   const { isFacePreservationAvailable, swapFaceIntoScene } = await import(
     "../../lib/services/replicate-portrait"
   );
-  const { analyzePortraitPhoto } = await import(
-    "../../lib/services/portrait-analysis"
-  );
+  const {
+    analyzePortraitPhoto,
+    checkStandInFidelity,
+    checkIdentityPresence,
+    checkStylePresence,
+  } = await import("../../lib/services/portrait-analysis");
 
   if (!isFacePreservationAvailable()) {
     fail("Face preservation unavailable (ENABLE_FACE_PRESERVATION / REPLICATE_API_TOKEN)");
@@ -103,23 +106,65 @@ async function main(): Promise<void> {
   }
   console.log(`→ Scene prompt (${scenePrompt.length} chars): ${scenePrompt.slice(0, 160)}…`);
 
-  console.log("\n→ Step 1: stand-in scene via image-gen service…");
-  const t1 = Date.now();
-  const scene = await generateStandInScene(scenePrompt, styleSlug);
-  if ("error" in scene) fail(`Stand-in scene generation failed: ${scene.error}`);
-  console.log(`  ✓ Scene in ${((Date.now() - t1) / 1000).toFixed(1)}s: ${scene.sceneUrl}`);
+  // Step 1 + FIDELITY GATE — same loop as generatePortrait (P2.2, P3 pins):
+  // mismatch → regenerate (max 3), unknown → abort fail-closed.
+  const MAX_STANDIN_ATTEMPTS = 3;
+  let sceneUrl: string | null = null;
+  for (let attempt = 1; attempt <= MAX_STANDIN_ATTEMPTS; attempt++) {
+    console.log(`\n→ Step 1: stand-in scene attempt ${attempt}/${MAX_STANDIN_ATTEMPTS} (pinned engine)…`);
+    const t1 = Date.now();
+    const scene = await generateStandInScene(scenePrompt, styleSlug);
+    if ("error" in scene) fail(`Stand-in scene generation failed: ${scene.error}`);
+    console.log(`  scene in ${((Date.now() - t1) / 1000).toFixed(1)}s: ${scene.sceneUrl}`);
+    const fidelity = await checkStandInFidelity(scene.sceneUrl, analysis);
+    console.log(`  fidelity gate: ${fidelity}`);
+    if (fidelity === "match") {
+      sceneUrl = scene.sceneUrl;
+      break;
+    }
+    if (fidelity === "unknown") fail("Stand-in fidelity verification unavailable — abort (fail-closed)");
+  }
+  if (!sceneUrl) {
+    fail(`Stand-in did not match subject coloring after ${MAX_STANDIN_ATTEMPTS} attempts`);
+    return;
+  }
+
+  // Step 2 + COMBINED ACCEPTANCE GATE — same as generatePortrait (P2.1 + P1):
+  // identity=same AND style=styled, both fail-closed, one swap retry.
+  const subjectKind = analysis.subjectType === "pet" ? ("pet" as const) : ("person" as const);
+  const styleDescription = `${variant.stylePack.name} — ${variant.name}`;
+  const assessSwap = async (imageUrl: string) => {
+    const [identity, style] = await Promise.all([
+      checkIdentityPresence(photoDataUri, imageUrl),
+      checkStylePresence(imageUrl, styleDescription),
+    ]);
+    return { identity, style, pass: identity === "same" && style === "styled" };
+  };
 
   console.log("→ Step 2: swapFaceIntoScene…");
-  const swap = await swapFaceIntoScene({
-    photoUrl: photoDataUri,
-    sceneUrl: scene.sceneUrl,
-    subjectKind: analysis.subjectType === "pet" ? "pet" : "person",
-  });
+  let swap = await swapFaceIntoScene({ photoUrl: photoDataUri, sceneUrl, subjectKind });
   if (!swap.success || !swap.imageUrl) fail(`Identity swap failed: ${swap.error}`);
-  console.log(`  ✓ Swap in ${swap.processingTimeMs}ms: ${swap.imageUrl}`);
+  console.log(`  swap in ${swap.processingTimeMs}ms: ${swap.imageUrl}`);
+  let verdict = await assessSwap(swap.imageUrl!);
+  console.log(`  acceptance gate: identity=${verdict.identity} style=${verdict.style}`);
+  if (!verdict.pass) {
+    console.log("  → gate failed — retrying swap once (same scene)…");
+    const retry = await swapFaceIntoScene({ photoUrl: photoDataUri, sceneUrl, subjectKind });
+    if (retry.success && retry.imageUrl) {
+      const retryVerdict = await assessSwap(retry.imageUrl);
+      console.log(`  retry acceptance gate: identity=${retryVerdict.identity} style=${retryVerdict.style}`);
+      if (retryVerdict.pass) {
+        swap = retry;
+        verdict = retryVerdict;
+      }
+    }
+  }
+  if (!verdict.pass) {
+    fail(`Output failed acceptance gate (identity=${verdict.identity}, style=${verdict.style}) — style HELD BACK, not gallery-eligible this run`);
+  }
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  const res = await fetch(swap.imageUrl);
+  const res = await fetch(swap.imageUrl!);
   if (!res.ok) fail(`Failed to download output: HTTP ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
   const outPath = path.join(OUT_DIR, `${subject}-${styleSlug}.png`);
@@ -134,10 +179,11 @@ async function main(): Promise<void> {
       styleSlug,
       pack: variant.stylePack.slug,
       analysisSource: analysisSource.split(" (")[0],
-      sceneUrl: scene.sceneUrl,
+      sceneUrl,
       swapUrl: swap.imageUrl,
       outPath: path.relative(ROOT, outPath),
       bytes: buf.length,
+      gates: { identity: verdict.identity, style: verdict.style },
       verified: false,
     }) + "\n"
   );
