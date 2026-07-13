@@ -23,6 +23,7 @@ import { prisma } from "@/lib/prisma";
 import Stripe from "stripe";
 import { cookies } from "next/headers";
 import { PRINT_CATALOG, resolveSku } from "@/lib/services/print-fulfillment";
+import { trackTikTokEvent } from "@/lib/services/tiktok-events";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
@@ -173,6 +174,14 @@ export async function GET(request: NextRequest) {
     },
   });
 
+  // --- TikTok attribution context (from the visitor's browser request) ---
+  const ttclid =
+    searchParams.get("ttclid") || cookieStore.get("ttclid")?.value || null;
+  const ttp = cookieStore.get("_ttp")?.value || null;
+  const visitorIp =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
+  const visitorUa = request.headers.get("user-agent");
+
   // --- Build Stripe Checkout Session ---
   const sessionConfig: Stripe.Checkout.SessionCreateParams = {
     mode: "payment",
@@ -194,6 +203,10 @@ export async function GET(request: NextRequest) {
       orderId: order.id,
       portraitId: portrait.id,
       orderType: type,
+      // TikTok attribution — carried to the Purchase server event (webhook
+      // has no browser context)
+      ...(ttclid ? { ttclid } : {}),
+      ...(ttp ? { ttp } : {}),
     },
     success_url: `${BASE_URL}/portraits/${portrait.id}/success?session_id={CHECKOUT_SESSION_ID}&orderId=${order.id}`,
     cancel_url: `${BASE_URL}/portraits/${portrait.id}/preview?cancelled=true`,
@@ -224,6 +237,22 @@ export async function GET(request: NextRequest) {
   await prisma.order.update({
     where: { id: order.id },
     data: { stripeSessionId: checkoutSession.id },
+  });
+
+  await trackTikTokEvent({
+    event: "InitiateCheckout",
+    eventId: `checkout_${order.id}`,
+    url: request.url,
+    email: userEmail,
+    externalId: userId,
+    ip: visitorIp,
+    userAgent: visitorUa,
+    ttclid,
+    ttp,
+    value: discountedAmountCents / 100,
+    currency: "USD",
+    contentId: portrait.id,
+    contentName: productName,
   });
 
   // Redirect to Stripe Checkout
