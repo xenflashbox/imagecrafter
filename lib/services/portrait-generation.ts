@@ -159,7 +159,12 @@ async function enhanceCustomScenePrompt(
   userScene: string,
   subjectDescription: string
 ): Promise<string | null> {
-  if (!AI_GATEWAY_KEY) return null;
+  // null is a SIGNALED failure — the caller falls back to a deterministic
+  // prompt. Every null path logs loudly (fail-open audit, fix directive P1#3).
+  if (!AI_GATEWAY_KEY) {
+    console.error("[CustomScene] AI_GATEWAY_KEY not configured — using deterministic fallback prompt");
+    return null;
+  }
 
   try {
     const response = await fetch(getAiGatewayUrl(), {
@@ -182,10 +187,14 @@ async function enhanceCustomScenePrompt(
       }),
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.error(`[CustomScene] AI gateway returned ${response.status} — using deterministic fallback prompt`);
+      return null;
+    }
     const data = await response.json();
     return data.choices?.[0]?.message?.content || null;
-  } catch {
+  } catch (error) {
+    console.error("[CustomScene] Enhancement call failed — using deterministic fallback prompt:", error);
     return null;
   }
 }

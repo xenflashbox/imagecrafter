@@ -235,6 +235,7 @@ function PreviewSection({
   isAuthenticated,
   isSaved,
   isSaving,
+  saveError,
 }: {
   portraitId: string | null;
   previewUrl: string | null;
@@ -248,6 +249,7 @@ function PreviewSection({
   isAuthenticated?: boolean;
   isSaved?: boolean;
   isSaving?: boolean;
+  saveError?: string | null;
 }) {
   if (isGenerating) {
     return (
@@ -371,6 +373,11 @@ function PreviewSection({
             </button>
           )}
         </div>
+        {saveError && (
+          <p className="text-center text-sm text-red-600 bg-red-50 rounded-lg px-4 py-2">
+            {saveError}
+          </p>
+        )}
         <p className="text-center text-xs text-slate-400">
           Regenerate for a different version · Change style or photo to start fresh
         </p>
@@ -460,6 +467,7 @@ function CreatePortraitContent() {
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const stepIdx = step === "upload" ? 0 : step === "style" ? 1 : 2;
 
@@ -634,11 +642,14 @@ function CreatePortraitContent() {
       const data = await res.json();
       if (data.success) {
         setIsSaved(true);
+        setSaveError(null);
       } else {
         console.error("Failed to save portrait:", data.error);
+        setSaveError("Failed to save your portrait. Please try again.");
       }
     } catch (err) {
       console.error("Error saving portrait:", err);
+      setSaveError("Failed to save your portrait. Please try again.");
     } finally {
       setIsSaving(false);
     }
@@ -753,6 +764,7 @@ function CreatePortraitContent() {
               isAuthenticated={isSignedIn}
               isSaved={isSaved}
               isSaving={isSaving}
+              saveError={saveError}
             />
           </div>
         )}

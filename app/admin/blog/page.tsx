@@ -24,10 +24,9 @@ export default async function AdminBlogPage() {
     redirect("/dashboard");
   }
 
-  const postsData = await getBlogPosts({ page: 1, limit: 20 }).catch((err) => {
-    console.error("Admin blog: CMS fetch failed:", err);
-    return { docs: [], totalDocs: 0, totalPages: 1, hasNextPage: false, hasPrevPage: false, page: 1, prevPage: null, nextPage: null, limit: 20 };
-  });
+  // No catch-and-render-empty: the admin must see the CMS failure, not
+  // "0 posts" (fail-open audit, fix directive P1#3).
+  const postsData = await getBlogPosts({ page: 1, limit: 20 });
 
   const posts = postsData.docs;
 

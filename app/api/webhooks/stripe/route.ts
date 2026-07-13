@@ -409,16 +409,27 @@ async function handlePortraitCheckoutCompleted(
           `[stripe-webhook] Prodigi order ${prodigiOrderId} created for print order ${orderId}`
         );
       } catch (prodigiError) {
-        // Log but don't fail the webhook — order is paid, Prodigi can be retried
+        // Don't fail the webhook (payment already settled), but PERSIST the
+        // failure — a log line alone left paid-but-unfulfilled orders
+        // invisible (fail-open audit, fix directive P1#3). Re-submit
+        // manually via /api/print/order.
         console.error(
           `[stripe-webhook] Prodigi submission failed for order ${orderId}:`,
           prodigiError
         );
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { prodigiStatus: "submission_failed" },
+        });
       }
     } else {
       console.warn(
         `[stripe-webhook] Skipping Prodigi submission for order ${orderId}: missing hi-res URL or shipping address`
       );
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { prodigiStatus: "submission_blocked_missing_data" },
+      });
     }
   }
 }

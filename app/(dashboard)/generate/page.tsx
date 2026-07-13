@@ -203,6 +203,7 @@ export default function GeneratePage() {
       if (data.success) setCategories(data.categories);
     } catch (err) {
       console.error("Failed to load templates:", err);
+      setError("Failed to load templates. Please refresh the page.");
     } finally {
       setLoadingTemplates(false);
     }
@@ -211,17 +212,17 @@ export default function GeneratePage() {
   const fetchCredits = async () => {
     try {
       const res = await fetch("/api/usage");
-      if (res.ok) {
-        const data = await res.json();
-        setCredits(data);
-        // Auto-set best available resolution
-        setResolution(
-          data.maxResolution === "4K" ? "4K" :
-          data.maxResolution === "2K" ? "2K" : "1K"
-        );
-      }
+      if (!res.ok) throw new Error(`Usage fetch failed: ${res.status}`);
+      const data = await res.json();
+      setCredits(data);
+      // Auto-set best available resolution
+      setResolution(
+        data.maxResolution === "4K" ? "4K" :
+        data.maxResolution === "2K" ? "2K" : "1K"
+      );
     } catch (err) {
       console.error("Failed to fetch credits:", err);
+      setError("Failed to load your usage info. Please refresh the page.");
     }
   };
 
@@ -456,6 +457,13 @@ export default function GeneratePage() {
 
       <div className="max-w-6xl mx-auto px-6 py-8">
         <StepIndicator current={step} total={5} />
+
+        {error && step !== 4 && (
+          <div className="flex items-center gap-2 text-red-400 text-sm bg-red-500/10 px-4 py-3 rounded-xl mb-6">
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            {error}
+          </div>
+        )}
 
         <div className="grid lg:grid-cols-[1fr_380px] gap-8">
           {/* LEFT: Step Content */}

@@ -92,12 +92,17 @@ export default function DashboardPage() {
   const [recentImages, setRecentImages] = useState<RecentImage[]>([]);
   const [portraitCount, setPortraitCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/usage").then((r) => r.json()),
       fetch("/api/images?limit=6").then((r) => r.json()),
-      fetch("/api/portraits?userId=me&limit=1").then((r) => r.json()).catch((err) => { console.error("Portrait count fetch failed:", err); return null; }),
+      fetch("/api/portraits?userId=me&limit=1").then((r) => r.json()).catch((err) => {
+        console.error("Portrait count fetch failed:", err);
+        setLoadError("Some dashboard data failed to load. Please refresh the page.");
+        return null;
+      }),
     ]).then(([usageData, imagesData, portraitsData]) => {
       if (usageData && !usageData.error) {
         const daysLeft = usageData.creditsResetAt
@@ -111,6 +116,9 @@ export default function DashboardPage() {
           favoriteTemplate: "—",
           averageGenerationTime: 18,
         });
+      } else {
+        console.error("Usage fetch returned error:", usageData?.error);
+        setLoadError("Failed to load your usage stats. Please refresh the page.");
       }
       if (imagesData?.success && Array.isArray(imagesData.images)) {
         setRecentImages(
@@ -127,7 +135,11 @@ export default function DashboardPage() {
         setPortraitCount(portraitsData.pagination?.total ?? portraitsData.portraits?.length ?? 0);
       }
       setLoading(false);
-    }).catch((err) => { console.error("Dashboard data fetch failed:", err); setLoading(false); });
+    }).catch((err) => {
+      console.error("Dashboard data fetch failed:", err);
+      setLoadError("Failed to load your dashboard. Please refresh the page.");
+      setLoading(false);
+    });
   }, []);
 
   const usagePercent = stats ? (stats.imagesGenerated / stats.imagesLimit) * 100 : 0;
@@ -183,6 +195,12 @@ export default function DashboardPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
+        {loadError && (
+          <div className="text-red-400 text-sm bg-red-500/10 px-4 py-3 rounded-xl mb-6">
+            {loadError}
+          </div>
+        )}
+
         {/* Stats Grid */}
         <div className="grid md:grid-cols-4 gap-4 mb-8">
           {/* Usage Card */}

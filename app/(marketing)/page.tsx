@@ -147,12 +147,10 @@ export default async function LandingPage() {
   const { userId } = await auth();
   const isSignedIn = Boolean(userId);
 
-  const [stylePacks] = await Promise.all([
-    getStylePacks().catch((err) => {
-      console.error("StylePack fetch failed:", err);
-      return [] as Awaited<ReturnType<typeof getStylePacks>>;
-    }),
-  ]);
+  // No catch-and-render-empty: the gallery IS the homepage. A dead DB must
+  // surface as an error, never as a homepage with a silently missing
+  // gallery (fail-open audit, fix directive P1#3).
+  const stylePacks = await getStylePacks();
 
   const paidPlans = PRICING_TABLE.filter((p) => p.tier !== "FREE");
 

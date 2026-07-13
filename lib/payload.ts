@@ -440,14 +440,12 @@ export async function getBlogPost(
 
   if (SITE_ID > 0) params.set("where[site][equals]", String(SITE_ID));
 
-  try {
-    const data = await payloadFetch<PayloadPaginatedResponse<PayloadPost>>(
-      `/articles?${params.toString()}`
-    );
-    return data.docs[0] || null;
-  } catch {
-    return null;
-  }
+  // Errors propagate: a CMS outage must surface as an error, never as a
+  // 404 for a post that exists (fail-open audit, fix directive P1#3).
+  const data = await payloadFetch<PayloadPaginatedResponse<PayloadPost>>(
+    `/articles?${params.toString()}`
+  );
+  return data.docs[0] || null;
 }
 
 /**
@@ -476,13 +474,9 @@ export async function getRelatedPosts({
 
   const url = `/articles?${categoryWhere}${siteFilter}&where[slug][not_equals]=${encodeURIComponent(currentSlug)}&where[status][equals]=published&depth=2&limit=${limit}`;
 
-  try {
-    const data =
-      await payloadFetch<PayloadPaginatedResponse<PayloadPost>>(url);
-    return data.docs || [];
-  } catch {
-    return [];
-  }
+  const data =
+    await payloadFetch<PayloadPaginatedResponse<PayloadPost>>(url);
+  return data.docs || [];
 }
 
 /**
@@ -497,14 +491,12 @@ export async function getAllPostSlugs(): Promise<string[]> {
 
   if (SITE_ID > 0) params.set("where[site][equals]", String(SITE_ID));
 
-  try {
-    const data = await payloadFetch<PayloadPaginatedResponse<PayloadPost>>(
-      `/articles?${params.toString()}`
-    );
-    return data.docs.map((p) => p.slug);
-  } catch {
-    return [];
-  }
+  // Errors propagate: silently returning [] here made a dead CMS look like
+  // "a blog with no posts" at build time.
+  const data = await payloadFetch<PayloadPaginatedResponse<PayloadPost>>(
+    `/articles?${params.toString()}`
+  );
+  return data.docs.map((p) => p.slug);
 }
 
 // =============================================================================
@@ -516,12 +508,8 @@ export interface PayloadCategoryWithCount extends PayloadCategory {
 }
 
 export async function getCategories(): Promise<PayloadCategory[]> {
-  try {
-    const data = await payloadFetch<
-      PayloadPaginatedResponse<PayloadCategory>
-    >("/categories?limit=100&depth=0");
-    return data.docs || [];
-  } catch {
-    return [];
-  }
+  const data = await payloadFetch<
+    PayloadPaginatedResponse<PayloadCategory>
+  >("/categories?limit=100&depth=0");
+  return data.docs || [];
 }

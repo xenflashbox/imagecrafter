@@ -30,13 +30,19 @@ function escapeXml(str: string): string {
 }
 
 export async function GET() {
-  let posts: Awaited<ReturnType<typeof getBlogPosts>>["docs"] = [];
+  // No catch-and-render-empty: a dead CMS must return 503, never a valid
+  // empty feed that readers cache (fail-open audit, fix directive P1#3).
+  let posts: Awaited<ReturnType<typeof getBlogPosts>>["docs"];
 
   try {
     const data = await getBlogPosts({ page: 1, limit: 20 });
     posts = data.docs || [];
   } catch (err) {
     console.error("RSS feed: Payload CMS fetch failed:", err);
+    return new NextResponse("RSS feed temporarily unavailable", {
+      status: 503,
+      headers: { "Retry-After": "3600" },
+    });
   }
 
   const items = posts
