@@ -24,6 +24,7 @@ import Stripe from "stripe";
 import { cookies } from "next/headers";
 import { PRINT_CATALOG, resolveSku } from "@/lib/services/print-fulfillment";
 import { trackTikTokEvent } from "@/lib/services/tiktok-events";
+import { trackMetaEvent, fbcFromFbclid } from "@/lib/services/meta-events";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
@@ -174,10 +175,14 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  // --- TikTok attribution context (from the visitor's browser request) ---
+  // --- Ad attribution context (from the visitor's browser request) ---
   const ttclid =
     searchParams.get("ttclid") || cookieStore.get("ttclid")?.value || null;
   const ttp = cookieStore.get("_ttp")?.value || null;
+  const fbclid = searchParams.get("fbclid");
+  const fbc =
+    cookieStore.get("_fbc")?.value || (fbclid ? fbcFromFbclid(fbclid) : null);
+  const fbp = cookieStore.get("_fbp")?.value || null;
   const visitorIp =
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
   const visitorUa = request.headers.get("user-agent");
@@ -203,10 +208,12 @@ export async function GET(request: NextRequest) {
       orderId: order.id,
       portraitId: portrait.id,
       orderType: type,
-      // TikTok attribution — carried to the Purchase server event (webhook
+      // Ad attribution — carried to the Purchase server events (webhook
       // has no browser context)
       ...(ttclid ? { ttclid } : {}),
       ...(ttp ? { ttp } : {}),
+      ...(fbc ? { fbc } : {}),
+      ...(fbp ? { fbp } : {}),
     },
     success_url: `${BASE_URL}/portraits/${portrait.id}/success?session_id={CHECKOUT_SESSION_ID}&orderId=${order.id}`,
     cancel_url: `${BASE_URL}/portraits/${portrait.id}/preview?cancelled=true`,
@@ -249,6 +256,21 @@ export async function GET(request: NextRequest) {
     userAgent: visitorUa,
     ttclid,
     ttp,
+    value: discountedAmountCents / 100,
+    currency: "USD",
+    contentId: portrait.id,
+    contentName: productName,
+  });
+  await trackMetaEvent({
+    event: "InitiateCheckout",
+    eventId: `checkout_${order.id}`,
+    url: request.url,
+    email: userEmail,
+    externalId: userId,
+    ip: visitorIp,
+    userAgent: visitorUa,
+    fbc,
+    fbp,
     value: discountedAmountCents / 100,
     currency: "USD",
     contentId: portrait.id,

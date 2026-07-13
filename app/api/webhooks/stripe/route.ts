@@ -16,6 +16,7 @@ import {
 } from "@/lib/services/email-notification";
 import { createProdigiOrder } from "@/lib/services/print-fulfillment";
 import { trackTikTokEvent } from "@/lib/services/tiktok-events";
+import { trackMetaEvent } from "@/lib/services/meta-events";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
@@ -235,14 +236,27 @@ async function handlePortraitCheckoutCompleted(
   const stylePackLabel = (order.portrait?.stylePackSlug || "Portrait").replace(/-/g, " ");
   const styleVariantLabel = (order.portrait?.styleVariantSlug || "").replace(/-/g, " ");
 
-  // TikTok Purchase — attribution (ttclid/ttp) carried via session metadata
-  // from /api/orders/create since the webhook has no browser context.
+  // Ad-platform Purchase — attribution (ttclid/ttp/fbc/fbp) carried via
+  // session metadata from /api/orders/create since the webhook has no
+  // browser context.
   await trackTikTokEvent({
     event: "Purchase",
     eventId: `purchase_${order.id}`,
     email: customerEmail,
     ttclid: session.metadata?.ttclid || null,
     ttp: session.metadata?.ttp || null,
+    value: order.amount / 100,
+    currency: (order.currency || "usd").toUpperCase(),
+    contentId: order.portraitId,
+    contentName: `${stylePackLabel} ${styleVariantLabel}`.trim(),
+    url: `${BASE_URL}/portraits/${order.portraitId}/success`,
+  });
+  await trackMetaEvent({
+    event: "Purchase",
+    eventId: `purchase_${order.id}`,
+    email: customerEmail,
+    fbc: session.metadata?.fbc || null,
+    fbp: session.metadata?.fbp || null,
     value: order.amount / 100,
     currency: (order.currency || "usd").toUpperCase(),
     contentId: order.portraitId,
