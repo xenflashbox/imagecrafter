@@ -58,7 +58,7 @@ export default async function PortraitsPage() {
             📷 Create Your Portrait
           </Link>
           <p className="mt-4 text-sm text-white/50">
-            No account required · From $14.95 · Delivered in seconds
+            No account required · From $29.95 · Delivered in seconds
           </p>
         </div>
       </section>
@@ -168,7 +168,7 @@ export default async function PortraitsPage() {
                 <span className="text-2xl">⬇️</span>
                 <h3 className="text-xl font-bold text-slate-900">Digital Download</h3>
               </div>
-              <div className="text-4xl font-bold text-slate-900 mb-1">$14.95</div>
+              <div className="text-4xl font-bold text-slate-900 mb-1">$29.95</div>
               <p className="text-sm text-slate-500 mb-6">One-time purchase</p>
               <ul className="space-y-2 text-sm text-slate-700">
                 {["Full-resolution (up to 4K)", "No watermark", "Instant delivery via email", "Download up to 5 times", "No account required"].map((item) => (
@@ -184,8 +184,8 @@ export default async function PortraitsPage() {
                 <span className="text-2xl">🖨️</span>
                 <h3 className="text-xl font-bold text-slate-900">Art Print</h3>
               </div>
-              <div className="text-4xl font-bold text-slate-900 mb-1">from $29.95</div>
-              <p className="text-sm text-slate-500 mb-6">Multiple sizes available</p>
+              <div className="text-4xl font-bold text-slate-900 mb-1">from $49.95</div>
+              <p className="text-sm text-slate-500 mb-6">Multiple sizes · Free US shipping</p>
               <ul className="space-y-2 text-sm text-slate-700">
                 {["Museum-quality print", "Canvas, framed, or art print", "Ships worldwide", "Tracking included"].map((item) => (
                   <li key={item} className="flex items-center gap-2">

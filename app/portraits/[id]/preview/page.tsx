@@ -21,10 +21,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 const PRINT_OPTIONS = [
-  { size: '8×10"', price: 29.95, sku: "GICLÉE_8x10" },
-  { size: '12×16"', price: 49.95, sku: "GICLÉE_12x16" },
-  { size: '16×20"', price: 79.95, sku: "GICLÉE_16x20" },
-  { size: '24×36"', price: 129.95, sku: "GICLÉE_24x36" },
+  { size: '8×10"', price: 49.95, sku: "GICLÉE_8x10" },
+  { size: '12×16"', price: 69.95, sku: "GICLÉE_12x16" },
+  { size: '16×20"', price: 89.95, sku: "GICLÉE_16x20" },
+  { size: '24×36"', price: 149.95, sku: "GICLÉE_24x36" },
 ];
 
 export default async function PortraitPreviewPage({ params }: Props) {
@@ -190,7 +190,7 @@ export default async function PortraitPreviewPage({ params }: Props) {
                   <div className="flex-1">
                     <div className="flex items-center justify-between mb-1">
                       <h3 className="font-bold text-slate-900">Digital Download</h3>
-                      <span className="text-xl font-bold text-slate-900">$14.95</span>
+                      <span className="text-xl font-bold text-slate-900">$29.95</span>
                     </div>
                     <ul className="text-sm text-slate-600 space-y-1 mb-4">
                       {["Full 4K resolution, no watermark", "Instant delivery to your email", "Download up to 5 times (72 hours)", "No account required"].map((item) => (

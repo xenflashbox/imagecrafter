@@ -392,7 +392,7 @@ function PreviewSection({
               href={`/portraits/${portraitId}/preview`}
               className="flex-1 text-center rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-3 font-semibold text-sm transition-colors"
             >
-              ⬇️ Purchase Digital — $14.95
+              ⬇️ Purchase Digital — $29.95
             </Link>
             <Link
               href={`/portraits/${portraitId}/preview`}

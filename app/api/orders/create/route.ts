@@ -29,7 +29,7 @@ import { trackMetaEvent, fbcFromFbclid } from "@/lib/services/meta-events";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
 
-const DIGITAL_PRICE_CENTS = 1495;
+const DIGITAL_PRICE_CENTS = 2995;
 const SUBSCRIBER_DISCOUNT_PCT = 0.15; // 15% off for subscribers
 
 // All valid print SKUs (Phase 3 legacy + Phase 4 expanded catalog)
@@ -149,7 +149,7 @@ export async function GET(request: NextRequest) {
 
   const productName =
     type === "digital"
-      ? `Portrait Digital Download`
+      ? `Single Portrait`
       : (catalogProduct?.name || "Fine Art Print");
   const productDescription =
     type === "digital"

@@ -57,10 +57,10 @@ export interface PrintProduct {
 
 export const PRINT_CATALOG: PrintProduct[] = [
   // --- ART PRINTS (Fine Art Paper) ---
-  { sku: "ART-8x10",   prodigiSku: "GLOBAL-FAP-8X10",   name: '8×10" Art Print',   format: "art_print",      size: '8×10"',   dimensionsIn: "8X10",   priceUsd: 2995 },
-  { sku: "ART-12x16",  prodigiSku: "GLOBAL-FAP-12X16",  name: '12×16" Art Print',  format: "art_print",      size: '12×16"',  dimensionsIn: "12X16",  priceUsd: 4995 },
-  { sku: "ART-16x20",  prodigiSku: "GLOBAL-FAP-16X20",  name: '16×20" Art Print',  format: "art_print",      size: '16×20"',  dimensionsIn: "16X20",  priceUsd: 7995 },
-  { sku: "ART-24x36",  prodigiSku: "GLOBAL-FAP-24X36",  name: '24×36" Art Print',  format: "art_print",      size: '24×36"',  dimensionsIn: "24X36",  priceUsd: 12995 },
+  { sku: "ART-8x10",   prodigiSku: "GLOBAL-FAP-8X10",   name: '8×10" Art Print',   format: "art_print",      size: '8×10"',   dimensionsIn: "8X10",   priceUsd: 4995 },
+  { sku: "ART-12x16",  prodigiSku: "GLOBAL-FAP-12X16",  name: '12×16" Art Print',  format: "art_print",      size: '12×16"',  dimensionsIn: "12X16",  priceUsd: 6995 },
+  { sku: "ART-16x20",  prodigiSku: "GLOBAL-FAP-16X20",  name: '16×20" Art Print',  format: "art_print",      size: '16×20"',  dimensionsIn: "16X20",  priceUsd: 8995 },
+  { sku: "ART-24x36",  prodigiSku: "GLOBAL-FAP-24X36",  name: '24×36" Art Print',  format: "art_print",      size: '24×36"',  dimensionsIn: "24X36",  priceUsd: 14995 },
 
   // --- FRAMED PRINTS (Classic Framed Metal) ---
   { sku: "FRAME-8x10",  prodigiSku: "GLOBAL-CFPM-8X10",  name: '8×10" Framed Print',  format: "framed_print", size: '8×10"',  dimensionsIn: "8X10",  priceUsd: 8995, frameOptions: ["black","white","natural","gold","silver"], defaultFrame: "black" },
@@ -68,13 +68,13 @@ export const PRINT_CATALOG: PrintProduct[] = [
   { sku: "FRAME-16x20", prodigiSku: "GLOBAL-CFPM-16X20", name: '16×20" Framed Print', format: "framed_print", size: '16×20"', dimensionsIn: "16X20", priceUsd: 11995, frameOptions: ["black","white","natural","gold","silver"], defaultFrame: "black" },
 
   // --- CANVAS (Stretched) ---
-  { sku: "CANVAS-12x12", prodigiSku: "GLOBAL-CAN-12X12", name: '12×12" Canvas',    format: "canvas", size: '12×12"', dimensionsIn: "12X12", priceUsd: 5995, wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
-  { sku: "CANVAS-16x20", prodigiSku: "GLOBAL-CAN-16X20", name: '16×20" Canvas',    format: "canvas", size: '16×20"', dimensionsIn: "16X20", priceUsd: 8995, wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
-  { sku: "CANVAS-24x36", prodigiSku: "GLOBAL-CAN-24X36", name: '24×36" Canvas',    format: "canvas", size: '24×36"', dimensionsIn: "24X36", priceUsd: 13995, wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
+  { sku: "CANVAS-12x12", prodigiSku: "GLOBAL-CAN-12X12", name: '12×12" Canvas',    format: "canvas", size: '12×12"', dimensionsIn: "12X12", priceUsd: 9995, wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
+  { sku: "CANVAS-16x20", prodigiSku: "GLOBAL-CAN-16X20", name: '16×20" Canvas',    format: "canvas", size: '16×20"', dimensionsIn: "16X20", priceUsd: 14995, wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
+  { sku: "CANVAS-24x36", prodigiSku: "GLOBAL-CAN-24X36", name: '24×36" Canvas',    format: "canvas", size: '24×36"', dimensionsIn: "24X36", priceUsd: 19995, wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
 
   // --- FRAMED CANVAS ---
-  { sku: "FCANVAS-16x20", prodigiSku: "GLOBAL-FRA-CAN-16X20", name: '16×20" Framed Canvas', format: "framed_canvas", size: '16×20"', dimensionsIn: "16X20", priceUsd: 12995, frameOptions: ["black","white","natural","gold"], defaultFrame: "black", wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
-  { sku: "FCANVAS-24x36", prodigiSku: "GLOBAL-FRA-CAN-24X36", name: '24×36" Framed Canvas', format: "framed_canvas", size: '24×36"', dimensionsIn: "24X36", priceUsd: 19995, frameOptions: ["black","white","natural","gold"], defaultFrame: "black", wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
+  { sku: "FCANVAS-16x20", prodigiSku: "GLOBAL-FRA-CAN-16X20", name: '16×20" Framed Canvas', format: "framed_canvas", size: '16×20"', dimensionsIn: "16X20", priceUsd: 19995, frameOptions: ["black","white","natural","gold"], defaultFrame: "black", wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
+  { sku: "FCANVAS-24x36", prodigiSku: "GLOBAL-FRA-CAN-24X36", name: '24×36" Framed Canvas', format: "framed_canvas", size: '24×36"', dimensionsIn: "24X36", priceUsd: 29995, frameOptions: ["black","white","natural","gold"], defaultFrame: "black", wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
 ];
 
 // Legacy Phase 3 SKU aliases → new catalog (backward compatible)
