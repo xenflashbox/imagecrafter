@@ -39,9 +39,6 @@ const WRAP_LABELS: Record<CanvasWrap, string> = {
   White:     "White Sides",
 };
 
-// Subscriber discount
-const SUBSCRIBER_DISCOUNT = 0.15;
-
 export default function PrintOptionsPage() {
   const { id: portraitId } = useParams<{ id: string }>();
 
@@ -289,7 +286,6 @@ export default function PrintOptionsPage() {
               </div>
 
               <p className="text-center text-xs text-gray-600 mt-4">
-                Subscribers receive 15% off automatically at checkout.
                 Estimated delivery: 5–10 business days.
               </p>
             </div>

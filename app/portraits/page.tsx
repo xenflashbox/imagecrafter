@@ -192,9 +192,6 @@ export default async function PortraitsPage() {
                     <span className="text-green-500">✓</span> {item}
                   </li>
                 ))}
-                <li className="flex items-center gap-2">
-                  <span className="text-amber-500">★</span> Subscribers save 15%
-                </li>
               </ul>
             </div>
           </div>

@@ -31,7 +31,6 @@ import {
   ChevronLeft,
   Settings2,
 } from "lucide-react";
-import Link from "next/link";
 import DualPickPanel, {
   type DualImage,
   type FailedProvider,
@@ -443,14 +442,6 @@ export default function GeneratePage() {
               </div>
               <div className="text-xs text-white/40">{credits.plan} Plan</div>
             </div>
-            {credits.plan === "FREE" && (
-              <Link
-                href="/settings"
-                className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 text-xs font-medium hover:from-violet-500 hover:to-fuchsia-500 transition-all"
-              >
-                Upgrade
-              </Link>
-            )}
           </div>
         </div>
       </div>
@@ -774,7 +765,6 @@ export default function GeneratePage() {
                   <div className="flex items-center gap-2 text-amber-400 text-sm bg-amber-500/10 px-4 py-3 rounded-xl mt-4">
                     <AlertCircle className="w-4 h-4 flex-shrink-0" />
                     Not enough credits — need {creditCost}, have {credits.remaining}.
-                    <Link href="/settings" className="underline ml-1">Upgrade</Link>
                   </div>
                 )}
 

@@ -10,7 +10,6 @@ import {
   Zap,
   Calendar,
   Clock,
-  Star,
   ChevronRight,
   ExternalLink,
   Sparkles,
@@ -240,15 +239,6 @@ export default function DashboardPage() {
                     }`}
                   />
                 </div>
-                {(stats.plan === "FREE" || stats.plan === "Free") && (
-                  <Link
-                    href="/settings"
-                    className="text-sm text-violet-400 hover:text-violet-300 flex items-center gap-1"
-                  >
-                    Upgrade for more images
-                    <ChevronRight className="w-4 h-4" />
-                  </Link>
-                )}
               </>
             )}
           </div>

@@ -10,10 +10,6 @@ import {
   Film,
   Presentation,
   Package,
-  Sparkles,
-  MoreVertical,
-  Settings,
-  Trash2,
   ChevronRight,
   Lock,
   Image as ImageIcon,
@@ -128,39 +124,18 @@ export default function ProjectsPage() {
           <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 border border-violet-500/30 flex items-center justify-center mx-auto mb-6">
             <Lock className="w-10 h-10 text-violet-400" />
           </div>
-          <h1 className="text-2xl font-light mb-3">Projects require Pro</h1>
+          <h1 className="text-2xl font-light mb-3">Projects are coming soon</h1>
           <p className="text-white/50 mb-8">
-            Create character-consistent projects for children's books, storyboards, presentations,
-            and more with our Pro plan.
+            Character-consistent projects for children's books, storyboards, and
+            presentations are in development.
           </p>
 
-          <div className="bg-white/5 rounded-xl p-6 border border-white/10 mb-6 text-left">
-            <h3 className="font-medium mb-4 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-violet-400" />
-              What you get with Pro
-            </h3>
-            <ul className="space-y-3">
-              {[
-                "Unlimited projects with character consistency",
-                "500 images per month",
-                "Pro model access for higher quality",
-                "4K resolution support",
-                "Batch generation (up to 10 at once)",
-              ].map((feature, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-white/70">
-                  <div className="w-1.5 h-1.5 rounded-full bg-violet-500 mt-1.5 flex-shrink-0" />
-                  {feature}
-                </li>
-              ))}
-            </ul>
-          </div>
-
           <Link
-            href="/settings"
+            href="/portraits/create"
             className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all font-medium"
           >
             <Zap className="w-4 h-4" />
-            Upgrade to Pro — $19/mo
+            Create a Portrait Instead
           </Link>
         </motion.div>
       </div>
