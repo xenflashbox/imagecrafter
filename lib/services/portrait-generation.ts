@@ -36,6 +36,7 @@ import { uploadPortraitPreview, uploadPortraitHiRes } from "./file-storage";
 import {
   isFacePreservationAvailable,
   swapFaceIntoScene,
+  upscalePortraitBuffer,
 } from "./replicate-portrait";
 import { postToService, getFromService, serviceErrorMessage } from "./image-generation";
 
@@ -694,12 +695,46 @@ export async function generatePortrait(
   const newVersion = parseInt(existingVersions || "0", 10) + 1;
   console.log(`[PortraitGen] Generating version ${newVersion} for portrait ${portraitId}`);
 
-  // --- Step 12: Store hi-res (unwatermarked) ---
-  const hiResBuffer = await prepareHiResImage(imageBuffer);
+  // --- Step 12: Upscale ×4 + store hi-res (unwatermarked) ---
+  // Engines output ~1MP; we sell "full 4K". Real-ESRGAN ×4 makes the
+  // promise true. Fail CLOSED: a preview whose hi-res can't be delivered
+  // would be a purchasable product we can't fulfill.
+  const upscale = await upscalePortraitBuffer(imageBuffer);
+  if (!upscale.success || !upscale.buffer) {
+    console.error(`[PortraitGen] Upscale failed: ${upscale.error}`);
+    await prisma.portrait.update({
+      where: { id: portraitId },
+      data: { status: "failed", errorMessage: `Upscale failed: ${upscale.error}` },
+    });
+    return {
+      success: false,
+      error: "Final image processing failed. Please try again.",
+      errorType: "generation",
+    };
+  }
+  console.log(
+    `[PortraitGen] Upscaled ×4 in ${upscale.processingTimeMs}ms (${imageBuffer.length} → ${upscale.buffer.length} bytes)`
+  );
+
+  const hiResBuffer = await prepareHiResImage(upscale.buffer);
   let hiResImageUrl: string | undefined;
   if (hiResBuffer.success && hiResBuffer.buffer) {
     const hiResUpload = await uploadPortraitHiRes(hiResBuffer.buffer, portraitId, newVersion);
     if (hiResUpload.success) hiResImageUrl = hiResUpload.url;
+  }
+  if (!hiResImageUrl) {
+    console.error(
+      `[PortraitGen] Hi-res prep/upload failed: ${hiResBuffer.error || "upload failed"}`
+    );
+    await prisma.portrait.update({
+      where: { id: portraitId },
+      data: { status: "failed", errorMessage: "Failed to store hi-res image" },
+    });
+    return {
+      success: false,
+      error: "Failed to store portrait. Please try again.",
+      errorType: "upload",
+    };
   }
 
   // --- Step 13: Upload watermarked preview to R2 ---

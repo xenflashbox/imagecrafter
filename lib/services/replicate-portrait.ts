@@ -191,6 +191,93 @@ export async function swapFaceIntoScene(
   }
 }
 
+const REAL_ESRGAN_MODEL = "nightmareai/real-esrgan";
+
+export interface UpscaleResult {
+  success: boolean;
+  buffer?: Buffer;
+  error?: string;
+  processingTimeMs?: number;
+}
+
+/**
+ * Upscale an accepted portrait ×4 with Real-ESRGAN so the delivered hi-res
+ * is genuinely 4K-class (engines output ~1MP). Runs AFTER the acceptance
+ * gate, so face_enhance stays OFF — GFPGAN would alter the face the
+ * identity gate just approved.
+ *
+ * The temporary Replicate upload is always deleted before returning.
+ */
+export async function upscalePortraitBuffer(
+  imageBuffer: Buffer
+): Promise<UpscaleResult> {
+  if (!replicate) {
+    return {
+      success: false,
+      error: "Replicate API not configured (missing REPLICATE_API_TOKEN)",
+    };
+  }
+
+  const startTime = Date.now();
+  let uploadedId: string | null = null;
+  try {
+    type ReplicateFile = { id: string; urls: { get: string } };
+    const file = (await replicate.files.create(
+      new Blob([new Uint8Array(imageBuffer)], { type: "image/png" })
+    )) as ReplicateFile;
+    uploadedId = file.id;
+
+    const output = await replicate.run(REAL_ESRGAN_MODEL, {
+      input: {
+        image: file.urls.get,
+        scale: 4,
+        face_enhance: false,
+      },
+    });
+
+    const imageUrl = extractUrlFromOutput(output);
+    if (!imageUrl) {
+      console.error("[Upscale] No output URL received:", output);
+      return {
+        success: false,
+        error: "No image URL returned from upscaler",
+        processingTimeMs: Date.now() - startTime,
+      };
+    }
+
+    const res = await fetch(imageUrl, {
+      headers: { "user-agent": "ImageCrafter/1.0" },
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch upscaled image (HTTP ${res.status})`);
+    }
+    const upscaled = Buffer.from(await res.arrayBuffer());
+    return {
+      success: true,
+      buffer: upscaled,
+      processingTimeMs: Date.now() - startTime,
+    };
+  } catch (error) {
+    console.error("[Upscale] Upscale failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown upscale error",
+      processingTimeMs: Date.now() - startTime,
+    };
+  } finally {
+    if (uploadedId) {
+      try {
+        await replicate.files.delete(uploadedId);
+      } catch (err) {
+        console.error(
+          `[Upscale] PRIVACY: failed to delete temporary Replicate file ${uploadedId}:`,
+          err
+        );
+      }
+    }
+  }
+}
+
 /**
  * Extract URL string from various Replicate output formats.
  */
