@@ -288,23 +288,43 @@ export async function createProdigiOrder(
     },
   };
 
-  const response = await prodigiRequest<{ outcome: string; order: { id: string; status: { stage: string } } }>(
-    "POST",
-    "/Orders",
-    requestBody
-  );
+  const response = await prodigiRequest<{
+    outcome: string;
+    order: { id: string; status?: { stage?: string; issues?: unknown[] } };
+  }>("POST", "/Orders", requestBody);
 
-  if (response.outcome !== "Created") {
+  // Prodigi success outcomes (v4 docs): Created, CreatedWithIssues (order accepted
+  // but has issues, e.g. UsSalesTaxWarning or RequiresPaymentAuthorisation), OnHold
+  // (dashboard pause window active — status unavailable until window expires),
+  // AlreadyExists (idempotent replay). Everything else is a failure.
+  const outcome = (response.outcome || "").toLowerCase();
+  const SUCCESS_OUTCOMES = new Set(["created", "createdwithissues", "onhold", "alreadyexists"]);
+
+  if (!SUCCESS_OUTCOMES.has(outcome)) {
     throw new Error(`Prodigi order creation failed with outcome: ${response.outcome}`);
   }
+  if (!response.order?.id) {
+    throw new Error(
+      `Prodigi returned success outcome "${response.outcome}" but no order id — refusing to treat as created`
+    );
+  }
+
+  if (outcome === "createdwithissues") {
+    console.warn(
+      `[print-fulfillment] Prodigi order ${response.order.id} created WITH ISSUES for Order ${params.orderId}: ${JSON.stringify(response.order.status?.issues ?? [])}`
+    );
+  }
+
+  const stage =
+    response.order.status?.stage || (outcome === "onhold" ? "OnHold" : "InProgress");
 
   console.log(
-    `[print-fulfillment] Prodigi order ${response.order.id} created for Order ${params.orderId} (${USE_SANDBOX ? "SANDBOX" : "PRODUCTION"})`
+    `[print-fulfillment] Prodigi order ${response.order.id} accepted (outcome=${response.outcome}, stage=${stage}) for Order ${params.orderId} (${USE_SANDBOX ? "SANDBOX" : "PRODUCTION"})`
   );
 
   return {
     prodigiOrderId: response.order.id,
-    stage: response.order.status?.stage || "InProgress",
+    stage,
   };
 }
 
