@@ -5,8 +5,8 @@
  * then redirects the browser to Stripe's hosted checkout.
  *
  * DUAL-FLOW:
- * - Guest:       email required in query params; no Stripe Customer created
- * - Subscriber:  email from Clerk; stripeCustomerId used; 15% discount applied
+ * - Guest:        email required in query params; no Stripe Customer created
+ * - Signed-in:    email from Clerk; stripeCustomerId reused when present
  *
  * Query params:
  *   portraitId  — required
@@ -14,7 +14,7 @@
  *   sku         — required when type=print (e.g. "GICLÉE_8x10")
  *   email       — required for guests (Stripe will also collect it)
  *
- * Ownership verified via sessionId cookie (guest) or Clerk userId (subscriber).
+ * Ownership verified via sessionId cookie (guest) or Clerk userId (signed-in).
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -30,7 +30,6 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
 
 const DIGITAL_PRICE_CENTS = 2995;
-const SUBSCRIBER_DISCOUNT_PCT = 0.15; // 15% off for subscribers
 
 // All valid print SKUs (Phase 3 legacy + Phase 4 expanded catalog)
 const ALL_SKUS = new Set(PRINT_CATALOG.map((p) => p.sku).concat([
@@ -68,7 +67,6 @@ export async function GET(request: NextRequest) {
   let userId: string | null = null;
   let userEmail: string | null = null;
   let stripeCustomerId: string | null = null;
-  let isSubscriber = false;
 
   try {
     const { userId: clerkUserId } = await auth();
@@ -76,12 +74,11 @@ export async function GET(request: NextRequest) {
       userId = clerkUserId;
       const user = await prisma.user.findUnique({
         where: { id: clerkUserId },
-        select: { email: true, stripeCustomerId: true, subscription: { select: { plan: true } } },
+        select: { email: true, stripeCustomerId: true },
       });
       if (user) {
         userEmail = user.email;
         stripeCustomerId = user.stripeCustomerId;
-        isSubscriber = user.subscription?.plan !== "FREE" && user.subscription?.plan != null;
       }
     }
   } catch {
@@ -135,10 +132,16 @@ export async function GET(request: NextRequest) {
   // --- Determine pricing ---
   // Resolve SKU from catalog (supports both Phase 3 legacy and Phase 4 expanded)
   const catalogProduct = type === "print" ? resolveSku(sku!) : null;
-  const baseAmountCents = type === "digital" ? DIGITAL_PRICE_CENTS : (catalogProduct?.priceUsd ?? 2995);
-  const discountedAmountCents = isSubscriber
-    ? Math.round(baseAmountCents * (1 - SUBSCRIBER_DISCOUNT_PCT))
-    : baseAmountCents;
+  if (type === "print" && !catalogProduct) {
+    // ALL_SKUS validated above, so this only fires if the catalog and
+    // validation set ever diverge — fail closed rather than mis-price.
+    console.error(`[orders/create] SKU passed validation but failed catalog resolution: ${sku}`);
+    return NextResponse.json(
+      { success: false, error: "Product configuration error. Please try again later." },
+      { status: 500 }
+    );
+  }
+  const amountCents = type === "digital" ? DIGITAL_PRICE_CENTS : catalogProduct!.priceUsd;
 
   const packLabel = portrait.stylePackSlug?.replace(/-/g, " ") || "Portrait";
   const variantLabel = portrait.styleVariantSlug?.replace(/-/g, " ") || "";
@@ -167,7 +170,7 @@ export async function GET(request: NextRequest) {
       printSize: catalogProduct?.size || null,
       printFrame: frameParam,
       printFormat: catalogProduct?.format || null,
-      amount: discountedAmountCents,
+      amount: amountCents,
       currency: "usd",
       status: "pending",
       maxDownloads: parseInt(process.env.PORTRAIT_MAX_DOWNLOADS || "5"),
@@ -199,7 +202,7 @@ export async function GET(request: NextRequest) {
             description: productDescription,
             images: [portrait.previewImageUrl],
           },
-          unit_amount: discountedAmountCents,
+          unit_amount: amountCents,
         },
         quantity: 1,
       },
@@ -219,16 +222,13 @@ export async function GET(request: NextRequest) {
     cancel_url: `${BASE_URL}/portraits/${portrait.id}/preview?cancelled=true`,
   };
 
-  // Subscriber: use existing Stripe customer
-  if (isSubscriber && stripeCustomerId) {
+  // Signed-in with an existing Stripe customer: reuse it
+  if (stripeCustomerId) {
     sessionConfig.customer = stripeCustomerId;
-  } else {
-    // Guest or free subscriber: collect email at checkout
-    if (userEmail) {
-      sessionConfig.customer_email = userEmail;
-    }
-    // else: Stripe will prompt for email at checkout
+  } else if (userEmail) {
+    sessionConfig.customer_email = userEmail;
   }
+  // else: Stripe will prompt for email at checkout
 
   // Print orders: collect shipping address
   if (type === "print") {
@@ -256,7 +256,7 @@ export async function GET(request: NextRequest) {
     userAgent: visitorUa,
     ttclid,
     ttp,
-    value: discountedAmountCents / 100,
+    value: amountCents / 100,
     currency: "USD",
     contentId: portrait.id,
     contentName: productName,
@@ -271,7 +271,7 @@ export async function GET(request: NextRequest) {
     userAgent: visitorUa,
     fbc,
     fbp,
-    value: discountedAmountCents / 100,
+    value: amountCents / 100,
     currency: "USD",
     contentId: portrait.id,
     contentName: productName,
