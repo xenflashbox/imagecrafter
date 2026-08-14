@@ -275,6 +275,13 @@ export default function RootLayout({
               </noscript>
             </>
           )}
+
+          {/* Ahrefs Web Analytics */}
+          <Script
+            src="https://analytics.ahrefs.com/analytics.js"
+            data-key="3nx4JzGVP31C1ZRQV+ESEw"
+            strategy="afterInteractive"
+          />
         </body>
       </html>
     </ClerkProvider>
