@@ -15,6 +15,7 @@ import {
   sendPrintPurchaseEmail,
 } from "@/lib/services/email-notification";
 import { createProdigiOrder } from "@/lib/services/print-fulfillment";
+import { grantPackCredits, resolvePack } from "@/lib/services/credits";
 import { trackTikTokEvent } from "@/lib/services/tiktok-events";
 import { trackMetaEvent } from "@/lib/services/meta-events";
 
@@ -167,6 +168,18 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   }
 
   // -------------------------------------------------------------------------
+  // CREDIT PACK FLOW
+  // Detected by packSku in metadata (set by /api/packs/checkout).
+  // Must run before the subscription fallthrough, which errors on
+  // missing metadata.userId.
+  // -------------------------------------------------------------------------
+  const packSku = session.metadata?.packSku;
+  if (packSku) {
+    await handlePackCheckoutCompleted(session, packSku);
+    return;
+  }
+
+  // -------------------------------------------------------------------------
   // SUBSCRIPTION FLOW (existing behavior)
   // -------------------------------------------------------------------------
   const userId = session.metadata?.userId;
@@ -187,6 +200,72 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   // Fetch the subscription details
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
   await handleSubscriptionUpdated(subscription);
+}
+
+async function handlePackCheckoutCompleted(
+  session: Stripe.Checkout.Session,
+  packSku: string
+) {
+  const userId = session.metadata?.packUserId;
+  if (!userId) {
+    // Should be impossible — /api/packs/checkout requires Clerk auth.
+    // Fail loud: without a userId there is no account to credit.
+    throw new Error(
+      `[stripe-webhook] Pack checkout ${session.id} (${packSku}) has no packUserId — cannot grant credits`
+    );
+  }
+
+  const pack = resolvePack(packSku);
+  const credits = pack?.credits ?? parseInt(session.metadata?.credits || "0");
+  if (!credits || credits <= 0) {
+    throw new Error(
+      `[stripe-webhook] Pack checkout ${session.id}: unknown SKU ${packSku} and no credits in metadata — cannot grant`
+    );
+  }
+
+  const result = await grantPackCredits({
+    userId,
+    packSku,
+    credits,
+    stripeSessionId: session.id,
+  });
+
+  if (result.alreadyGranted) {
+    return; // webhook replay — already logged by grantPackCredits
+  }
+
+  console.log(
+    `[stripe-webhook] Granted ${credits} credits (${packSku}) to user ${userId} for session ${session.id}`
+  );
+
+  const amountCents = session.amount_total ?? pack?.priceUsd ?? 0;
+  const email = session.customer_details?.email || null;
+  await trackTikTokEvent({
+    event: "Purchase",
+    eventId: `purchase_pack_${session.id}`,
+    url: `${process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app"}/api/packs/checkout`,
+    email,
+    externalId: userId,
+    ttclid: session.metadata?.ttclid || null,
+    ttp: session.metadata?.ttp || null,
+    value: amountCents / 100,
+    currency: "USD",
+    contentId: packSku,
+    contentName: pack?.name || packSku,
+  });
+  await trackMetaEvent({
+    event: "Purchase",
+    eventId: `purchase_pack_${session.id}`,
+    url: `${process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app"}/api/packs/checkout`,
+    email,
+    externalId: userId,
+    fbc: session.metadata?.fbc || null,
+    fbp: session.metadata?.fbp || null,
+    value: amountCents / 100,
+    currency: "USD",
+    contentId: packSku,
+    contentName: pack?.name || packSku,
+  });
 }
 
 async function handlePortraitCheckoutCompleted(

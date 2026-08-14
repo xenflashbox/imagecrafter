@@ -19,6 +19,7 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { auth } from "@clerk/nextjs/server";
 import { buildDownloadUrl } from "@/lib/services/download-token";
+import { CreditPackCards } from "@/components/credit-pack-cards";
 
 export const metadata: Metadata = {
   title: "Order Confirmed — ImageCrafter Portrait Studio",
@@ -288,6 +289,20 @@ export default async function PortraitSuccessPage({ params, searchParams }: Prop
             <p className="text-xs text-gray-500 mt-4">
               Confirmation sent to {order.email} · Estimated delivery: 5–10 business days
             </p>
+          </div>
+        )}
+
+        {/* ---------------------------------------------------------------- */}
+        {/* CREDIT PACK UPSELL */}
+        {/* ---------------------------------------------------------------- */}
+        {isPaid && (
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
+            <h2 className="font-semibold text-white mb-1 text-lg">🎟️ Making more portraits?</h2>
+            <p className="text-sm text-gray-400 mb-5">
+              Grab a credit pack and redeem future portraits as digital downloads —
+              credits never expire.
+            </p>
+            <CreditPackCards theme="dark" />
           </div>
         )}
 

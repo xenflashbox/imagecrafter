@@ -11,6 +11,9 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { auth } from "@clerk/nextjs/server";
+import { getCreditBalance } from "@/lib/services/credits";
+import { RedeemButton } from "@/components/redeem-button";
+import { CreditPackCards } from "@/components/credit-pack-cards";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -111,6 +114,9 @@ export default async function PortraitPreviewPage({ params }: Props) {
 
   const isPurchased = portrait.status === "purchased";
 
+  // Pack credits (signed-in users only — packs require an account)
+  const creditBalance = userId ? await getCreditBalance(userId) : 0;
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Nav */}
@@ -183,6 +189,26 @@ export default async function PortraitPreviewPage({ params }: Props) {
                 </p>
               </div>
 
+              {/* Redeem with pack credit */}
+              {creditBalance > 0 && (
+                <div className="rounded-2xl border-2 border-emerald-200 p-5 bg-white">
+                  <div className="flex items-start gap-4">
+                    <div className="p-2 rounded-lg bg-emerald-100 text-2xl">🎟️</div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <h3 className="font-bold text-slate-900">Redeem a Credit</h3>
+                        <span className="text-xl font-bold text-emerald-600">Free</span>
+                      </div>
+                      <p className="text-sm text-slate-600 mb-4">
+                        Use 1 of your {creditBalance} portrait credit{creditBalance !== 1 ? "s" : ""} for
+                        the full-resolution digital download — no charge.
+                      </p>
+                      <RedeemButton portraitId={portrait.id} balance={creditBalance} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Digital download */}
               <div className="rounded-2xl border-2 border-purple-200 p-5 bg-white hover:border-purple-400 transition-colors">
                 <div className="flex items-start gap-4">
@@ -209,6 +235,17 @@ export default async function PortraitPreviewPage({ params }: Props) {
                   </div>
                 </div>
               </div>
+
+              {/* Credit packs upsell */}
+              {creditBalance === 0 && (
+                <div>
+                  <h3 className="font-bold text-slate-900 mb-3">🎟️ Making more than one?</h3>
+                  <CreditPackCards theme="light" />
+                  <p className="text-xs text-slate-500 mt-2 text-center">
+                    Credits never expire · Redeem any portrait as a digital download · Requires a free account
+                  </p>
+                </div>
+              )}
 
               {/* Print options */}
               <div>

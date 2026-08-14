@@ -38,6 +38,7 @@ model User {
   reviews           Review[]
   portraits         Portrait[]
   orders            Order[]
+  creditLedger      CreditLedger[]
 
   @@index([email])
   @@index([stripeCustomerId])
@@ -659,6 +660,26 @@ model Order {
   @@index([status])
   @@index([prodigiOrderId])
   @@map("ic_Order")
+}
+
+// Purchased portrait credits (packs). Append-only ledger — balance is
+// SUM(delta), computed in a transaction. Separate from Subscription's
+// monthly-reset credits: pack credits never expire (founder decision 2026-08-14).
+model CreditLedger {
+  id              String   @id @default(cuid())
+  userId          String
+  delta           Int      // +N on pack grant, -1 on redemption
+  reason          String   // "pack_grant" | "portrait_redeem" | "refund" | "admin_adjust"
+  stripeSessionId String?  @unique // idempotency key for pack grants (webhook replays)
+  orderId         String?  // Order created/updated by a redemption
+  portraitId      String?
+  packSku         String?  // "PACK_3" | "PACK_10" | "PACK_25"
+  createdAt       DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("ic_CreditLedger")
 }
 
 model StylePack {
