@@ -6,7 +6,7 @@
  *
  * Conversion paths:
  *   A — Guest Portrait: /portraits/create (no auth)
- *   B — Subscription: /sign-up → plans
+ *   B — Credit packs: /api/packs/checkout (sign-in enforced there)
  *   C — Style pack gallery from real DB data
  *
  * SEO: full Open Graph, Twitter Card, JSON-LD.
@@ -16,7 +16,7 @@ import { Metadata } from "next";
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
-import { PRICING_TABLE } from "@/lib/plans";
+import { CreditPackCards } from "@/components/credit-pack-cards";
 import {
   Camera,
   Sparkles,
@@ -37,7 +37,7 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
 export const metadata: Metadata = {
   title: "ImageCrafter — AI Portrait Studio & Image Generator",
   description:
-    "Transform your photo into stunning AI art in seconds. Royal portraits, fantasy scenes, fine art masterpieces — no account needed. Or subscribe for unlimited AI image generation.",
+    "Transform your photo into stunning AI art in seconds. Royal portraits, fantasy scenes, fine art masterpieces — no account needed. Pay only if you love it.",
   openGraph: {
     title: "ImageCrafter — AI Portrait Studio",
     description:
@@ -151,8 +151,6 @@ export default async function LandingPage() {
   // surface as an error, never as a homepage with a silently missing
   // gallery (fail-open audit, fix directive P1#3).
   const stylePacks = await getStylePacks();
-
-  const paidPlans = PRICING_TABLE.filter((p) => p.tier !== "FREE");
 
   return (
     <>
@@ -461,106 +459,63 @@ export default async function LandingPage() {
         </section>
 
         {/* ================================================================
-            PATH B — SUBSCRIPTION PLANS
+            PATH B — PRICING (real catalog: single portrait + credit packs)
         ================================================================ */}
         <section id="pricing" className="py-24 px-6 border-t border-white/5">
-          <div className="max-w-6xl mx-auto">
+          <div className="max-w-4xl mx-auto">
             <div className="text-center mb-14">
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-violet-500/15 border border-violet-500/25 text-violet-300 text-sm mb-4">
                 <Zap className="w-3.5 h-3.5" />
-                Unlimited AI Image Generation
+                Simple One-Time Pricing
               </div>
               <h2 className="text-4xl md:text-5xl font-light mb-4">
-                Create Without Limits
+                Pay Per Portrait
               </h2>
               <p className="text-white/50 max-w-xl mx-auto">
-                Subscribers get full access to the AI image generator — templates, batch mode,
-                4K resolution, and subscriber discounts on portrait prints.
+                No subscription. Create your portrait free, preview it, and pay only if
+                you love it — full 4K digital download, no watermark.
               </p>
             </div>
 
-            {/* Feature comparison */}
-            <div className="mb-12 max-w-2xl mx-auto bg-white/[0.03] rounded-2xl border border-white/10 p-6">
-              <h3 className="text-sm font-medium text-white/60 mb-4 uppercase tracking-wider">
-                Subscriber advantages
-              </h3>
-              <div className="grid sm:grid-cols-2 gap-3 text-sm">
-                {[
-                  "Unlimited template access",
-                  "15% off portrait prints",
-                  "Batch generate up to 10 images",
-                  "Up to 4K resolution",
-                  "No watermarks",
-                  "Priority generation queue",
-                  "Project & character consistency",
-                  "Full prompt history",
-                ].map((f) => (
-                  <div key={f} className="flex items-center gap-2 text-white/70">
-                    <Check className="w-4 h-4 text-violet-400 shrink-0" />
-                    {f}
-                  </div>
-                ))}
+            {/* Single portrait */}
+            <div className="mb-12 max-w-2xl mx-auto rounded-2xl border border-violet-500/50 bg-gradient-to-b from-violet-900/20 to-transparent p-8 text-center">
+              <div className="flex items-baseline justify-center gap-2 mb-1">
+                <span className="text-4xl font-light">$29.95</span>
+                <span className="text-white/40 text-sm">one-time</span>
               </div>
-            </div>
-
-            {/* Pricing cards */}
-            <div className="grid md:grid-cols-3 gap-6">
-              {paidPlans.map((plan) => (
-                <div
-                  key={plan.tier}
-                  className={`relative rounded-2xl border p-6 flex flex-col ${
-                    plan.highlighted
-                      ? "border-violet-500/60 bg-gradient-to-b from-violet-900/20 to-transparent"
-                      : "border-white/10 bg-white/[0.03]"
-                  }`}
-                >
-                  {plan.highlighted && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <span className="px-4 py-1 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-xs font-semibold whitespace-nowrap">
-                        Most Popular
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="mb-6">
-                    <div className="flex items-baseline gap-1 mb-1">
-                      <span className="text-3xl font-light">{plan.price}</span>
-                      <span className="text-white/40 text-sm">/mo</span>
-                    </div>
-                    <h3 className="text-lg font-medium mb-1">{plan.name}</h3>
-                    <p className="text-sm text-white/50">{plan.description}</p>
-                  </div>
-
-                  <ul className="space-y-2.5 mb-8 flex-1">
-                    {plan.features.map((f) => (
-                      <li key={f} className="flex items-start gap-2 text-sm text-white/70">
-                        <Check className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-
-                  <Link
-                    href={plan.tier === "TEAM" ? "/sign-up" : "/sign-up"}
-                    className={`flex items-center justify-center gap-2 py-3 rounded-xl font-medium text-sm transition-all ${
-                      plan.highlighted
-                        ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500"
-                        : "bg-white/8 hover:bg-white/12 border border-white/10"
-                    }`}
-                  >
-                    {plan.cta}
-                    <ArrowRight className="w-4 h-4" />
-                  </Link>
-                </div>
-              ))}
-            </div>
-
-            <p className="text-center text-white/30 text-sm mt-6">
-              Free plan available · No credit card required to start ·{" "}
-              <Link href="/sign-up" className="text-violet-400 hover:text-violet-300 transition-colors">
-                Sign up free
+              <h3 className="text-lg font-medium mb-4">Single Portrait</h3>
+              <ul className="space-y-2.5 mb-8 max-w-xs mx-auto text-left">
+                {[
+                  "Full 4K digital download",
+                  "No watermark",
+                  "Museum-quality prints & canvases available",
+                  "Preview before you pay",
+                ].map((f) => (
+                  <li key={f} className="flex items-start gap-2 text-sm text-white/70">
+                    <Check className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href="/portraits/create"
+                className="inline-flex items-center justify-center gap-2 px-8 py-3 rounded-xl font-medium text-sm bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all"
+              >
+                Create Your Portrait
+                <ArrowRight className="w-4 h-4" />
               </Link>
-            </p>
+            </div>
+
+            {/* Credit packs */}
+            <div className="max-w-2xl mx-auto">
+              <h3 className="text-sm font-medium text-white/60 mb-5 uppercase tracking-wider text-center">
+                Creating more than one? Save with credit packs
+              </h3>
+              <CreditPackCards theme="dark" />
+              <p className="text-center text-white/30 text-sm mt-6">
+                Credits never expire · Each credit unlocks one full 4K portrait download
+              </p>
+            </div>
           </div>
         </section>
 

@@ -131,56 +131,51 @@ const structuredData = {
   applicationCategory: "DesignApplication",
   operatingSystem: "Web",
   description:
-    "AI-powered image generation tool that creates professional images from simple text descriptions.",
+    "AI portrait studio — turn your photo into a Renaissance, Starry Night, fantasy, or comic-book portrait. Full 4K digital downloads and museum-quality prints.",
   url: "https://imagecrafter.app",
   author: {
     "@type": "Organization",
     name: "Xenco Labs",
     url: "https://xencolabs.com",
   },
+  // Real catalog only (founder-approved 2026-08 ladder). No aggregateRating:
+  // a fabricated rating is a Google structured-data policy violation.
   offers: {
     "@type": "AggregateOffer",
-    lowPrice: "0",
-    highPrice: "49",
+    lowPrice: "29.95",
+    highPrice: "149.95",
     priceCurrency: "USD",
     offerCount: "4",
     offers: [
       {
         "@type": "Offer",
-        name: "Free",
-        price: "0",
+        name: "Single Portrait",
+        price: "29.95",
         priceCurrency: "USD",
-        description: "5 images per month, watermarked",
+        description: "One portrait — full 4K digital download, no watermark",
       },
       {
         "@type": "Offer",
-        name: "Starter",
-        price: "9",
+        name: "3-Portrait Pack",
+        price: "39.95",
         priceCurrency: "USD",
-        description: "100 images per month, no watermark",
+        description: "3 portrait credits — never expire",
       },
       {
         "@type": "Offer",
-        name: "Pro",
-        price: "19",
+        name: "10-Portrait Pack",
+        price: "74.95",
         priceCurrency: "USD",
-        description: "500 images per month, 4K, projects",
+        description: "10 portrait credits — never expire",
       },
       {
         "@type": "Offer",
-        name: "Team",
-        price: "49",
+        name: "25-Portrait Pack",
+        price: "149.95",
         priceCurrency: "USD",
-        description: "2000 images per month, API access",
+        description: "25 portrait credits — never expire",
       },
     ],
-  },
-  aggregateRating: {
-    "@type": "AggregateRating",
-    ratingValue: "4.8",
-    ratingCount: "127",
-    bestRating: "5",
-    worstRating: "1",
   },
 };
 
