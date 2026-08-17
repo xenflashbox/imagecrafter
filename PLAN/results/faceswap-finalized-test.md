@@ -266,3 +266,119 @@ One of six attempted subject x style combinations produced an image a human woul
 That is the honest state of the face swap today, and it is the reason the homepage rebrand
 (#44) cannot complete: three of the four styles the homepage advertises cannot currently
 produce a correct image of the subject.
+
+---
+
+# Addendum — 2026-08-17: the blockers were two real defects, both fixed
+
+The table above closed with 1-of-6 acceptable and three styles marked UNTESTABLE. That
+picture was accurate on the day but it was NOT the true failure rate: two of the three
+"failures" were defects in the pipeline's own machinery, not in the swap. Both are now
+root-caused, fixed, and proven. Final gallery state: **4 of 5 styles ship**, egyptian
+remains held back.
+
+## Blocker 0 — Kling error 1102 (P0 #47) — RESOLVED, no re-pinning
+
+Renaissance and elven were UNTESTABLE only because the Kling account was out of balance.
+The founder bought a 1,000-image trial on a separate Kling API console and rotated
+`KLING_API_KEY` in the `kling-ai-mcp-xmhp` Infisical project.
+
+The fix was **a container restart, not a code change**. image-gen injects secrets at
+container start via `os.execvpe`, so a rotated key is invisible to a running process. Its
+bootstrap fetches `KLING_API_KEY` cross-project from the key's home vault using
+`INFISICAL_KLING_PROJECT_ID`, and is fail-closed — it refuses to boot if the key is not
+readable. Restarted `image-gen-worker`/`api`/`mcp` on host `xenco` (plain Docker, image
+`registry.xencolabs.com/gemini-image-gen:fix-b98cd1c`).
+
+Evidence: key last-4 `Y0W8` -> `JXPY` (len 57 both, value never printed); live probe
+returned `provider: kling kling-v3` with a real image. **No style was re-pinned to another
+engine to dodge the outage** — pinning is a measured bake-off result, not a fallback.
+
+## Defect 1 — the style gate was false-rejecting legitimate output
+
+**Symptom.** Elven was rejected twice as `style=photoreal` on images that are plainly an
+elf in an enchanted forest.
+
+**Root cause.** The gate's own documented purpose (portrait-analysis.ts:334-336) is to
+catch ONE defect: the swap step sometimes discards the artistic scene and returns a plain
+photograph. But the prompt had drifted into asking a compound question — is this image
+stylized *in the style of X* — which turns a defect detector into a style-fidelity judge.
+Any output that was clearly artistic but not a perfect stylistic match got rejected.
+
+**Fix.** Rewrote the prompt to ask only the question the gate exists to answer, with an
+explicit carve-out: answer STYLED even if the face is photographically rendered and even
+if it does not match the intended style, because fidelity is not what is being judged.
+Still fail-closed — `"unknown"` on anything unparseable, and the caller accepts only
+`"styled"`.
+
+**Proof, including the reject leg.** `scripts/smoke/style-gate-demo.ts` runs the production
+gate against four known inputs and is **4/4 green**:
+
+| Input | Expected | Got |
+|---|---|---|
+| the real source photograph | photoreal | photoreal |
+| the elven swap the old prompt rejected | styled | styled |
+| shipped renaissance (control) | styled | styled |
+| shipped starry-night (control) | styled | styled |
+
+The first row is the important one. A gate that only ever says yes is not a gate; the
+demo proves the rewrite did not simply make it permissive.
+
+## Defect 2 — uncalibrated skin-tone scale was producing strangers
+
+**Symptom.** comic-hero returned a woman who is not the subject: broad face, heavy jaw,
+noticeably darker skin. Rejected on sight.
+
+**Root cause — and it is a customer-facing bug, not a gallery bug.** The swap redraws
+features *inside the face region only*; skin tone, hair and head geometry are inherited
+from the stand-in. So the stand-in's skin tone is load-bearing for identity. The analysis
+prompt asked for a skin tone using scale words with **no anchors**, so for a light-skinned
+subject it emitted "Medium" roughly half the time and "Light" the other half. A too-dark
+stand-in yields a stranger no matter how good the swap is. This mechanism explains the
+identity failures far better than "the swap is unreliable" does.
+
+**Fix.** Anchored every scale word to an observable criterion (fair / light / medium / tan
+/ deep), instructed judging against the whole human range rather than others in frame,
+required breaking ties toward the LIGHTER word with the reason stated inline, and banned
+leading with an undertone ("warm olive skin tone" reads as an olive-skinned person).
+
+**Proof.** Immediately after the change, comic-hero passed on the **first** swap with
+`identity=same`, and the result is visibly the subject. Renaissance and elven likewise
+came back correct.
+
+## What this changes about the earlier verdict
+
+The 1-of-6 number conflated three different things: a funding outage (blocker 0), a broken
+judge (defect 1), and a genuine input defect (defect 2). Only defect 2 was ever about the
+swap itself, and it was an analysis bug upstream of the swap. The swap step was not the
+weak link.
+
+## Standing rule reaffirmed
+
+Every one of the four shipped images was viewed directly before use. comic-hero's first
+version existed on disk and would have passed a file-existence check; it was rejected on
+sight. **No image is gallery-eligible on gate approval alone** — the gates are a cost
+filter that avoids burning credits on obvious failures, not the acceptance authority.
+
+## Final coverage
+
+| Subject x style | Verdict | Note |
+|---|---|---|
+| adult-face x renaissance | **PASS** (lead-verified) | ships |
+| adult-face x starry-night | **PASS** (lead-verified) | ships |
+| adult-face x elven | **PASS** (lead-verified) | ships; had been a style-gate false reject |
+| adult-face x comic-hero | **PASS** (lead-verified) | ships; passed first swap after the skin-tone fix |
+| adult-face x egyptian | HELD BACK | no gate-passing output; pack deactivated in prod DB |
+| child-face x starry-night | FAIL | unchanged — children remain unproven, not advertised |
+| pets | UNTESTED | |
+| groups | documented no-go | |
+
+Shipped as `gallery/v3` on R2 (immutable 1yr cache forces new keys per regeneration),
+prod DB shows `packs=4 variants=4`, `picsum remaining: 0` across variants/packs/templates.
+Commit `ee58d60`.
+
+## Open
+
+Identity gate false-reject flake (~1/4 on a lead-verified control) is still open as #49.
+It fails safe — it rejects good images rather than passing bad ones — so it costs credits
+and retries, not correctness. Tracked separately.
