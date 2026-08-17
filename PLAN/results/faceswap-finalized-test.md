@@ -212,3 +212,57 @@ exhausted, P0, founder action). Child and pet subjects are untested.
 Three times in this test a gate returned green on an image a human rejected. The gates are a
 cost filter, not the acceptance authority. **No image is gallery-eligible on gate approval
 alone.**
+
+---
+
+## Run 5 — child subject, same day (2026-08-17)
+
+First test of a non-adult subject on the fixed pipeline.
+
+```
+adult-face  x starry-night  → PASS (lead-verified, run 4)
+child-face  x starry-night  → FAIL  fidelity=match,
+                                    acceptance identity=different (x2, incl. retry)
+```
+
+The descriptor confirms all three fixes are working on this subject:
+
+> "a child, young child around 3-5 years old, with Medium-dark brown wavy hair with warm
+> undertones. **Medium skin** with warm olive undertones. Deep brown eyes with amber
+> highlights., **wearing** Medium-length wavy hair falling just past ear level … ,
+> **face shape:** Distinctly round face with very full cheeks, soft jawline, and rounded
+> chin creating near-circular proportions typical of early childhood"
+
+Skin tone leads with a scale word ("Medium skin", olive demoted to an undertone — exactly
+the fix from run 3), and hair and face shape both reach the prompt. So this is **not** the
+run-1/3 defect class recurring. The stand-in was built correctly and the fidelity gate
+agreed; the failure is downstream, in the swap itself.
+
+Working hypothesis (NOT yet proven): young children's faces carry far less distinguishing
+structure than adults'. Adult identity rides on jaw, brow and cheekbone geometry, which the
+descriptor now transfers; a 3-5 year old's face is dominated by the round-cheek/soft-jaw
+proportions common to *every* child that age, so the swap has much less to key on and the
+identity gate cannot separate this child from a generic one. Confirming or refuting this
+needs more child subjects, which we do not have.
+
+**Consequence for launch: children are unproven. Do not put a child portrait on the
+homepage, and do not claim children as a supported subject, on the strength of one failed
+run.** This is a single data point, not a verdict — but it is a data point in the wrong
+direction, and the honest position is "untested/unproven", not "supported".
+
+## Coverage as of end of test
+
+| Subject x style | Verdict | Note |
+|---|---|---|
+| adult-face x starry-night | **PASS** (lead-verified) | the only gallery-eligible asset produced |
+| adult-face x comic-hero | FAIL — held back | identity=different x2; retry also style=photoreal |
+| adult-face x renaissance | UNTESTABLE | Kling 1102, P0 #47 |
+| adult-face x elven | UNTESTABLE | Kling 1102, P0 #47 |
+| child-face x starry-night | FAIL | see run 5 |
+| pets | UNTESTED | |
+| groups | documented no-go | |
+
+One of six attempted subject x style combinations produced an image a human would accept.
+That is the honest state of the face swap today, and it is the reason the homepage rebrand
+(#44) cannot complete: three of the four styles the homepage advertises cannot currently
+produce a correct image of the subject.
