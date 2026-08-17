@@ -407,7 +407,7 @@ export default async function LandingPage() {
                   className="group bg-white/[0.04] rounded-2xl border border-white/10 overflow-hidden hover:border-violet-500/50 hover:bg-white/[0.06] transition-all"
                 >
                   {/* Thumbnail */}
-                  <div className="aspect-video relative overflow-hidden">
+                  <div className="aspect-[3/4] relative overflow-hidden">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={

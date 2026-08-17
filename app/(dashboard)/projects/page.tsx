@@ -200,7 +200,7 @@ export default function ProjectsPage() {
                     className="group block bg-white/5 rounded-xl border border-white/10 overflow-hidden hover:border-white/20 transition-all"
                   >
                     {/* Thumbnail */}
-                    <div className="relative aspect-video bg-gradient-to-br from-white/5 to-white/[0.02]">
+                    <div className="relative aspect-[3/4] bg-gradient-to-br from-white/5 to-white/[0.02]">
                       {project.thumbnailUrl ? (
                         <img
                           src={project.thumbnailUrl}

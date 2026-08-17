@@ -405,7 +405,7 @@ export default function GalleryPage() {
                           src={img.thumbnailUrl || img.imageUrl}
                           alt={img.originalPrompt}
                           className={`w-full object-cover transition-transform duration-300 group-hover:scale-105 ${
-                            viewMode === "grid" ? "aspect-video" : ""
+                            viewMode === "grid" ? "aspect-[3/4]" : ""
                           }`}
                         />
 

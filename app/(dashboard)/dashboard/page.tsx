@@ -334,7 +334,7 @@ export default function DashboardPage() {
                   className="group bg-white/5 rounded-xl border border-white/10 overflow-hidden"
                 >
                   {/* Image */}
-                  <div className="relative aspect-video">
+                  <div className="relative aspect-[3/4]">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={image.imageUrl}
