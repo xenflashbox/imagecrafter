@@ -116,7 +116,7 @@ async function main(): Promise<void> {
     const scene = await generateStandInScene(scenePrompt, styleSlug);
     if ("error" in scene) fail(`Stand-in scene generation failed: ${scene.error}`);
     console.log(`  scene in ${((Date.now() - t1) / 1000).toFixed(1)}s: ${scene.sceneUrl}`);
-    const fidelity = await checkStandInFidelity(scene.sceneUrl, analysis);
+    const fidelity = await checkStandInFidelity(photoDataUri, scene.sceneUrl);
     console.log(`  fidelity gate: ${fidelity}`);
     if (fidelity === "match") {
       sceneUrl = scene.sceneUrl;

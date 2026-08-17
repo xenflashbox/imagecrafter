@@ -120,7 +120,17 @@ export function buildStandInDescriptor(
   }
   const who = p.genderPresentation || "person";
   const age = p.ageBracket ? `, ${p.ageBracket},` : "";
-  return `a ${who}${age} with ${p.coloring}`;
+  // Hair is not optional detail: the swap transfers the face region only, so
+  // whatever hair the stand-in is generated with is the hair the customer
+  // receives. Coloring carries hair COLOUR; this carries length and texture.
+  const hair = p.hair ? `, wearing ${p.hair}` : "";
+  // Face shape for the same reason as hair: the swap redraws the features
+  // inside the face region, but head width, jawline and chin come from the
+  // stand-in. A narrow-faced subject built on a broad-jawed stand-in still
+  // reads as a different woman even after a clean swap (lead-verified
+  // 2026-08-17 on starry-night).
+  const face = p.faceShape ? `, face shape: ${p.faceShape}` : "";
+  return `a ${who}${age} with ${p.coloring}${hair}${face}`;
 }
 
 /**
@@ -528,7 +538,10 @@ export async function generatePortrait(
       };
     }
 
-    const fidelity = await checkStandInFidelity(scene.sceneUrl, analysis);
+    const fidelity = await checkStandInFidelity(
+      portrait.sourceImageUrl,
+      scene.sceneUrl
+    );
     if (fidelity === "match") {
       sceneUrl = scene.sceneUrl;
       break;

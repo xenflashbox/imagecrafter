@@ -29,6 +29,18 @@ export interface PortraitSubjectAnalysis {
     ageBracket?: string;
     /** apparent gender presentation for humans, if evident */
     genderPresentation?: string;
+    /**
+     * Hair length, texture and how it is worn. The face swap replaces the face
+     * region only — hair comes from the stand-in — so this must reach the
+     * stand-in prompt or the output wears a stranger's hair.
+     */
+    hair?: string;
+    /**
+     * Face shape and proportions. Same reason as hair: the swap redraws the
+     * features inside the face region, but head width, jawline and chin are
+     * inherited from the stand-in.
+     */
+    faceShape?: string;
   };
   additionalSubjects?: Array<{
     description: string;
@@ -71,10 +83,11 @@ Analyze the photo and return a JSON object with the following structure:
     "species": "if pet, the species (omit for humans)",
     "breed": "if pet, the breed or best guess (omit for humans)",
     "keyFeatures": ["array", "of", "5-8", "HIGHLY SPECIFIC", "identifying", "features", "that make this individual unique"],
-    "coloring": "PRECISE description of colors - exact hair/fur color (e.g., 'warm chestnut brown with subtle auburn highlights' not just 'brown'), skin tone, eye color with specific shading",
+    "coloring": "PRECISE description of colors - exact hair/fur color (e.g., 'warm chestnut brown with subtle auburn highlights' not just 'brown'); then skin tone, which MUST lead with exactly one of these scale words - fair, light, medium, tan, deep - and may add undertone nuance only after it (e.g. 'light skin with olive undertones'). NEVER lead with the undertone: 'warm olive skin tone' reads as an olive-skinned person and is wrong for a light-skinned subject. Then eye color with specific shading.",
     "expression": "description of their facial expression/mood",
     "ageBracket": "approximate age bracket, e.g. 'toddler', 'child around 8 years old', 'teenager', 'adult in their 30s', 'senior' (for pets: 'puppy', 'adult dog', etc.)",
     "genderPresentation": "for humans: apparent gender presentation, e.g. 'man', 'woman', 'boy', 'girl' (omit if unclear or for pets)",
+    "hair": "for humans: hair LENGTH, TEXTURE and how it is worn, e.g. 'long straight hair falling well past the shoulders, parted slightly off-centre' or 'short tightly-curled hair cropped close at the sides'. State length relative to the shoulders and whether it is straight, wavy, curly or coiled. Omit for pets.",
     "faceShape": "specific face shape and proportions",
     "uniqueMarks": "any unique identifying marks: freckles, moles, dimples, scars, birthmarks, asymmetries"
   },
@@ -412,7 +425,7 @@ export async function checkIdentityPresence(
             toBlock(output),
             {
               type: "text",
-              text: `Image 1 is a real photo of a subject. Image 2 is a stylized artistic portrait. Ignoring the artistic style, costume, and setting: does image 2 depict the SAME individual as image 1 — same facial structure, same hair color, same eye color, same skin tone, same apparent age and gender? A different hair color, eye color, or skin tone means DIFFERENT. Answer with exactly one word: SAME or DIFFERENT.`,
+              text: `Image 1 is a real photo of a subject. Image 2 is a stylized artistic portrait. Ignoring the artistic style, costume, and setting: does image 2 depict the SAME individual as image 1 — same facial structure, same hair color, same hair length and texture, same eye color, same skin tone, same apparent age and gender? Judge as a friend of the person would: if they would not recognise image 2 as this specific individual, answer DIFFERENT. A different hair color, a clearly different hair length or texture, a different eye color, or a different skin tone each mean DIFFERENT on their own. Answer with exactly one word: SAME or DIFFERENT.`,
             },
           ],
         },
@@ -437,34 +450,42 @@ export async function checkIdentityPresence(
 export type StandInFidelity = "match" | "mismatch" | "unknown";
 
 /**
- * Compare the rendered stand-in's coloring/demographics against the analysis
- * JSON BEFORE the face swap. The swap can only bridge what the stand-in
- * already resembles: a blonde blue-eyed stand-in for a dark-haired brown-eyed
- * subject fails here and is regenerated — it never reaches the swap.
- * Automates the human QA bar that made the Jul-7 test 15/15.
+ * Compare the rendered stand-in against the SUBJECT'S ACTUAL PHOTO before the
+ * face swap. The swap can only bridge what the stand-in already resembles, so
+ * a stand-in with the wrong skin tone or hair is regenerated — it never
+ * reaches the swap.
+ *
+ * The comparison is image-to-image on purpose. Comparing against the analysis
+ * text instead let a visibly different woman through on 2026-08-17: the
+ * analysis had drifted (a fair-skinned subject described as "warm medium skin
+ * tone with olive undertones"), the stand-in faithfully matched that text, and
+ * the swap inherited the wrong skin tone. The photo is the only ground truth.
+ *
+ * This is a TRAIT check, not an identity check — the stand-in is deliberately
+ * a different person. It vetoes only on traits the swap demonstrably does NOT
+ * correct: skin tone, hair and eye colour. Facial structure and apparent age
+ * are excluded because the swap rebuilds them, and because grading a stylised
+ * painting's "apparent age" flipped run-to-run and failed a lead-verified
+ * control. Each veto carries an explicit tolerance for the same reason: the
+ * verifier read one photo as both "medium olive" and "light" across runs, so
+ * an adjacent-step difference is noise, not signal.
  *
  * FAIL-CLOSED: "unknown" must ABORT the generation at the caller (never burn
  * regeneration spend while the verifier is blind).
  */
 export async function checkStandInFidelity(
-  standInImageUrl: string,
-  analysis: PortraitSubjectAnalysis
+  photoUrl: string,
+  standInImageUrl: string
 ): Promise<StandInFidelity> {
   if (!anthropic) return "unknown";
-  const p = analysis.primarySubject || ({} as PortraitSubjectAnalysis["primarySubject"]);
-  const expectations = [
-    p.coloring ? `coloring: ${p.coloring}` : "",
-    p.genderPresentation ? `gender presentation: ${p.genderPresentation}` : "",
-    p.ageBracket ? `age bracket: ${p.ageBracket}` : "",
-  ]
-    .filter(Boolean)
-    .join("; ");
-  if (!expectations) return "unknown";
   try {
-    const { base64, mediaType } = await fetchImageAsBase64(standInImageUrl);
+    const [photo, standIn] = await Promise.all([
+      fetchImageAsBase64(photoUrl),
+      fetchImageAsBase64(standInImageUrl),
+    ]);
     const response = await anthropic.messages.create({
       model: VISION_MODEL,
-      max_tokens: 16,
+      max_tokens: 400,
       messages: [
         {
           role: "user",
@@ -473,23 +494,56 @@ export async function checkStandInFidelity(
               type: "image",
               source: {
                 type: "base64",
-                media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
-                data: base64,
+                media_type: photo.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+                data: photo.base64,
+              },
+            },
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: standIn.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+                data: standIn.base64,
               },
             },
             {
               type: "text",
-              text: `This is a stylized rendering of a subject who should have these real-world traits: ${expectations}. Allowing for the artistic style, does the depicted subject's hair color, eye color, skin tone, apparent gender, and apparent age plausibly MATCH those traits? A clearly different hair color, eye color, or skin tone means MISMATCH. Answer with exactly one word: MATCH or MISMATCH.`,
+              text: `Image 1 is a real photo of a subject. Image 2 is a stylized rendering of a stand-in who is meant to share that subject's physical traits (it is deliberately NOT the same individual, so do not judge identity, facial structure or age).
+
+For each trait below, state what you see in image 1, then image 2, on one short line:
+SKIN TONE:
+HAIR COLOUR:
+HAIR LENGTH: (cropped / short / chin-length / shoulder-length / past-shoulders / long)
+HAIR TEXTURE: (straight / wavy / curly / coiled)
+EYE COLOUR:
+
+Judge ONLY those five traits, and only at a coarse level:
+- MISMATCH if the skin tone differs by more than one shade step (fair / light / medium / tan / deep) — a fair subject rendered deep, or a deep subject rendered fair.
+- MISMATCH if the hair colour is a different colour family (e.g. brown vs blonde, black vs red).
+- MISMATCH if the hair length differs by two or more steps on the scale above (e.g. cropped vs past-shoulders).
+- MISMATCH if the hair texture is categorically different (e.g. straight vs curly or coiled).
+- MISMATCH if the eye colour is a different colour family (e.g. brown vs blue, brown vs green).
+
+Otherwise answer MATCH. Adjacent steps (shoulder-length vs past-shoulders, light vs medium, straight vs slightly wavy, brown vs hazel) are within tolerance and are a MATCH. Ignore differences in facial structure, expression and apparent age — the swap rebuilds those.
+
+Finish with a final line containing exactly one word: MATCH or MISMATCH.`,
             },
           ],
         },
       ],
     });
     const textContent = response.content.find((block) => block.type === "text");
-    const answer =
-      (textContent && "text" in textContent ? textContent.text : "").trim().toUpperCase();
-    if (answer.startsWith("MATCH")) return "match";
+    const raw = (textContent && "text" in textContent ? textContent.text : "").trim();
+    if (response.stop_reason === "max_tokens") {
+      console.error("[StandInFidelity] Response truncated before the verdict line");
+      return "unknown";
+    }
+    // The verdict is the LAST word: the observation lines above it mention both
+    // terms, so matching from the start would read the description, not the call.
+    const answer = raw.toUpperCase().split(/\s+/).filter(Boolean).pop() || "";
     if (answer.startsWith("MISMATCH")) return "mismatch";
+    if (answer.startsWith("MATCH")) return "match";
+    console.error(`[StandInFidelity] Unparseable verdict: ${raw.slice(-120)}`);
     return "unknown";
   } catch (error) {
     console.error("[StandInFidelity] Check failed:", error);
