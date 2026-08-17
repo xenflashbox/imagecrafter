@@ -83,7 +83,7 @@ const websiteSchema = {
 // hosted on R2 CDN (gallery v2: gate-passing P4 regeneration). Not stock, not
 // mock. Egyptian is held back (failed the identity acceptance gate) and is
 // intentionally absent — never ship a stranger.
-const GALLERY_CDN = "https://images.imagecrafter.app/gallery/v2";
+const GALLERY_CDN = "https://images.imagecrafter.app/gallery/v3";
 const BEFORE_PHOTO = `${GALLERY_CDN}/before/adult-face-thumb.jpg`;
 const AFTER_GALLERY = [
   { slug: "renaissance", name: "Renaissance", pack: "Royal Gallery" },

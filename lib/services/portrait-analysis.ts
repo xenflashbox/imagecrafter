@@ -83,7 +83,7 @@ Analyze the photo and return a JSON object with the following structure:
     "species": "if pet, the species (omit for humans)",
     "breed": "if pet, the breed or best guess (omit for humans)",
     "keyFeatures": ["array", "of", "5-8", "HIGHLY SPECIFIC", "identifying", "features", "that make this individual unique"],
-    "coloring": "PRECISE description of colors - exact hair/fur color (e.g., 'warm chestnut brown with subtle auburn highlights' not just 'brown'); then skin tone, which MUST lead with exactly one of these scale words - fair, light, medium, tan, deep - and may add undertone nuance only after it (e.g. 'light skin with olive undertones'). NEVER lead with the undertone: 'warm olive skin tone' reads as an olive-skinned person and is wrong for a light-skinned subject. Then eye color with specific shading.",
+    "coloring": "PRECISE description of colors - exact hair/fur color (e.g., 'warm chestnut brown with subtle auburn highlights' not just 'brown'); then skin tone, which MUST lead with exactly one of these scale words, calibrated as follows - fair (very pale, burns rather than tans), light (pale to light beige, may carry a slight tan), medium (visibly beige to light olive year-round), tan (clearly brown), deep (dark brown to very dark). Judge against the whole human range, not against other people in the frame; when torn between two adjacent words choose the LIGHTER one, because the stand-in inherits this value and a too-dark stand-in produces a stranger. You may add undertone nuance only AFTER the scale word (e.g. 'light skin with olive undertones'). NEVER lead with the undertone: 'warm olive skin tone' reads as an olive-skinned person and is wrong for a light-skinned subject. Then eye color with specific shading.",
     "expression": "description of their facial expression/mood",
     "ageBracket": "approximate age bracket, e.g. 'toddler', 'child around 8 years old', 'teenager', 'adult in their 30s', 'senior' (for pets: 'puppy', 'adult dog', etc.)",
     "genderPresentation": "for humans: apparent gender presentation, e.g. 'man', 'woman', 'boy', 'girl' (omit if unclear or for pets)",
@@ -364,7 +364,15 @@ export async function checkStylePresence(
             },
             {
               type: "text",
-              text: `Is this image rendered as stylized artwork in the style of "${styleDescription}" (painting, comic, illustration, etc.), or is it essentially a photorealistic photograph with no artistic style applied? Answer with exactly one word: STYLED or PHOTOREAL.`,
+              text: `You are checking for ONE specific defect: a face-swap step sometimes discards the artistic scene entirely and returns a plain photograph of the person.
+
+Answer PHOTOREAL only if this image is essentially an ordinary photograph — everyday clothing, an ordinary real-world setting, no costume and no artistic rendering.
+
+Answer STYLED if the image carries any artistic rendering, costume, or fantasy/period/illustrated setting, EVEN IF the face is rendered with photographic realism and EVEN IF it does not perfectly match the intended style. Fidelity to the intended style is not what you are judging.
+
+Intended style, for context only: "${styleDescription}"
+
+Answer with exactly one word: STYLED or PHOTOREAL.`,
             },
           ],
         },

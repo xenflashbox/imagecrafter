@@ -24,9 +24,11 @@ const BEFORE_PHOTO = path.join(ROOT, "scripts/faceswap-timebox/input/adult-face.
 
 const STYLES = ["renaissance", "starry-night", "egyptian", "elven", "comic-hero"];
 
-// v2: the P4 regeneration (gated pipeline outputs, 2026-07-12). v1 assets are
-// cached immutable for 1yr, so replaced content MUST get new keys.
-const GALLERY_PREFIX = "gallery/v2";
+// v3: regenerated 2026-08-17 on the repaired pipeline (skin-tone scale
+// calibration, faceShape in the descriptor, photo-anchored fidelity gate,
+// style gate no longer false-rejecting). Assets are cached immutable for 1yr,
+// so replaced content MUST get new keys.
+const GALLERY_PREFIX = "gallery/v3";
 
 async function main(): Promise<void> {
   const { uploadToR2, generateThumbnail, isR2Available } = await import("../../lib/r2");
