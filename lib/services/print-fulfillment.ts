@@ -14,6 +14,8 @@
  *   Framed Canvas:   GLOBAL-FRA-CAN-{WIDTH}X{HEIGHT} (attributes: color AND wrap — both required)
  */
 
+import { timingSafeEqual } from "node:crypto";
+
 // =============================================================================
 // CONFIGURATION
 // =============================================================================
@@ -250,7 +252,15 @@ export async function createProdigiOrder(
     attributes.wrap = params.wrap || product.defaultWrap || "ImageWrap";
   }
 
-  // Build callback URL including webhook secret for verification
+  // Build callback URL including webhook secret for verification.
+  // The order is already paid for, so a missing secret must not block
+  // fulfilment — but it does mean every status callback will be rejected,
+  // so say so loudly rather than losing tracking updates in silence.
+  if (!WEBHOOK_SECRET) {
+    console.error(
+      `[prodigi] PRODIGI_WEBHOOK_SECRET is not configured — order ${params.orderId} will receive NO status/tracking updates; status must be reconciled manually`
+    );
+  }
   const callbackUrl = WEBHOOK_SECRET
     ? `${APP_URL}/api/webhooks/prodigi?secret=${encodeURIComponent(WEBHOOK_SECRET)}`
     : `${APP_URL}/api/webhooks/prodigi`;
@@ -365,12 +375,25 @@ export function extractTracking(
 
 /**
  * Verify a Prodigi webhook request by checking the secret query param.
- * Returns true if the secret matches or no secret is configured.
+ *
+ * Fails CLOSED when no secret is configured: this endpoint mutates order
+ * status and sends customers shipping emails, so an unset secret must not
+ * leave it open to anyone who knows the URL.
  */
 export function verifyProdigiWebhook(requestSecret: string | null): boolean {
-  if (!WEBHOOK_SECRET) return true;
+  if (!WEBHOOK_SECRET) {
+    console.error(
+      "[prodigi] PRODIGI_WEBHOOK_SECRET is not configured — rejecting webhook (fail-closed)"
+    );
+    return false;
+  }
   if (!requestSecret) return false;
-  return requestSecret === WEBHOOK_SECRET;
+
+  const provided = Buffer.from(requestSecret);
+  const expected = Buffer.from(WEBHOOK_SECRET);
+  return (
+    provided.length === expected.length && timingSafeEqual(provided, expected)
+  );
 }
 
 /** Check if we're running in sandbox mode */

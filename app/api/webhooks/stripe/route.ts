@@ -27,15 +27,18 @@ const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 // STARTER/TEAM Stripe prices map to PRO so grandfathered subscribers renewing
 // on old price IDs keep resolving to a real tier (DB rows were migrated by
 // prisma/migrations/20260705_generation_request_dual_engine_tier_collapse.sql).
-const PRICE_TO_PLAN: Record<string, PlanTier> = {
-  [process.env.STRIPE_PRICE_PRO!]: "PRO",
-  ...(process.env.STRIPE_PRICE_STARTER
-    ? { [process.env.STRIPE_PRICE_STARTER]: "PRO" as PlanTier }
-    : {}),
-  ...(process.env.STRIPE_PRICE_TEAM
-    ? { [process.env.STRIPE_PRICE_TEAM]: "PRO" as PlanTier }
-    : {}),
-};
+// Only defined price IDs become keys: interpolating an unset env var yields
+// the literal key "undefined", which an undefined priceId lookup would then
+// match — granting PRO with no payment behind it.
+const PRICE_TO_PLAN: Record<string, PlanTier> = Object.fromEntries(
+  [
+    process.env.STRIPE_PRICE_PRO,
+    process.env.STRIPE_PRICE_STARTER,
+    process.env.STRIPE_PRICE_TEAM,
+  ]
+    .filter((id): id is string => Boolean(id))
+    .map((id) => [id, "PRO" as PlanTier])
+);
 
 // Plan configurations — sets both credit system and legacy fields
 const PLAN_CONFIG: Record<
@@ -528,6 +531,12 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 
   // Determine plan from price ID
   const priceId = subscription.items.data[0]?.price.id;
+  if (!priceId) {
+    console.error(
+      `[stripe-webhook] Subscription ${subscription.id} has no price ID — cannot resolve a plan, skipping (fail-closed)`
+    );
+    return;
+  }
   const plan = PRICE_TO_PLAN[priceId] || "FREE";
   const config = PLAN_CONFIG[plan];
 
