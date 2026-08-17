@@ -333,7 +333,7 @@ export default async function LandingPage() {
             <div className="text-center mb-14">
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-green-500/15 border border-green-500/25 text-green-300 text-sm mb-4">
                 <Camera className="w-3.5 h-3.5" />
-                Real results — one photo, five styles
+                Real results — one photo, {AFTER_GALLERY.length} styles
               </div>
               <h2 className="text-4xl md:text-5xl font-light mb-4">
                 From One Photo to Any Style
