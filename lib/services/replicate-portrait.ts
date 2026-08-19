@@ -28,6 +28,14 @@ export interface FaceIntoSceneParams {
   /** Public URL of the generic stand-in scene (image 2). */
   sceneUrl: string;
   subjectKind: "person" | "pet";
+  /**
+   * Anchored age band from the analysis. The swap regularises very young
+   * subjects toward an older child — a 3-year-old came back looking 6-7 even
+   * from a correctly-aged stand-in (lead-verified 2026-08-18, renaissance) —
+   * and a generic "keep their age" instruction does not hold. Restating the
+   * literal band does, the same way it does in the stand-in prompt.
+   */
+  subjectAge?: string;
 }
 
 // =============================================================================
@@ -40,6 +48,7 @@ const ENABLE_FACE_PRESERVATION =
   process.env.ENABLE_INSTANTID === "true";
 
 const MULTI_KONTEXT_MODEL = "flux-kontext-apps/multi-image-kontext-pro";
+const KONTEXT_MODEL = "black-forest-labs/flux-kontext-pro";
 
 // Initialize Replicate client — fail loud when face preservation is enabled
 // but the token is missing, so prod misconfiguration is obvious instead of
@@ -70,11 +79,26 @@ export function isFacePreservationAvailable(): boolean {
 // Validated construction (two-step test, 15/15). Prompts verbatim from the
 // passing run: clothing-ignore wording is REQUIRED (clothing from the real
 // photo leaked into the scene without it).
-function faceIntoScenePrompt(kind: FaceIntoSceneParams["subjectKind"]): string {
+function faceIntoScenePrompt(
+  kind: FaceIntoSceneParams["subjectKind"],
+  subjectAge?: string
+): string {
   if (kind === "pet") {
     return "Place the animal from image 1 into the scene shown in image 2. Completely ignore the background from image 1. It wears the collar and attire from image 2, takes the pose from image 2, and is rendered fully in the artistic style of image 2, with image 2's complete background and lighting. The animal's face and identity remain exactly as in image 1 — identical facial structure, fur color and markings, eyes, and natural ear shape.";
   }
-  return "Place the person from image 1 into the scene shown in image 2. Completely ignore the clothing and background from image 1. They wear ONLY the costume and headwear from image 2, take the pose from image 2, and are rendered fully in the artistic style of image 2, with image 2's complete background and lighting. Their face and identity remain exactly as in image 1 — identical facial structure, eyes, nose, mouth, skin tone, and age.";
+  const base =
+    "Place the person from image 1 into the scene shown in image 2. Completely ignore the clothing and background from image 1. They wear ONLY the costume and headwear from image 2, take the pose from image 2, and are rendered fully in the artistic style of image 2, with image 2's complete background and lighting. Their face and identity remain exactly as in image 1 — identical facial structure, eyes, nose, mouth, skin tone, and age.";
+  if (!subjectAge) return base;
+  const isChild = /^(infant|toddler|young child|child)\b/.test(
+    subjectAge.toLowerCase()
+  );
+  return (
+    base +
+    ` CRITICAL AGE CONSTRAINT: the person is ${subjectAge} and MUST be rendered at exactly that age. Do NOT age them up.` +
+    (isChild
+      ? " Keep the childlike proportions of image 1: a head large relative to the body, full rounded cheeks, a soft undefined jawline, small facial features set low on the face, and smooth unlined skin. Do not mature the face, lengthen or define the jaw, or slim the cheeks."
+      : "")
+  );
 }
 
 /**
@@ -89,6 +113,102 @@ async function fetchImageBlob(url: string, label: string): Promise<Blob> {
     throw new Error(`Failed to fetch ${label} image (HTTP ${res.status})`);
   }
   return await res.blob();
+}
+
+/**
+ * Single-pass generation: the customer's REAL photo goes straight to Kontext
+ * with the style prompt — no description, no stand-in, no swap.
+ *
+ * Measured against the two-step flow on identical subjects through identical
+ * acceptance gates (PLAN/results/single-pass-ab.md, 2026-08-18): renaissance
+ * 12/12 across adult, 3-5y child, heavyset adult and dog — every subject that
+ * two-step was failing — at ~13s and $0.04 against ~60s and $0.10-0.16.
+ *
+ * Only the styles measured to win here are routed to it (STYLE_ARCHITECTURE in
+ * portrait-generation.ts). comic-hero in particular must NOT be: Kontext ignored
+ * the template's explicit ban on the Superman S-shield and drew one in 2 of 3
+ * runs, which the two-step stand-in leg does not do.
+ *
+ * The photo is fetched server-side and re-uploaded via Replicate Files for the
+ * same reason as the swap leg, and the temporary upload is ALWAYS deleted.
+ */
+export async function generateSinglePassPortrait(params: {
+  photoUrl: string;
+  prompt: string;
+}): Promise<PortraitGenerationResult> {
+  if (!replicate) {
+    return {
+      success: false,
+      error: "Replicate API not configured (missing REPLICATE_API_TOKEN)",
+    };
+  }
+
+  const startTime = Date.now();
+  let uploadedId: string | null = null;
+  try {
+    const photoBlob = await fetchImageBlob(params.photoUrl, "subject photo");
+    type ReplicateFile = { id: string; urls: { get: string } };
+    const photoFile = (await replicate.files.create(photoBlob)) as ReplicateFile;
+    uploadedId = photoFile.id;
+
+    const output = await replicate.run(KONTEXT_MODEL, {
+      input: {
+        input_image: photoFile.urls.get,
+        prompt: params.prompt,
+        aspect_ratio: "3:4",
+        safety_tolerance: 2,
+        output_format: "png",
+      },
+    });
+
+    const processingTimeMs = Date.now() - startTime;
+    const imageUrl = extractUrlFromOutput(output);
+    if (!imageUrl) {
+      console.error("[SinglePass] No output URL received:", output);
+      return {
+        success: false,
+        error: "No image URL returned from single-pass generation",
+        processingTimeMs,
+      };
+    }
+    return { success: true, imageUrl, processingTimeMs };
+  } catch (error) {
+    const processingTimeMs = Date.now() - startTime;
+    console.error("[SinglePass] Generation failed:", error);
+    if (error instanceof Error) {
+      if (error.message.includes("rate limit")) {
+        return {
+          success: false,
+          error: "Rate limit exceeded. Please try again later.",
+          processingTimeMs,
+        };
+      }
+      if (error.message.includes("NSFW") || error.message.includes("safety")) {
+        return {
+          success: false,
+          error: "Image flagged by safety filter. Please try a different photo.",
+          processingTimeMs,
+        };
+      }
+      return { success: false, error: error.message, processingTimeMs };
+    }
+    return {
+      success: false,
+      error: "Unknown error during single-pass generation",
+      processingTimeMs,
+    };
+  } finally {
+    if (uploadedId) {
+      try {
+        await replicate.files.delete(uploadedId);
+      } catch (err) {
+        console.error(
+          `[SinglePass] PRIVACY: failed to delete temporary Replicate file ${uploadedId}:`,
+          err
+        );
+      }
+    }
+  }
 }
 
 /**
@@ -129,7 +249,7 @@ export async function swapFaceIntoScene(
       input: {
         input_image_1: photoFile.urls.get,
         input_image_2: sceneFile.urls.get,
-        prompt: faceIntoScenePrompt(params.subjectKind),
+        prompt: faceIntoScenePrompt(params.subjectKind, params.subjectAge),
         // NEVER "match_input_image" — returns the model's internal
         // side-by-side canvas (20/20 reproductions in attempt 1).
         aspect_ratio: "3:4",

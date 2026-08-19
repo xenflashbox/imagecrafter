@@ -41,6 +41,22 @@ export interface PortraitSubjectAnalysis {
      * inherited from the stand-in.
      */
     faceShape?: string;
+    /**
+     * Body build. Portrait templates default to a slim idealised sitter, and
+     * the swap only redraws the face region, so a heavyset subject rendered on
+     * a slim stand-in ships a stranger regardless of swap quality.
+     */
+    build?: string;
+    /**
+     * Short, literal colour values split out of `coloring`. The style prior
+     * repaints hair and eyes unless the exact colour words are restated as a
+     * constraint at the very end of the scene prompt, and a back-reference
+     * ("as described above") does not survive — it must be the literal value.
+     * Kept deliberately short so the restatement fits the prompt char budget.
+     */
+    hairColor?: string;
+    eyeColor?: string;
+    skinTone?: string;
   };
   additionalSubjects?: Array<{
     description: string;
@@ -74,6 +90,15 @@ CRITICAL: The description must be specific enough that the generated portrait wi
 IMMEDIATELY RECOGNIZABLE as the same individual. Focus on what makes THIS person/pet
 unique compared to others of similar type.
 
+CORRECT FOR THE PHOTO'S LIGHTING BEFORE YOU NAME ANY COLOUR. Snapshots carry colour
+casts - warm yellow indoor bulbs, golden late-afternoon sun, cool blue shade - and a
+flash or a bright window washes tone out. Report hair, skin and eye colour as they
+would look under neutral daylight, reading the mid-tones and shadowed areas rather
+than the brightest lit patch. If you note a colour cast under photoQuality.issues you
+MUST also have discounted it in the colour fields. A warm-lit snapshot of a
+dark-brown-haired child was reported as 'medium brown with lighter streaks' and the
+render came back auburn: the wrong description, faithfully rendered, ships a stranger.
+
 Analyze the photo and return a JSON object with the following structure:
 {
   "subjectType": one of "pet", "person", "couple", "family", "group",
@@ -83,12 +108,16 @@ Analyze the photo and return a JSON object with the following structure:
     "species": "if pet, the species (omit for humans)",
     "breed": "if pet, the breed or best guess (omit for humans)",
     "keyFeatures": ["array", "of", "5-8", "HIGHLY SPECIFIC", "identifying", "features", "that make this individual unique"],
-    "coloring": "PRECISE description of colors - exact hair/fur color (e.g., 'warm chestnut brown with subtle auburn highlights' not just 'brown'); then skin tone, which MUST lead with exactly one of these scale words, calibrated as follows - fair (very pale, burns rather than tans), light (pale to light beige, may carry a slight tan), medium (visibly beige to light olive year-round), tan (clearly brown), deep (dark brown to very dark). Judge against the whole human range, not against other people in the frame; when torn between two adjacent words choose the LIGHTER one, because the stand-in inherits this value and a too-dark stand-in produces a stranger. You may add undertone nuance only AFTER the scale word (e.g. 'light skin with olive undertones'). NEVER lead with the undertone: 'warm olive skin tone' reads as an olive-skinned person and is wrong for a light-skinned subject. Then eye color with specific shading.",
+    "coloring": "PRECISE description of colors - exact hair/fur color, which MUST match the 'hairColor' field: lead with the same anchor word, do NOT add 'warm', 'golden', 'honey', 'copper' or 'auburn' nuance to brown or black hair, because the painterly palette turns those words coppery red, and do NOT mention highlights, streaks or lighter strands, which the render reads as licence to lighten the whole head; then skin tone, which MUST lead with exactly one of these scale words, calibrated as follows - fair (very pale, burns rather than tans), light (pale to light beige, may carry a slight tan), medium (visibly beige to light olive year-round), tan (clearly brown), deep (dark brown to very dark). Judge against the whole human range, not against other people in the frame; when torn between two adjacent words choose the LIGHTER one, because the stand-in inherits this value and a too-dark stand-in produces a stranger. You may add undertone nuance only AFTER the scale word (e.g. 'light skin with olive undertones'). NEVER lead with the undertone: 'warm olive skin tone' reads as an olive-skinned person and is wrong for a light-skinned subject. Then eye color with specific shading.",
     "expression": "description of their facial expression/mood",
-    "ageBracket": "approximate age bracket, e.g. 'toddler', 'child around 8 years old', 'teenager', 'adult in their 30s', 'senior' (for pets: 'puppy', 'adult dog', etc.)",
+    "ageBracket": "MUST lead with exactly one of these bands, verbatim: 'infant', 'toddler', 'young child', 'child', 'teenager', 'young adult', 'adult in their 30s', 'adult in their 40s', 'adult in their 50s', 'senior'. Calibrated as - infant (under 2), toddler (2-4), young child (5-8), child (9-12), teenager (13-17), young adult (18-29), senior (60+). When torn between two adjacent bands choose the YOUNGER one, because the stand-in inherits this value and an aged-up stand-in produces a stranger. You may add nuance only AFTER the band (e.g. 'young child, around 6'). For pets lead with one of: 'puppy', 'kitten', 'adult dog', 'adult cat', 'senior pet'.",
     "genderPresentation": "for humans: apparent gender presentation, e.g. 'man', 'woman', 'boy', 'girl' (omit if unclear or for pets)",
-    "hair": "for humans: hair LENGTH, TEXTURE and how it is worn, e.g. 'long straight hair falling well past the shoulders, parted slightly off-centre' or 'short tightly-curled hair cropped close at the sides'. State length relative to the shoulders and whether it is straight, wavy, curly or coiled. Omit for pets.",
-    "faceShape": "specific face shape and proportions",
+    "hair": "for humans: hair LENGTH, TEXTURE and how it is worn. MUST lead with exactly one of these length words, verbatim: 'cropped', 'short', 'chin-length', 'shoulder-length', 'past-shoulders', 'long'. Judge where the ENDS of the hair actually fall against the body - a bob ending at the jaw is 'chin-length', not 'shoulder-length', and hair that stops above the shoulder line is never 'past-shoulders'. Then state whether it is straight, wavy, curly or coiled, then how it is worn. Omit for pets.",
+    "faceShape": "MUST lead with exactly one of these shapes, verbatim: 'round', 'oval', 'square', 'heart-shaped', 'diamond', 'oblong'. Then describe face width, jawline definition and chin. For any subject in the infant/toddler/young child/child bands you MUST also state that the cheeks are full and the jawline soft and undefined, and must NOT use words like 'tapering', 'defined jawline', 'sculpted' or 'chiselled' - the stand-in inherits head geometry, so an adult jawline on a child yields a stranger.",
+    "build": "for humans: MUST lead with exactly one of these words, verbatim: 'slight', 'slim', 'average', 'sturdy', 'heavyset', 'very heavyset'. Judge head, neck, shoulder and (if visible) torso width together, and judge against the whole adult range. Then describe face fullness, neck width and shoulder width. Portrait templates default to a slim idealised sitter, so an understated build produces a stranger - do NOT flatter the subject. Omit for pets.",
+    "hairColor": "for humans: the hair colour ONLY, at most 6 words, and it MUST lead with exactly one of these words, verbatim: 'black', 'dark brown', 'medium brown', 'light brown', 'dark blonde', 'blonde', 'red', 'auburn', 'grey', 'white'. When torn between two adjacent shades choose the DARKER one, because the painterly palette lightens hair and a lightened stand-in produces a stranger. Judge the hair in shadow as well as in direct light, and do NOT add 'warm', 'golden', 'honey', 'copper' or 'auburn' nuance to brown or black hair - those words make the render come back coppery red. Do NOT mention highlights, streaks, lighter strands, sun-lightened ends or ombre either: the render treats any such phrase as licence to lighten the whole head, and a dark-brown-haired child described as having 'subtle natural lighter streaks' came back auburn (lead-verified 2026-08-18). No texture, no length, no styling. This exact string is restated as a hard constraint at the end of the render prompt.",
+    "eyeColor": "for humans: the eye colour ONLY, as a short literal phrase of at most 6 words, e.g. 'deep brown, almost black' or 'pale grey-blue'. No shape, no expression. This exact string is restated as a hard constraint at the end of the render prompt.",
+    "skinTone": "for humans: the skin tone ONLY, at most 6 words, MUST lead with the same scale word used in 'coloring' (fair, light, medium, tan, deep), optionally followed by an undertone, e.g. 'light with olive undertones'. NEVER lead with the undertone. Describe the SKIN only: no parenthetical, and no mention of the photo's lighting, white balance or colour cast - correct for those silently and record them under photoQuality.issues instead. This exact string is restated as a hard constraint at the end of the render prompt.",
     "uniqueMarks": "any unique identifying marks: freckles, moles, dimples, scars, birthmarks, asymmetries"
   },
   "additionalSubjects": [
@@ -141,6 +170,16 @@ const anthropic = ANTHROPIC_API_KEY ? new Anthropic({ apiKey: ANTHROPIC_API_KEY 
 // Setting to 3.5MB to be safe (3.5 * 1.33 = 4.65MB)
 const MAX_IMAGE_SIZE_BYTES = 3.5 * 1024 * 1024; // 3.5MB to account for base64 overhead
 const MAX_IMAGE_DIMENSION = 2048; // Max width/height for analysis
+
+/**
+ * Reduce a verdict word to bare letters. The model emits markdown emphasis on
+ * its one-word answers (`**MISMATCH**`), which defeated a bare startsWith and
+ * turned a correct mismatch into "unknown" — aborting the run fail-closed for a
+ * parsing reason rather than a subject reason (2026-08-18).
+ */
+function lettersOnly(text: string): string {
+  return text.toUpperCase().replace(/[^A-Z]/g, "");
+}
 
 /**
  * Fetch image, resize if needed, and convert to base64 for Anthropic API
@@ -380,7 +419,7 @@ Answer with exactly one word: STYLED or PHOTOREAL.`,
     });
     const textContent = response.content.find((block) => block.type === "text");
     const answer =
-      (textContent && "text" in textContent ? textContent.text : "").trim().toUpperCase();
+      lettersOnly(textContent && "text" in textContent ? textContent.text : "");
     if (answer.startsWith("STYLED")) return "styled";
     if (answer.startsWith("PHOTOREAL")) return "photoreal";
     return "unknown";
@@ -441,7 +480,7 @@ export async function checkIdentityPresence(
     });
     const textContent = response.content.find((block) => block.type === "text");
     const answer =
-      (textContent && "text" in textContent ? textContent.text : "").trim().toUpperCase();
+      lettersOnly(textContent && "text" in textContent ? textContent.text : "");
     if (answer.startsWith("SAME")) return "same";
     if (answer.startsWith("DIFFERENT")) return "different";
     return "unknown";
@@ -518,21 +557,26 @@ export async function checkStandInFidelity(
               type: "text",
               text: `Image 1 is a real photo of a subject. Image 2 is a stylized rendering of a stand-in who is meant to share that subject's physical traits (it is deliberately NOT the same individual, so do not judge identity, facial structure or age).
 
-For each trait below, state what you see in image 1, then image 2, on one short line:
-SKIN TONE:
-HAIR COLOUR:
-HAIR LENGTH: (cropped / short / chin-length / shoulder-length / past-shoulders / long)
-HAIR TEXTURE: (straight / wavy / curly / coiled)
-EYE COLOUR:
+Place each trait on its scale, for image 1 then image 2. Use ONE label from the scale each time — do not invent labels, and pick by the colour in the mid-tones and shadows, not in a bright highlight.
 
-Judge ONLY those five traits, and only at a coarse level:
-- MISMATCH if the skin tone differs by more than one shade step (fair / light / medium / tan / deep) — a fair subject rendered deep, or a deep subject rendered fair.
-- MISMATCH if the hair colour is a different colour family (e.g. brown vs blonde, black vs red).
-- MISMATCH if the hair length differs by two or more steps on the scale above (e.g. cropped vs past-shoulders).
-- MISMATCH if the hair texture is categorically different (e.g. straight vs curly or coiled).
-- MISMATCH if the eye colour is a different colour family (e.g. brown vs blue, brown vs green).
+SKIN TONE: fair / light / light-medium / medium / olive / tan / brown / deep
+HAIR COLOUR: black / dark brown / medium brown / light brown / auburn / red / dark blonde / blonde / grey / white
+HAIR LENGTH: cropped / short / chin-length / shoulder-length / past-shoulders / long
+HAIR TEXTURE: straight / wavy / curly / coiled
+EYE COLOUR: very dark brown / brown / hazel / green / blue / grey
 
-Otherwise answer MATCH. Adjacent steps (shoulder-length vs past-shoulders, light vs medium, straight vs slightly wavy, brown vs hazel) are within tolerance and are a MATCH. Ignore differences in facial structure, expression and apparent age — the swap rebuilds those.
+Answer on five lines like "SKIN TONE: light -> light".
+
+Then count the STEPS between the two labels on each scale and apply these rules:
+- MISMATCH if any of skin tone, hair colour, hair length or eye colour differs by TWO OR MORE steps.
+- MISMATCH if hair texture differs by two or more steps (straight vs curly, wavy vs coiled).
+- MISMATCH if TWO OR MORE of skin tone, hair colour and eye colour each differ by exactly ONE step in the SAME direction along their scales (all toward the lighter/blonder end, or all toward the darker end). Individually tolerable drifts that all run the same way compound into a visibly different person: an olive-skinned, dark-brown-haired, dark-eyed child rendered as light-skinned, auburn-haired and light-brown-eyed passed every per-trait check and was still the wrong child (lead-verified 2026-08-18).
+
+A single one-step difference, or one-step differences that run in opposite directions, is within tolerance — answer MATCH.
+
+Do not let the scene lighting move a label. These styles wash the whole image in a warm golden cast that also falls on the background and clothing; a golden sheen on the skin or a warm highlight in the hair is illumination, not colouring. Read the label from the shadowed areas.
+
+Ignore differences in facial structure, expression and apparent age — the swap rebuilds those.
 
 Finish with a final line containing exactly one word: MATCH or MISMATCH.`,
             },
@@ -546,9 +590,13 @@ Finish with a final line containing exactly one word: MATCH or MISMATCH.`,
       console.error("[StandInFidelity] Response truncated before the verdict line");
       return "unknown";
     }
+    // The trait readings are what make a verdict auditable — without them a
+    // disagreement with the lead is untunable, because you cannot tell whether
+    // the gate saw the wrong colour or applied the wrong rule.
+    if (process.env.FIDELITY_DEBUG === "1") console.error(`[StandInFidelity]\n${raw}`);
     // The verdict is the LAST word: the observation lines above it mention both
     // terms, so matching from the start would read the description, not the call.
-    const answer = raw.toUpperCase().split(/\s+/).filter(Boolean).pop() || "";
+    const answer = lettersOnly(raw.split(/\s+/).filter(Boolean).pop() || "");
     if (answer.startsWith("MISMATCH")) return "mismatch";
     if (answer.startsWith("MATCH")) return "match";
     console.error(`[StandInFidelity] Unparseable verdict: ${raw.slice(-120)}`);

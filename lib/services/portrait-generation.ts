@@ -1,18 +1,25 @@
 /**
- * Portrait Generation Pipeline — TWO-STEP FACE-INTO-SCENE
- * (proven 15/15 single-subject; PLAN/results/faceswap-two-step.md)
+ * Portrait Generation Pipeline — PER-STYLE ARCHITECTURE ROUTING
+ * (measured, PLAN/results/single-pass-ab.md 2026-08-18; see SINGLE_PASS_STYLES)
  *
- * 1. Analyze photo with Claude Vision (identity + coloring + demographics)
- * 2. Step 1: generate a GENERIC stand-in scene (full costume/style, no real
- *    identity) via image-gen.xencolabs.com — pinned to the per-style bake-off
- *    winner engine (auto-route for unmapped styles), stand-in coloring built
- *    from the analysis JSON. A fidelity gate verifies the stand-in matches
- *    the subject's coloring BEFORE any swap (mismatch → regenerate).
- * 3. Step 2: swap the real subject's identity onto the stand-in via
- *    Replicate multi-image Kontext Pro (real photo = image 1 anchor)
- * 4. Combined acceptance gate: SAME PERSON (identity) + style present, both
- *    fail-CLOSED ("unknown" blocks) + one retry
- * 5. Apply watermark to preview; store both versions to R2; update DB
+ * Every portrait is analyzed with Claude Vision (identity + coloring +
+ * demographics), then takes ONE of two generation legs depending on the style:
+ *
+ * SINGLE-PASS (renaissance, starry-night): the REAL photo goes straight to
+ * Kontext with the style template and a neutral subject phrase. Identity never
+ * leaves the image domain.
+ *
+ * TWO-STEP FACE-INTO-SCENE (elven, comic-hero): generate a GENERIC stand-in
+ * scene (full costume/style, no real identity) via image-gen.xencolabs.com —
+ * pinned to the per-style bake-off winner engine — with stand-in coloring built
+ * from the analysis JSON; a fidelity gate verifies the stand-in matches the
+ * subject BEFORE any swap (mismatch → regenerate); then swap the real subject's
+ * identity onto it via Replicate multi-image Kontext Pro (real photo = anchor).
+ *
+ * Both legs then share:
+ * - Combined acceptance gate: SAME PERSON (identity) + style present, both
+ *   fail-CLOSED ("unknown" blocks) + one retry
+ * - Watermarked preview + ×4 upscaled hi-res, both stored to R2; DB updated
  *
  * v1 constraint: SINGLE SUBJECT ONLY. Groups/couples failed identity
  * transfer in testing and are rejected with an honest error.
@@ -36,6 +43,7 @@ import { uploadPortraitPreview, uploadPortraitHiRes } from "./file-storage";
 import {
   isFacePreservationAvailable,
   swapFaceIntoScene,
+  generateSinglePassPortrait,
   upscalePortraitBuffer,
 } from "./replicate-portrait";
 import { postToService, getFromService, serviceErrorMessage } from "./image-generation";
@@ -98,6 +106,9 @@ Return ONLY the enhanced prompt. No explanation, no preamble.`;
 // HELPERS
 // =============================================================================
 
+/** Kling caps prompts at 2500 characters; stay under it with margin. */
+const STANDIN_PROMPT_CHAR_LIMIT = 2400;
+
 /**
  * Build the GENERIC stand-in descriptor for the step-1 scene prompt.
  *
@@ -107,30 +118,70 @@ Return ONLY the enhanced prompt. No explanation, no preamble.`;
  * but never the real identity (the scene holds no real face by design).
  */
 export function buildStandInDescriptor(
-  analysis: PortraitSubjectAnalysis
+  analysis: PortraitSubjectAnalysis,
+  level = 0
 ): string {
   const p = analysis.primarySubject;
+  // Kling rejects prompts over 2500 characters (error 1201), and the analysis
+  // fields are the only variable-length part of the prompt. Every anchored
+  // field LEADS with its load-bearing token (scale word, age band, face shape,
+  // build), so trimming the tail at a word boundary keeps the anchor. Level 1
+  // keeps only each field's leading clause; level 2 keeps only the anchor word.
+  const clamp = (s: string | undefined, max: number): string | undefined => {
+    if (!s) return s;
+    if (level >= 1) s = s.split(/[,.]/)[0].trim();
+    if (level >= 2) s = s.split(/\s+/).slice(0, 3).join(" ");
+    const limit = level >= 1 ? Math.floor(max / 2) : max;
+    if (s.length <= limit) return s;
+    const cut = s.slice(0, limit);
+    return cut.slice(0, Math.max(cut.lastIndexOf(" "), limit - 20)).trimEnd();
+  };
   if (analysis.subjectType === "pet") {
     const kind = [p.breed, p.species || "pet"].filter(Boolean).join(" ");
     const features =
       p.keyFeatures && p.keyFeatures.length > 0
         ? `, with ${p.keyFeatures.join(", ")}`
         : "";
-    return `a ${kind} with ${p.coloring}${features}`;
+    return `a ${kind} with ${clamp(p.coloring, 300)}${features}`;
   }
   const who = p.genderPresentation || "person";
-  const age = p.ageBracket ? `, ${p.ageBracket},` : "";
+  const age = p.ageBracket ? `, ${clamp(p.ageBracket, 60)},` : "";
   // Hair is not optional detail: the swap transfers the face region only, so
   // whatever hair the stand-in is generated with is the hair the customer
   // receives. Coloring carries hair COLOUR; this carries length and texture.
-  const hair = p.hair ? `, wearing ${p.hair}` : "";
+  // Hair styling is the first thing to go under budget pressure: colour, age,
+  // face shape and build all decide whether the swap reads as the subject,
+  // whereas the parting and fringe do not.
+  // Labelled like face shape and build, NOT "wearing": once the analysis field
+  // was anchored to lead with a length word, "wearing chin-length, wavy" read as
+  // a garment and the stand-in came back with the hair swept up instead of the
+  // subject's bob (lead-verified 2026-08-18).
+  const hair = p.hair && level < 2 ? `, hair: ${clamp(p.hair, 140)}` : "";
   // Face shape for the same reason as hair: the swap redraws the features
   // inside the face region, but head width, jawline and chin come from the
   // stand-in. A narrow-faced subject built on a broad-jawed stand-in still
   // reads as a different woman even after a clean swap (lead-verified
   // 2026-08-17 on starry-night).
-  const face = p.faceShape ? `, face shape: ${p.faceShape}` : "";
-  return `a ${who}${age} with ${p.coloring}${hair}${face}`;
+  const face = p.faceShape ? `, face shape: ${clamp(p.faceShape, 200)}` : "";
+  // Build for the same reason as face shape: neck, shoulders and face fullness
+  // are stand-in geometry, and noble-portrait templates default to a slim
+  // sitter — a heavyset subject came back slim-faced (lead-verified 2026-08-17,
+  // renaissance).
+  const build = p.build ? `, build: ${clamp(p.build, 140)}` : "";
+  // Under budget pressure the long prose `coloring` gives way to the short
+  // literal colour fields rather than being trimmed: the same values are
+  // restated as a hard constraint at the end of the scene prompt, and trimming
+  // the prose can silently drop the eye or hair colour off the tail.
+  const shortColoring = [
+    p.skinTone && `${p.skinTone} skin`,
+    p.hairColor && `${p.hairColor} hair`,
+    p.eyeColor && `${p.eyeColor} eyes`,
+  ].filter(Boolean);
+  const coloring =
+    level >= 1 && shortColoring.length > 0
+      ? shortColoring.join(", ")
+      : clamp(p.coloring, 300);
+  return `a ${who}${age} with ${coloring}${hair}${face}${build}`;
 }
 
 /**
@@ -148,22 +199,139 @@ export function buildStandInScenePrompt(
     .map(([k, v]) => `${k}: ${v}`)
     .join(", ");
 
-  let prompt = promptTemplate
-    .replace(/\{\{subject\}\}/g, standInDescriptor)
-    .replace(/\{\{style_modifiers\}\}/g, modifierText)
-    .replace(/\{\{user_details\}\}/g, userScene || "");
+  const assemble = (descriptor: string) =>
+    promptTemplate
+      .replace(/\{\{subject\}\}/g, descriptor)
+      .replace(/\{\{style_modifiers\}\}/g, modifierText)
+      .replace(/\{\{user_details\}\}/g, userScene || "");
+
+  let prompt = assemble(standInDescriptor);
 
   // Stand-in framing rules (test findings): the stand-in face must be a
   // viable swap surface, and pet scenes must not hide extra figures.
   // Generous headroom is a generation-time requirement (fix directive,
   // mobile framing): narrow viewports crop-scale the image, so a head
   // touching the top edge clips at 375px. Never fixed with CSS.
-  prompt +=
+  let suffix =
     analysis.subjectType === "pet"
       ? ` The ${analysis.primarySubject.species || "animal"} is the ONLY living figure in the scene — no faces or figures hidden in trees, bark, or background. Its face is large in the frame, clearly visible, and well-lit. Classical portrait composition with generous headroom: the entire head fully inside the frame with clear space above it — nothing cropped by the top edge.`
       : " Waist-up framing. The subject's face is large in the frame, clearly visible, unobstructed, and well-lit. Classical portrait composition with generous headroom: the entire head, including hair and any headwear, fully inside the frame with clear space above it — nothing cropped by the top edge.";
 
+  // Noble/royal portrait templates carry a strong prior toward idealised young
+  // adults, which overrides an age phrase buried mid-descriptor: a 5-year-old
+  // came back as roughly a 13-year-old (lead-verified 2026-08-17, renaissance).
+  // The swap redraws inside the face region only, so an aged-up stand-in ships
+  // a stranger. Restate the age as a hard constraint at the end of the prompt.
+  //
+  // These stay at the TAIL. Moving them to the front was tested and made things
+  // worse on both subjects tried — it displaces the template's own opening
+  // ("A magnificent Renaissance oil portrait of …"), which is what anchors the
+  // sitter, and the control subject came back a stranger (lead-verified
+  // 2026-08-18). Editing the style template to strip "contradicting" directives
+  // was tried too and was worse (6/6 identity failures on the control); the
+  // templates are a measured bake-off artifact. Residual colour drift is caught
+  // and corrected by the stand-in fidelity gate's regeneration loop, not by
+  // re-ordering or rewriting prompts.
+  const ageBand = (analysis.primarySubject.ageBracket || "").toLowerCase();
+  if (
+    analysis.subjectType !== "pet" &&
+    /^(infant|toddler|young child|child)\b/.test(ageBand)
+  ) {
+    suffix +=
+      ` CRITICAL AGE CONSTRAINT: the subject is ${analysis.primarySubject.ageBracket} and MUST be depicted at exactly that age —` +
+      " a small child with childlike proportions, a head large relative to the body, full rounded cheeks," +
+      " a soft undefined jawline, and smooth unlined skin. Do NOT age the subject up:" +
+      " no teenager, no young adult, no adult facial structure, no defined or tapering jawline," +
+      " no adult body proportions.";
+  }
+
+  // Style palettes overrode attributes the analysis had already specified:
+  // near-black hair rendered mid-brown and dark brown eyes hazel under
+  // renaissance's warm Rembrandt lighting; dark blonde rendered coppery red and
+  // a heavyset sitter rendered slim (both lead-verified 2026-08-17). Mid-prompt
+  // attributes lose to the style prior, so restate them last as constraints.
+  // A back-reference ("as described above") does not survive — the age
+  // constraint works because it restates the literal value, so do the same.
+  if (analysis.subjectType !== "pet") {
+    const s = analysis.primarySubject;
+    const literals = [
+      s.hairColor && `hair is ${s.hairColor}`,
+      s.eyeColor && `eyes are ${s.eyeColor}`,
+      s.skinTone && `skin is ${s.skinTone}`,
+      s.build && `build is ${s.build.split(/[,.]/)[0].trim()}`,
+    ].filter(Boolean);
+    if (literals.length > 0) {
+      suffix +=
+        ` CRITICAL LIKENESS CONSTRAINT: the subject's ${literals.join(", ")}.` +
+        " Render exactly those values. The artistic palette and lighting must not shift them:" +
+        " do not warm, redden, lighten or golden the hair, do not lighten the eyes or the skin," +
+        " and do not slim, narrow or otherwise idealise the subject.";
+    }
+  }
+
+  prompt = prompt + suffix;
+
+  // Kling rejects prompts over 2500 characters outright (error 1201), which
+  // surfaces as an opaque provider failure mid-generation. The constraints in
+  // the suffix are load-bearing for identity, so the descriptor gives way
+  // first, never the constraints.
+  for (let level = 1; level <= 2 && prompt.length > STANDIN_PROMPT_CHAR_LIMIT; level++) {
+    prompt = assemble(buildStandInDescriptor(analysis, level)) + suffix;
+  }
+  if (prompt.length > STANDIN_PROMPT_CHAR_LIMIT) {
+    throw new Error(
+      `Stand-in prompt is ${prompt.length} characters, over the ${STANDIN_PROMPT_CHAR_LIMIT} limit even after compacting the descriptor — the style template is too long to carry the identity constraints.`
+    );
+  }
+
   return prompt;
+}
+
+/**
+ * Build the single-pass prompt. The subject placeholder is the NEUTRAL phrase
+ * "this person"/"this animal" — the photo itself carries identity, so no
+ * descriptor is generated and no likeness constraints are appended.
+ *
+ * This reproduces the benched prompt exactly (scripts/smoke/single-pass-ab.ts).
+ * Do NOT add the stand-in framing suffix or the likeness literals: the measured
+ * 12/12 was taken with the age constraint as the ONLY addition, and every extra
+ * descriptive constraint tried made things worse. In particular a gender
+ * restatement pulled the model toward a generic slender ideal and took a
+ * heavyset subject 3/3 → 0/3 → 3/3 on revert (lead-verified 2026-08-18).
+ */
+export function buildSinglePassPrompt(
+  promptTemplate: string,
+  styleModifiers: Record<string, string>,
+  analysis: PortraitSubjectAnalysis,
+  userScene?: string
+): string {
+  const modifierText = Object.entries(styleModifiers)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(", ");
+  const isPet = analysis.subjectType === "pet";
+
+  const base = promptTemplate
+    .replace(/\{\{subject\}\}/g, isPet ? "this animal" : "this person")
+    .replace(/\{\{style_modifiers\}\}/g, modifierText)
+    .replace(/\{\{user_details\}\}/g, userScene || "");
+
+  if (isPet) return base;
+
+  const ageBracket = analysis.primarySubject.ageBracket;
+  if (!ageBracket) return base;
+
+  // Without this the renaissance template's "period-accurate noble attire"
+  // resolved toward an adult sitter and a 3-year-old came back as a teenager in
+  // 3/3 runs. The same literal restatement that fixed the two-step swap leg
+  // took the same subject to 3/3 PASS.
+  const isChild = /^(infant|toddler|young child|child)\b/.test(ageBracket.toLowerCase());
+  return (
+    base +
+    ` CRITICAL AGE CONSTRAINT: the subject is ${ageBracket} and MUST be rendered at exactly that age. Do NOT age them up.` +
+    (isChild
+      ? " Keep their childlike proportions: a head large relative to the body, full rounded cheeks, a soft undefined jawline, small facial features set low on the face, and smooth unlined skin. Do not mature the face, lengthen or define the jaw, or slim the cheeks. Dress them in a child's version of the attire."
+      : "")
+  );
 }
 
 async function enhanceCustomScenePrompt(
@@ -234,6 +402,19 @@ const STYLE_ENGINE: Record<string, { provider: string; model?: string }> = {
   "starry-night": { provider: "higgsfield", model: "nano_banana_pro" },
   "comic-hero": { provider: "higgsfield", model: "nano_banana_pro" },
 };
+
+// Architecture per style is a MEASURED assignment (PLAN/results/single-pass-ab.md,
+// 2026-08-18), not a preference. Single-pass sends the REAL photo straight to
+// Kontext; two-step launders identity through photo → English text → stand-in →
+// swap, and everything the swap cannot redraw is inherited from an image built
+// out of words.
+//   renaissance   single-pass 12/12 across adult, 3-5y child, heavyset adult, dog
+//                 — every subject two-step was failing.
+//   starry-night  single-pass 8/9.
+//   elven         STAYS two-step: single-pass idealises body type (heavyset 0/3).
+//   comic-hero    STAYS two-step: Kontext ignored the template's explicit ban on
+//                 the Superman S-shield and drew one in 2 of 3 runs. IP risk.
+const SINGLE_PASS_STYLES = new Set(["renaissance", "starry-night"]);
 
 const ASYNC_POLL_INTERVAL_MS = 3_000;
 const ASYNC_POLL_TIMEOUT_MS = 300_000;
@@ -457,13 +638,23 @@ export async function generatePortrait(
 
   const variant = stylePack.variants[0];
 
-  // --- Step 6: Build the step-1 stand-in scene prompt ---
-  // The stand-in is GENERIC: coloring + demographics from the analysis JSON
-  // (required for the swap to bridge), never the real identity.
+  // --- Step 6: Build the generation prompt for this style's architecture ---
+  // Single-pass sends the real photo itself, so the prompt carries no
+  // descriptor. Two-step needs a GENERIC stand-in: coloring + demographics from
+  // the analysis JSON (required for the swap to bridge), never the real identity.
+  const useSinglePass =
+    SINGLE_PASS_STYLES.has(styleVariantSlug) && stylePackSlug !== "custom-scene";
   const standInDescriptor = buildStandInDescriptor(analysis);
   let enhancedPrompt: string;
 
-  if (stylePackSlug === "custom-scene" && userScene) {
+  if (useSinglePass) {
+    enhancedPrompt = buildSinglePassPrompt(
+      variant.promptTemplate,
+      variant.styleModifiers as Record<string, string>,
+      analysis,
+      userScene
+    );
+  } else if (stylePackSlug === "custom-scene" && userScene) {
     // Custom scene: enhance user description with Claude
     const customPrompt = await enhanceCustomScenePrompt(userScene, standInDescriptor);
     enhancedPrompt =
@@ -513,23 +704,54 @@ export async function generatePortrait(
     };
   }
 
-  // Step 8a: stand-in scene (per-style pinned engine, P3) + FIDELITY GATE
-  // (P2.2). The swap can only bridge what the stand-in already resembles: a
-  // mismatched stand-in (wrong hair/eye/skin coloring vs the analysis JSON)
-  // is regenerated and NEVER reaches the swap. This automates the human QA
-  // bar behind the Jul-7 15/15.
-  const MAX_STANDIN_ATTEMPTS = 3;
-  let sceneUrl: string | null = null;
-  for (let attempt = 1; attempt <= MAX_STANDIN_ATTEMPTS; attempt++) {
-    console.log(
-      `[PortraitGen] Step 1: generating stand-in scene (attempt ${attempt}/${MAX_STANDIN_ATTEMPTS})`
+  // COMBINED ACCEPTANCE GATE (P1 + P2.1 + P2.3) — the output must be BOTH the
+  // same subject as the source (identity) AND carry the style. Both
+  // architectures are judged by it, unchanged. FAIL-CLOSED: "unknown" on either
+  // axis blocks — the old gate silently returned inert "unknown" and shipped
+  // strangers.
+  const assessOutput = async (imageUrl: string) => {
+    const [identity, style] = await Promise.all([
+      checkIdentityPresence(portrait.sourceImageUrl, imageUrl),
+      checkStylePresence(imageUrl, `${stylePack.name} — ${variant.name}`),
+    ]);
+    return { identity, style, pass: identity === "same" && style === "styled" };
+  };
+
+  // The rejected image URL is logged so a blocked portrait can actually be
+  // inspected: "identity=different" is a claim about an image, and without the
+  // URL there is no way to tell a correct rejection from a gate false-positive.
+  const gateFailure = async (identity: string, style: string, rejectedUrl: string) => {
+    console.error(
+      `[PortraitGen] Acceptance gate FAILED after retry (identity=${identity}, style=${style}) — portrait blocked; rejected=${rejectedUrl}`
     );
-    const scene = await generateStandInScene(enhancedPrompt, styleVariantSlug);
-    if ("error" in scene) {
-      console.error("[PortraitGen] Stand-in scene failed:", scene.error);
+    await prisma.portrait.update({
+      where: { id: portraitId },
+      data: {
+        status: "failed",
+        errorMessage: `Output failed acceptance gate (identity=${identity}, style=${style})`,
+      },
+    });
+    return {
+      success: false as const,
+      error:
+        "The generated portrait didn't match your photo closely enough. Please try again.",
+      errorType: "generation" as const,
+    };
+  };
+
+  let genResult: { imageUrl: string };
+
+  if (useSinglePass) {
+    // --- Step 8 (single-pass): the real photo goes straight to Kontext ---
+    console.log(`[PortraitGen] Single-pass generation (${styleVariantSlug})`);
+    let pass = await generateSinglePassPortrait({
+      photoUrl: portrait.sourceImageUrl,
+      prompt: enhancedPrompt,
+    });
+    if (!pass.success || !pass.imageUrl) {
       await prisma.portrait.update({
         where: { id: portraitId },
-        data: { status: "failed", errorMessage: scene.error },
+        data: { status: "failed", errorMessage: pass.error || "Single-pass generation failed" },
       });
       return {
         success: false,
@@ -538,132 +760,181 @@ export async function generatePortrait(
       };
     }
 
-    const fidelity = await checkStandInFidelity(
-      portrait.sourceImageUrl,
-      scene.sceneUrl
-    );
-    if (fidelity === "match") {
-      sceneUrl = scene.sceneUrl;
-      break;
+    let spVerdict = await assessOutput(pass.imageUrl);
+    if (!spVerdict.pass) {
+      console.log(
+        `[PortraitGen] Acceptance gate failed (identity=${spVerdict.identity}, style=${spVerdict.style}) — retrying single-pass once`
+      );
+      const retry = await generateSinglePassPortrait({
+        photoUrl: portrait.sourceImageUrl,
+        prompt: enhancedPrompt,
+      });
+      if (retry.success && retry.imageUrl) {
+        const retryVerdict = await assessOutput(retry.imageUrl);
+        if (retryVerdict.pass) {
+          pass = retry;
+          spVerdict = retryVerdict;
+        }
+      }
     }
-    if (fidelity === "unknown") {
-      // FAIL-CLOSED: the verifier is blind — abort rather than burn
-      // regeneration spend on unverifiable stand-ins (standing rule: fail
-      // loudly, never proceed on missing/degraded dependencies).
-      console.error("[PortraitGen] Stand-in fidelity check UNAVAILABLE — aborting");
+    if (!spVerdict.pass) {
+      return gateFailure(spVerdict.identity, spVerdict.style, pass.imageUrl!);
+    }
+    console.log(
+      `[PortraitGen] Acceptance gate PASSED (identity=${spVerdict.identity}, style=${spVerdict.style})`
+    );
+    genResult = { imageUrl: pass.imageUrl! };
+    console.log("[PortraitGen] Single-pass generation complete");
+  } else {
+    // Step 8a: stand-in scene (per-style pinned engine, P3) + FIDELITY GATE
+    // (P2.2). The swap can only bridge what the stand-in already resembles: a
+    // mismatched stand-in (wrong hair/eye/skin coloring vs the analysis JSON)
+    // is regenerated and NEVER reaches the swap. This automates the human QA
+    // bar behind the Jul-7 15/15.
+    const MAX_STANDIN_ATTEMPTS = 3;
+    type StandInOutcome =
+      | { ok: true; sceneUrl: string }
+      | { ok: false; kind: "engine"; message: string }
+      | { ok: false; kind: "verifier" }
+      | { ok: false; kind: "mismatch" };
+
+    const acquireStandIn = async (): Promise<StandInOutcome> => {
+      for (let attempt = 1; attempt <= MAX_STANDIN_ATTEMPTS; attempt++) {
+        console.log(
+          `[PortraitGen] Step 1: generating stand-in scene (attempt ${attempt}/${MAX_STANDIN_ATTEMPTS})`
+        );
+        const scene = await generateStandInScene(enhancedPrompt, styleVariantSlug);
+        if ("error" in scene) {
+          console.error("[PortraitGen] Stand-in scene failed:", scene.error);
+          return { ok: false, kind: "engine", message: scene.error };
+        }
+
+        const fidelity = await checkStandInFidelity(
+          portrait.sourceImageUrl,
+          scene.sceneUrl
+        );
+        if (fidelity === "match") return { ok: true, sceneUrl: scene.sceneUrl };
+        if (fidelity === "unknown") {
+          // FAIL-CLOSED: the verifier is blind — abort rather than burn
+          // regeneration spend on unverifiable stand-ins (standing rule: fail
+          // loudly, never proceed on missing/degraded dependencies).
+          console.error("[PortraitGen] Stand-in fidelity check UNAVAILABLE — aborting");
+          return { ok: false, kind: "verifier" };
+        }
+        console.warn(
+          `[PortraitGen] Stand-in fidelity MISMATCH on attempt ${attempt} — regenerating`
+        );
+      }
+      return { ok: false, kind: "mismatch" };
+    };
+
+    const firstStandIn = await acquireStandIn();
+    if (!firstStandIn.ok) {
+      if (firstStandIn.kind === "engine") {
+        await prisma.portrait.update({
+          where: { id: portraitId },
+          data: { status: "failed", errorMessage: firstStandIn.message },
+        });
+        return {
+          success: false,
+          error: "Portrait generation failed. Please try again.",
+          errorType: "generation",
+        };
+      }
+      if (firstStandIn.kind === "verifier") {
+        await prisma.portrait.update({
+          where: { id: portraitId },
+          data: {
+            status: "failed",
+            errorMessage: "Stand-in fidelity verification unavailable (vision leg down)",
+          },
+        });
+        return {
+          success: false,
+          error: "Portrait generation is temporarily unavailable. Please try again later.",
+          errorType: "server",
+        };
+      }
       await prisma.portrait.update({
         where: { id: portraitId },
         data: {
           status: "failed",
-          errorMessage: "Stand-in fidelity verification unavailable (vision leg down)",
+          errorMessage: `Stand-in did not match subject coloring after ${MAX_STANDIN_ATTEMPTS} attempts`,
         },
       });
       return {
         success: false,
-        error: "Portrait generation is temporarily unavailable. Please try again later.",
-        errorType: "server",
+        error: "We couldn't generate a portrait that matches your photo. Please try again.",
+        errorType: "generation",
       };
     }
-    console.warn(
-      `[PortraitGen] Stand-in fidelity MISMATCH on attempt ${attempt} — regenerating`
-    );
-  }
-  if (!sceneUrl) {
-    await prisma.portrait.update({
-      where: { id: portraitId },
-      data: {
-        status: "failed",
-        errorMessage: `Stand-in did not match subject coloring after ${MAX_STANDIN_ATTEMPTS} attempts`,
-      },
-    });
-    return {
-      success: false,
-      error: "We couldn't generate a portrait that matches your photo. Please try again.",
-      errorType: "generation",
-    };
-  }
+    const sceneUrl = firstStandIn.sceneUrl;
 
-  // Step 8b: identity swap — the real photo is image 1 (identity anchor).
-  const subjectKind =
-    analysis.subjectType === "pet" ? ("pet" as const) : ("person" as const);
-  console.log("[PortraitGen] Step 2: swapping identity onto stand-in scene");
-  let swap = await swapFaceIntoScene({
-    photoUrl: portrait.sourceImageUrl,
-    sceneUrl,
-    subjectKind,
-  });
-
-  if (!swap.success || !swap.imageUrl) {
-    await prisma.portrait.update({
-      where: { id: portraitId },
-      data: { status: "failed", errorMessage: swap.error || "Identity swap failed" },
-    });
-    return {
-      success: false,
-      error: "Portrait generation failed. Please try again.",
-      errorType: "generation",
-    };
-  }
-
-  // Step 8c: COMBINED ACCEPTANCE GATE (P1 + P2.1 + P2.3) — the output must
-  // be BOTH the same person as the source (identity) AND carry the style.
-  // FAIL-CLOSED: "unknown" on either axis blocks — the old gate silently
-  // returned inert "unknown" and shipped strangers. The old retry fired only
-  // on "photoreal" (inverted risk: it pushed outputs AWAY from likeness);
-  // now a retry must win on BOTH axes or the portrait fails honestly.
-  const assessSwap = async (imageUrl: string) => {
-    const [identity, style] = await Promise.all([
-      checkIdentityPresence(portrait.sourceImageUrl, imageUrl),
-      checkStylePresence(imageUrl, `${stylePack.name} — ${variant.name}`),
-    ]);
-    return { identity, style, pass: identity === "same" && style === "styled" };
-  };
-
-  let verdict = await assessSwap(swap.imageUrl);
-  if (!verdict.pass) {
-    console.log(
-      `[PortraitGen] Acceptance gate failed (identity=${verdict.identity}, style=${verdict.style}) — retrying swap once`
-    );
-    const retry = await swapFaceIntoScene({
+    // Step 8b: identity swap — the real photo is image 1 (identity anchor).
+    const subjectKind =
+      analysis.subjectType === "pet" ? ("pet" as const) : ("person" as const);
+    console.log("[PortraitGen] Step 2: swapping identity onto stand-in scene");
+    let swap = await swapFaceIntoScene({
       photoUrl: portrait.sourceImageUrl,
       sceneUrl,
       subjectKind,
+      subjectAge: analysis.primarySubject.ageBracket,
     });
-    if (retry.success && retry.imageUrl) {
-      const retryVerdict = await assessSwap(retry.imageUrl);
-      if (retryVerdict.pass) {
-        swap = retry;
-        verdict = retryVerdict;
+
+    if (!swap.success || !swap.imageUrl) {
+      await prisma.portrait.update({
+        where: { id: portraitId },
+        data: { status: "failed", errorMessage: swap.error || "Identity swap failed" },
+      });
+      return {
+        success: false,
+        error: "Portrait generation failed. Please try again.",
+        errorType: "generation",
+      };
+    }
+
+    // Step 8c: acceptance gate. The old retry fired only on "photoreal"
+    // (inverted risk: it pushed outputs AWAY from likeness); now a retry must win
+    // on BOTH axes or the portrait fails honestly.
+    let verdict = await assessOutput(swap.imageUrl);
+    if (!verdict.pass) {
+      // The retry regenerates the STAND-IN, not just the swap. The swap can
+      // only redraw the face; build, skin tone and head geometry are inherited
+      // from the scene, so re-rolling the swap against the same stand-in keeps
+      // the input that lost the identity in the first place.
+      console.log(
+        `[PortraitGen] Acceptance gate failed (identity=${verdict.identity}, style=${verdict.style}) — retrying with a fresh stand-in`
+      );
+      const retryStandIn = await acquireStandIn();
+      if (retryStandIn.ok) {
+        const retry = await swapFaceIntoScene({
+          photoUrl: portrait.sourceImageUrl,
+          sceneUrl: retryStandIn.sceneUrl,
+          subjectKind,
+          subjectAge: analysis.primarySubject.ageBracket,
+        });
+        if (retry.success && retry.imageUrl) {
+          const retryVerdict = await assessOutput(retry.imageUrl);
+          if (retryVerdict.pass) {
+            swap = retry;
+            verdict = retryVerdict;
+          }
+        }
       }
     }
-  }
 
-  if (!verdict.pass) {
-    console.error(
-      `[PortraitGen] Acceptance gate FAILED after retry (identity=${verdict.identity}, style=${verdict.style}) — portrait blocked`
+    if (!verdict.pass) {
+      return gateFailure(verdict.identity, verdict.style, swap.imageUrl!);
+    }
+    console.log(
+      `[PortraitGen] Acceptance gate PASSED (identity=${verdict.identity}, style=${verdict.style})`
     );
-    await prisma.portrait.update({
-      where: { id: portraitId },
-      data: {
-        status: "failed",
-        errorMessage: `Output failed acceptance gate (identity=${verdict.identity}, style=${verdict.style})`,
-      },
-    });
-    return {
-      success: false,
-      error:
-        "The generated portrait didn't match your photo closely enough. Please try again.",
-      errorType: "generation",
-    };
-  }
-  console.log(
-    `[PortraitGen] Acceptance gate PASSED (identity=${verdict.identity}, style=${verdict.style})`
-  );
 
-  // swap.imageUrl is guaranteed here: the initial swap was checked above and
-  // the retry is only adopted when retry.imageUrl is present.
-  const genResult = { imageUrl: swap.imageUrl! };
-  console.log("[PortraitGen] Two-step generation complete");
+    // swap.imageUrl is guaranteed here: the initial swap was checked above and
+    // the retry is only adopted when retry.imageUrl is present.
+    genResult = { imageUrl: swap.imageUrl! };
+    console.log("[PortraitGen] Two-step generation complete");
+  }
 
 
   // --- Step 9: Fetch generated image ---

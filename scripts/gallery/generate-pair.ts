@@ -141,21 +141,43 @@ async function main(): Promise<void> {
     return { identity, style, pass: identity === "same" && style === "styled" };
   };
 
+  // The gate is a COST FILTER, not the acceptance authority — it has produced
+  // both false rejects and a confirmed false pass. Keep every rejected image so
+  // a human can adjudicate; without this a failing run leaves no evidence and
+  // tuning proceeds blind against an unreliable oracle.
+  const keepRejected = async (url: string, tag: string) => {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) return;
+      const dir = path.join(OUT_DIR, "rejected");
+      fs.mkdirSync(dir, { recursive: true });
+      const p = path.join(dir, `${subject}-${styleSlug}-${tag}.png`);
+      fs.writeFileSync(p, Buffer.from(await r.arrayBuffer()));
+      console.log(`  kept rejected output for review: ${path.relative(ROOT, p)}`);
+    } catch (e) {
+      console.log(`  WARNING: could not keep rejected output (${tag}): ${String(e)}`);
+    }
+  };
+
   console.log("→ Step 2: swapFaceIntoScene…");
-  let swap = await swapFaceIntoScene({ photoUrl: photoDataUri, sceneUrl, subjectKind });
+  const subjectAge = analysis.primarySubject.ageBracket;
+  let swap = await swapFaceIntoScene({ photoUrl: photoDataUri, sceneUrl, subjectKind, subjectAge });
   if (!swap.success || !swap.imageUrl) fail(`Identity swap failed: ${swap.error}`);
   console.log(`  swap in ${swap.processingTimeMs}ms: ${swap.imageUrl}`);
   let verdict = await assessSwap(swap.imageUrl!);
   console.log(`  acceptance gate: identity=${verdict.identity} style=${verdict.style}`);
   if (!verdict.pass) {
+    await keepRejected(swap.imageUrl!, "attempt1");
     console.log("  → gate failed — retrying swap once (same scene)…");
-    const retry = await swapFaceIntoScene({ photoUrl: photoDataUri, sceneUrl, subjectKind });
+    const retry = await swapFaceIntoScene({ photoUrl: photoDataUri, sceneUrl, subjectKind, subjectAge });
     if (retry.success && retry.imageUrl) {
       const retryVerdict = await assessSwap(retry.imageUrl);
       console.log(`  retry acceptance gate: identity=${retryVerdict.identity} style=${retryVerdict.style}`);
       if (retryVerdict.pass) {
         swap = retry;
         verdict = retryVerdict;
+      } else {
+        await keepRejected(retry.imageUrl, "attempt2");
       }
     }
   }
