@@ -193,7 +193,8 @@ export function buildStandInScenePrompt(
   standInDescriptor: string,
   styleModifiers: Record<string, string>,
   analysis: PortraitSubjectAnalysis,
-  userScene?: string
+  userScene?: string,
+  styleVariantSlug?: string
 ): string {
   const modifierText = Object.entries(styleModifiers)
     .map(([k, v]) => `${k}: ${v}`)
@@ -275,13 +276,21 @@ export function buildStandInScenePrompt(
   // surfaces as an opaque provider failure mid-generation. The constraints in
   // the suffix are load-bearing for identity, so the descriptor gives way
   // first, never the constraints.
-  for (let level = 1; level <= 2 && prompt.length > STANDIN_PROMPT_CHAR_LIMIT; level++) {
-    prompt = assemble(buildStandInDescriptor(analysis, level)) + suffix;
-  }
-  if (prompt.length > STANDIN_PROMPT_CHAR_LIMIT) {
-    throw new Error(
-      `Stand-in prompt is ${prompt.length} characters, over the ${STANDIN_PROMPT_CHAR_LIMIT} limit even after compacting the descriptor — the style template is too long to carry the identity constraints.`
-    );
+  //
+  // The ceiling is Kling's alone. Enforced unconditionally it killed every
+  // comic-hero × child run at 2403-2411 chars — a style pinned to Higgsfield,
+  // which has no such limit. Unpinned styles still get the limit: they go to
+  // the auto-route service, which may land on Kling.
+  const enginePin = styleVariantSlug ? STYLE_ENGINE[styleVariantSlug] : undefined;
+  if (!enginePin || enginePin.provider === "kling") {
+    for (let level = 1; level <= 2 && prompt.length > STANDIN_PROMPT_CHAR_LIMIT; level++) {
+      prompt = assemble(buildStandInDescriptor(analysis, level)) + suffix;
+    }
+    if (prompt.length > STANDIN_PROMPT_CHAR_LIMIT) {
+      throw new Error(
+        `Stand-in prompt is ${prompt.length} characters, over the ${STANDIN_PROMPT_CHAR_LIMIT} limit even after compacting the descriptor — the style template is too long to carry the identity constraints.`
+      );
+    }
   }
 
   return prompt;
@@ -310,10 +319,33 @@ export function buildSinglePassPrompt(
     .join(", ");
   const isPet = analysis.subjectType === "pet";
 
-  const base = promptTemplate
-    .replace(/\{\{subject\}\}/g, isPet ? "this animal" : "this person")
-    .replace(/\{\{style_modifiers\}\}/g, modifierText)
-    .replace(/\{\{user_details\}\}/g, userScene || "");
+  // Templates that open "an oil painting OF {{subject}}" (renaissance) paint the
+  // whole frame; templates that open "{{subject}} standing in ..." (starry-night)
+  // read to Kontext as "keep this photo, paint the scene behind it" and returned
+  // a photoreal subject against a painted backdrop. Single-pass hands it the REAL
+  // photo, so the medium has to be stated for the subject too, and stated
+  // alongside a likeness constraint — pushing style alone trades away the
+  // identity that single-pass exists to win.
+  //
+  // It has to be stated BEFORE the scene as well as after. With the trailing
+  // constraint alone, tight selfies stayed photographic 0/3: the model reads
+  // "{{subject}} standing in ..." first, commits to keeping the photo, and
+  // treats everything after as background work. Leading with the medium makes
+  // the task a repaint rather than a composite (that cell went 0/3 → 2/3, with
+  // renaissance and the other starry-night cells unchanged at 3/3).
+  const base =
+    `TASK: repaint this photograph entirely as an original artwork. Every part of the output — including the ${
+      isPet ? "animal's face and fur" : "subject's face, skin and hair"
+    } — must be painted, never photographic. SCENE: ` +
+    promptTemplate
+      .replace(/\{\{subject\}\}/g, isPet ? "this animal" : "this person")
+      .replace(/\{\{style_modifiers\}\}/g, modifierText)
+      .replace(/\{\{user_details\}\}/g, userScene || "") +
+    ` CRITICAL MEDIUM CONSTRAINT: render the ENTIRE image as artwork in this style. The ${
+      isPet ? "animal's face, fur" : "subject's face, skin, hair"
+    } and surroundings must all carry the same visible brushwork and paint texture as the background — do NOT leave a photographic ${
+      isPet ? "animal" : "person"
+    } standing in a painted scene. Preserve their exact facial structure, proportions and coloring while painting them.`;
 
   if (isPet) return base;
 
@@ -614,6 +646,30 @@ export async function generatePortrait(
     };
   }
 
+  // --- Step 4c: style/subject compatibility ---
+  // Elven idealises the sitter: heavyset subjects came back as strangers 0/3
+  // under BOTH single-pass and two-step, so it is the style's limit, not the
+  // pipeline's. Reject up front — reaching the acceptance gate would spend a
+  // full generation to arrive at the same honest failure, and this runs before
+  // the paid download step.
+  const subjectBuild = analysis.primarySubject.build?.toLowerCase() ?? "";
+  if (styleVariantSlug === "elven" && /^(very\s+)?heavyset\b/.test(subjectBuild)) {
+    await prisma.portrait.update({
+      where: { id: portraitId },
+      data: {
+        status: "failed",
+        subjectAnalysis: analysis as object,
+        errorMessage: `Style/subject incompatible: elven does not preserve likeness for build="${subjectBuild}"`,
+      },
+    });
+    return {
+      success: false,
+      error:
+        "The Elven style doesn't capture this photo's likeness well. Please pick another style — Renaissance and Starry Night work beautifully with this photo.",
+      errorType: "quality",
+    };
+  }
+
   // --- Step 5: Load StyleVariant ---
   const stylePack = await prisma.stylePack.findUnique({
     where: { slug: stylePackSlug },
@@ -667,7 +723,8 @@ export async function generatePortrait(
       standInDescriptor,
       variant.styleModifiers as Record<string, string>,
       analysis,
-      userScene
+      userScene,
+      styleVariantSlug
     );
   }
 

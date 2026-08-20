@@ -46,55 +46,62 @@ async function main(): Promise<void> {
   for (let run = 1; run <= runs; run++) {
     const sessionId = `e2e-${Date.now()}-${run}`;
     const portraitId = sessionId.replace(/[^a-z0-9]/g, "");
-
-    const upload = await uploadPortraitSource(photoBytes, "image/png", sessionId, portraitId);
-    if (!upload.success || !upload.url || !upload.key) {
-      fail(`Run ${run}: source upload to R2 failed: ${upload.error}`);
-      return;
-    }
-
-    await prisma.portrait.create({
-      data: {
-        id: portraitId,
-        userId: null,
-        sessionId,
-        sourceImageUrl: upload.url,
-        sourceImageKey: upload.key,
-        stylePackSlug: "",
-        styleVariantSlug: "",
-        subjectType: "person",
-        subjectAnalysis: {},
-        enhancedPrompt: "",
-        status: "pending",
-        updatedAt: new Date(),
-      },
-    });
-
     const started = Date.now();
-    const result = await generatePortrait({
-      portraitId,
-      stylePackSlug: packSlug,
-      styleVariantSlug: variantSlug,
-      userId: null,
-    });
-    const secs = ((Date.now() - started) / 1000).toFixed(1);
 
-    const row = await prisma.portrait.findUnique({
-      where: { id: portraitId },
-      select: { status: true, errorMessage: true, hiResImageUrl: true, enhancedPrompt: true },
-    });
+    // A run that throws must not abort the cell: the variance rule needs all
+    // N runs, and a transient upstream 500 previously killed whole cells.
+    try {
+      const upload = await uploadPortraitSource(photoBytes, "image/png", sessionId, portraitId);
+      if (!upload.success || !upload.url || !upload.key) {
+        throw new Error(`source upload to R2 failed: ${upload.error}`);
+      }
 
-    if (result.success) {
-      passes++;
-      console.log(`run ${run}/${runs}: PASS (${secs}s) status=${row?.status}`);
-      console.log(`  preview: ${result.previewImageUrl}`);
-      console.log(`  hi-res:  ${row?.hiResImageUrl}`);
-    } else {
-      console.log(`run ${run}/${runs}: FAIL (${secs}s) status=${row?.status}`);
-      console.log(`  error:   ${result.error} [${result.errorType}]`);
-      console.log(`  db says: ${row?.errorMessage}`);
+      await prisma.portrait.create({
+        data: {
+          id: portraitId,
+          userId: null,
+          sessionId,
+          sourceImageUrl: upload.url,
+          sourceImageKey: upload.key,
+          stylePackSlug: "",
+          styleVariantSlug: "",
+          subjectType: "person",
+          subjectAnalysis: {},
+          enhancedPrompt: "",
+          status: "pending",
+          updatedAt: new Date(),
+        },
+      });
+
+      const result = await generatePortrait({
+        portraitId,
+        stylePackSlug: packSlug,
+        styleVariantSlug: variantSlug,
+        userId: null,
+      });
+      const secs = ((Date.now() - started) / 1000).toFixed(1);
+
+      const row = await prisma.portrait.findUnique({
+        where: { id: portraitId },
+        select: { status: true, errorMessage: true, hiResImageUrl: true, enhancedPrompt: true },
+      });
+
+      if (result.success) {
+        passes++;
+        console.log(`run ${run}/${runs}: PASS (${secs}s) status=${row?.status}`);
+        console.log(`  preview: ${result.previewImageUrl}`);
+        console.log(`  hi-res:  ${row?.hiResImageUrl}`);
+      } else {
+        console.log(`run ${run}/${runs}: FAIL (${secs}s) status=${row?.status}`);
+        console.log(`  error:   ${result.error} [${result.errorType}]`);
+        console.log(`  db says: ${row?.errorMessage}`);
+      }
+      console.log(`  prompt:  ${(row?.enhancedPrompt || "").slice(0, 160)}…`);
+    } catch (err) {
+      const secs = ((Date.now() - started) / 1000).toFixed(1);
+      console.log(`run ${run}/${runs}: ERROR (${secs}s) — counted as a failure, cell continues`);
+      console.log(`  threw:   ${err instanceof Error ? err.message : String(err)}`);
     }
-    console.log(`  prompt:  ${(row?.enhancedPrompt || "").slice(0, 160)}…`);
   }
 
   console.log(`\n${passes}/${runs} passed the full production path`);
