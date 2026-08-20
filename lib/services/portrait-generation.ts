@@ -455,7 +455,12 @@ const SINGLE_PASS_STYLES = new Set(["renaissance", "starry-night"]);
 const IP_SENSITIVE_STYLES = new Set(["comic-hero"]);
 
 const ASYNC_POLL_INTERVAL_MS = 3_000;
-const ASYNC_POLL_TIMEOUT_MS = 300_000;
+// Per single job, not cumulative — the stand-in leg and the swap leg each get
+// their own budget. Measured on comic-hero/nano_banana_pro: 1 stand-in job in
+// 12 exceeds 300s, observed max 373.0s (PLAN/results/standin-latency.md). The
+// shipped default stays 300s until the founder rules on #65; the override is
+// what lets the test harness reach a verdict on a style that sits on the line.
+const ASYNC_POLL_TIMEOUT_MS = Number(process.env.ASYNC_POLL_TIMEOUT_MS) || 300_000;
 
 /** Generate a stand-in scene on a PINNED engine via the async endpoint. */
 async function generatePinnedScene(
