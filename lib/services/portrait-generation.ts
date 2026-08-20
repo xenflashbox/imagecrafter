@@ -36,6 +36,7 @@ import {
   checkStylePresence,
   checkIdentityPresence,
   checkStandInFidelity,
+  checkIpSafety,
   type PortraitSubjectAnalysis,
 } from "./portrait-analysis";
 import { applyWatermark, prepareHiResImage } from "./watermark";
@@ -427,7 +428,7 @@ async function enhanceCustomScenePrompt(
 // Pinning requires the ASYNC endpoint: the sync /api/v1/generate request
 // enum is frozen by service design — new providers are reached by routing,
 // never by widening request enums. Unmapped styles auto-route as before.
-const STYLE_ENGINE: Record<string, { provider: string; model?: string }> = {
+export const STYLE_ENGINE: Record<string, { provider: string; model?: string }> = {
   renaissance: { provider: "kling", model: "kling-v3" },
   egyptian: { provider: "kling", model: "kling-v3" },
   elven: { provider: "kling", model: "kling-v3" },
@@ -447,6 +448,11 @@ const STYLE_ENGINE: Record<string, { provider: string; model?: string }> = {
 //   comic-hero    STAYS two-step: Kontext ignored the template's explicit ban on
 //                 the Superman S-shield and drew one in 2 of 3 runs. IP risk.
 const SINGLE_PASS_STYLES = new Set(["renaissance", "starry-night"]);
+
+// Styles whose output is checked for third-party IP. comic-hero is the only
+// one that asks an engine for a genre defined by living trademarks; the rest
+// draw on public-domain art movements.
+const IP_SENSITIVE_STYLES = new Set(["comic-hero"]);
 
 const ASYNC_POLL_INTERVAL_MS = 3_000;
 const ASYNC_POLL_TIMEOUT_MS = 300_000;
@@ -766,26 +772,43 @@ export async function generatePortrait(
   // architectures are judged by it, unchanged. FAIL-CLOSED: "unknown" on either
   // axis blocks — the old gate silently returned inert "unknown" and shipped
   // strangers.
+  // The IP axis is only checked for styles that draw from a corpus where real
+  // trademarks ARE the subject matter. Running it on renaissance would spend a
+  // vision call per portrait to ask whether a 16th-century oil painting
+  // infringes Marvel.
+  const needsIpCheck = IP_SENSITIVE_STYLES.has(styleVariantSlug);
+
   const assessOutput = async (imageUrl: string) => {
-    const [identity, style] = await Promise.all([
+    const [identity, style, ip] = await Promise.all([
       checkIdentityPresence(portrait.sourceImageUrl, imageUrl),
       checkStylePresence(imageUrl, `${stylePack.name} — ${variant.name}`),
+      needsIpCheck ? checkIpSafety(imageUrl) : Promise.resolve("clean" as const),
     ]);
-    return { identity, style, pass: identity === "same" && style === "styled" };
+    return {
+      identity,
+      style,
+      ip,
+      pass: identity === "same" && style === "styled" && ip === "clean",
+    };
   };
 
   // The rejected image URL is logged so a blocked portrait can actually be
   // inspected: "identity=different" is a claim about an image, and without the
   // URL there is no way to tell a correct rejection from a gate false-positive.
-  const gateFailure = async (identity: string, style: string, rejectedUrl: string) => {
+  const gateFailure = async (
+    identity: string,
+    style: string,
+    ip: string,
+    rejectedUrl: string
+  ) => {
     console.error(
-      `[PortraitGen] Acceptance gate FAILED after retry (identity=${identity}, style=${style}) — portrait blocked; rejected=${rejectedUrl}`
+      `[PortraitGen] Acceptance gate FAILED after retry (identity=${identity}, style=${style}, ip=${ip}) — portrait blocked; rejected=${rejectedUrl}`
     );
     await prisma.portrait.update({
       where: { id: portraitId },
       data: {
         status: "failed",
-        errorMessage: `Output failed acceptance gate (identity=${identity}, style=${style})`,
+        errorMessage: `Output failed acceptance gate (identity=${identity}, style=${style}, ip=${ip})`,
       },
     });
     return {
@@ -820,7 +843,7 @@ export async function generatePortrait(
     let spVerdict = await assessOutput(pass.imageUrl);
     if (!spVerdict.pass) {
       console.log(
-        `[PortraitGen] Acceptance gate failed (identity=${spVerdict.identity}, style=${spVerdict.style}) — retrying single-pass once`
+        `[PortraitGen] Acceptance gate failed (identity=${spVerdict.identity}, style=${spVerdict.style}, ip=${spVerdict.ip}) — retrying single-pass once`
       );
       const retry = await generateSinglePassPortrait({
         photoUrl: portrait.sourceImageUrl,
@@ -835,10 +858,10 @@ export async function generatePortrait(
       }
     }
     if (!spVerdict.pass) {
-      return gateFailure(spVerdict.identity, spVerdict.style, pass.imageUrl!);
+      return gateFailure(spVerdict.identity, spVerdict.style, spVerdict.ip, pass.imageUrl!);
     }
     console.log(
-      `[PortraitGen] Acceptance gate PASSED (identity=${spVerdict.identity}, style=${spVerdict.style})`
+      `[PortraitGen] Acceptance gate PASSED (identity=${spVerdict.identity}, style=${spVerdict.style}, ip=${spVerdict.ip})`
     );
     genResult = { imageUrl: pass.imageUrl! };
     console.log("[PortraitGen] Single-pass generation complete");
@@ -960,7 +983,7 @@ export async function generatePortrait(
       // from the scene, so re-rolling the swap against the same stand-in keeps
       // the input that lost the identity in the first place.
       console.log(
-        `[PortraitGen] Acceptance gate failed (identity=${verdict.identity}, style=${verdict.style}) — retrying with a fresh stand-in`
+        `[PortraitGen] Acceptance gate failed (identity=${verdict.identity}, style=${verdict.style}, ip=${verdict.ip}) — retrying with a fresh stand-in`
       );
       const retryStandIn = await acquireStandIn();
       if (retryStandIn.ok) {
@@ -981,10 +1004,10 @@ export async function generatePortrait(
     }
 
     if (!verdict.pass) {
-      return gateFailure(verdict.identity, verdict.style, swap.imageUrl!);
+      return gateFailure(verdict.identity, verdict.style, verdict.ip, swap.imageUrl!);
     }
     console.log(
-      `[PortraitGen] Acceptance gate PASSED (identity=${verdict.identity}, style=${verdict.style})`
+      `[PortraitGen] Acceptance gate PASSED (identity=${verdict.identity}, style=${verdict.style}, ip=${verdict.ip})`
     );
 
     // swap.imageUrl is guaranteed here: the initial swap was checked above and

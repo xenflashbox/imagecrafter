@@ -491,6 +491,137 @@ export async function checkIdentityPresence(
 }
 
 // =============================================================================
+// IP-SAFETY CHECK (comic-hero)
+// =============================================================================
+
+export type IpSafety = "clean" | "infringing" | "unknown";
+
+/**
+ * Assert a superhero-style output carries no third-party IP.
+ *
+ * The comic-hero template already bans the S-shield, the bat symbol, spider
+ * webbing and named Marvel/DC marks in explicit prose, and the engine drew a
+ * pentagonal shield emblem anyway. Prompt-level bans are advisory; the engine
+ * is drawing from a corpus where those marks ARE what a superhero looks like.
+ * Detection is the only defence left, and shipping an infringing image to a
+ * paying customer — or printing it — is not a defect we can settle later.
+ *
+ * FAIL-CLOSED: "unknown" must BLOCK at the caller. Only "clean" passes.
+ *
+ * Deliberately TWO calls: look first, judge second.
+ *
+ * A single call that lists the banned badge shapes and then asks for a verdict
+ * does not work, at any max_tokens. Naming Superman's five-sided shield in the
+ * question primes the answer: on the accept leg the model reported a "five-
+ * sided shield shape that comes to a point at the bottom" around an emblem
+ * that provably has no border at all (verified by cropping the chest region).
+ * It found what it had been told to look for, and rejected the intended
+ * original design 4 times in 5. Widening max_tokens from 16 to 300 only
+ * changed which leg it got wrong.
+ *
+ * So the perception call is asked to describe the emblem with no mention of
+ * infringement, trademarks, or any existing hero; the policy call then applies
+ * the ban list to that description as text. The observation cannot be bent by
+ * a criterion it never saw.
+ */
+export async function checkIpSafety(imageUrl: string): Promise<IpSafety> {
+  if (!anthropic) return "unknown";
+  try {
+    const { base64, mediaType } = await fetchImageAsBase64(imageUrl);
+    const observation = await anthropic.messages.create({
+      model: VISION_MODEL,
+      max_tokens: 300,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+                data: base64,
+              },
+            },
+            {
+              type: "text",
+              text: `Describe this comic-book cover illustration factually. Answer these three questions in at most four short sentences:
+
+1. Is the chest emblem enclosed by an outline — a badge, shield, circle, or any other border drawn around it? If yes, describe the shape of that border. If the artwork sits directly on the costume with nothing drawn around it, say so plainly.
+2. What does the emblem's artwork itself depict?
+3. Quote any text that appears anywhere on the image.
+
+Report only what you can actually see. Do not guess at a border that is not drawn.`,
+            },
+          ],
+        },
+      ],
+    });
+    const obsBlock = observation.content.find((block) => block.type === "text");
+    const description = (obsBlock && "text" in obsBlock ? obsBlock.text : "").trim();
+    if (!description) {
+      console.error("[IpSafety] Perception call returned no description");
+      return "unknown";
+    }
+
+    const ruling = await anthropic.messages.create({
+      model: VISION_MODEL,
+      max_tokens: 200,
+      messages: [
+        {
+          role: "user",
+          content: `You are a trademark reviewer. An artist produced an original superhero comic cover. You cannot see it; you have an observer's factual description:
+
+"""
+${description}
+"""
+
+You are applying a BRIGHT-LINE RULE, not judging degree of similarity. Do not reason about whether the shape is different enough, stylised enough, or original enough. Either the description reports one of these borders around the emblem or it does not.
+
+Answer INFRINGING if the description says the emblem is enclosed by any of:
+- a shield, pentagon, five-sided, diamond or kite border (Superman)
+- an oval or shield around a bat silhouette (Batman)
+- a circle around a lightning bolt (The Flash, Shazam)
+- a star, or concentric rings forming a target (Captain America)
+- a spider shape or web pattern (Spider-Man)
+
+"A shield-shaped border" is a match on the first line. So is "a pentagon-like badge". The word is enough — you do not get to decide it is sufficiently distinct from Superman's. Original artwork INSIDE the border does not matter and is not a reason to clear it; the border itself is the borrowed element.
+
+Also answer INFRINGING if the quoted text names a real Marvel or DC character, one of their company logos, or the title of an actual Marvel or DC comic. An invented masthead title is expected on a comic cover and is not a problem on its own.
+
+Answer CLEAN only if the description says the emblem has NO enclosing border, or describes a border shape that appears nowhere on the list above (for example a plain rectangle or a hexagon).
+
+Reply with one short sentence giving your reason, then on a new line exactly one word: CLEAN or INFRINGING.`,
+        },
+      ],
+    });
+    const ruleBlock = ruling.content.find((block) => block.type === "text");
+    const reply = (ruleBlock && "text" in ruleBlock ? ruleBlock.text : "").trim();
+    // The verdict is the LAST capitalised token, not the first — the reason
+    // sentence ahead of it may well name a banned shape while clearing it.
+    const verdicts = reply.match(/\b(CLEAN|INFRINGING)\b/g);
+    const answer = verdicts ? verdicts[verdicts.length - 1] : "";
+    const trail = `${description} || ${reply}`.replace(/\s+/g, " ");
+    if (answer === "INFRINGING") {
+      console.warn(`[IpSafety] INFRINGING — ${trail}`);
+      return "infringing";
+    }
+    if (answer === "CLEAN") {
+      // Logged on the pass too: a cleared image is the one that reaches a
+      // customer and a print run, so its basis has to be auditable after the
+      // fact, not just a blocked one's.
+      console.log(`[IpSafety] CLEAN — ${trail}`);
+      return "clean";
+    }
+    console.error(`[IpSafety] No verdict — ${trail}`);
+    return "unknown";
+  } catch (error) {
+    console.error("[IpSafety] Check failed:", error);
+    return "unknown";
+  }
+}
+
+// =============================================================================
 // STAND-IN FIDELITY CHECK (fix directive P2.2 — before the swap)
 // =============================================================================
 
