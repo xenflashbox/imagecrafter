@@ -12,6 +12,7 @@ import type { PlanTier, SubscriptionStatus } from "@prisma/client";
 import { buildDownloadUrl } from "@/lib/services/download-token";
 import {
   sendDigitalPurchaseEmail,
+  sendPackPurchaseEmail,
   sendPrintPurchaseEmail,
 } from "@/lib/services/email-notification";
 import { createProdigiOrder } from "@/lib/services/print-fulfillment";
@@ -233,16 +234,40 @@ async function handlePackCheckoutCompleted(
     stripeSessionId: session.id,
   });
 
-  if (result.alreadyGranted) {
-    return; // webhook replay — already logged by grantPackCredits
+  if (result.granted) {
+    console.log(
+      `[stripe-webhook] Granted ${credits} credits (${packSku}) to user ${userId} for session ${session.id}`
+    );
   }
-
-  console.log(
-    `[stripe-webhook] Granted ${credits} credits (${packSku}) to user ${userId} for session ${session.id}`
-  );
 
   const amountCents = session.amount_total ?? pack?.priceUsd ?? 0;
   const email = session.customer_details?.email || null;
+
+  // Sent on the replay path too. The only way we reach this with the grant
+  // already recorded is a previous attempt that failed AFTER writing the
+  // ledger row — most likely here. A duplicate confirmation is a far smaller
+  // problem than a customer who paid and heard nothing.
+  if (email) {
+    await sendPackPurchaseEmail({
+      to: email,
+      name: session.customer_details?.name || undefined,
+      packName: pack?.name || packSku,
+      credits,
+      amount: amountCents,
+      currency: (session.currency || "usd").toUpperCase(),
+    });
+  } else {
+    // The credits ARE granted, so this must not throw and unwind the webhook —
+    // but a paid customer with no confirmation has to be visible in the logs.
+    console.error(
+      `[stripe-webhook] Pack checkout ${session.id} (${packSku}) has no customer email — credits granted, confirmation NOT sent`
+    );
+  }
+
+  if (result.alreadyGranted) {
+    return; // webhook replay — do not re-fire the Purchase pixels
+  }
+
   await trackTikTokEvent({
     event: "Purchase",
     eventId: `purchase_pack_${session.id}`,
