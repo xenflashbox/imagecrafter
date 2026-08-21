@@ -131,7 +131,7 @@ const structuredData = {
   applicationCategory: "DesignApplication",
   operatingSystem: "Web",
   description:
-    "AI portrait studio — turn your photo into a Renaissance, Starry Night, fantasy, or comic-book portrait. Full 4K digital downloads and museum-quality prints.",
+    "AI portrait studio — turn your photo into a Renaissance, Starry Night, or Elven fantasy portrait. Full 4K digital downloads and museum-quality prints.",
   url: "https://imagecrafter.app",
   author: {
     "@type": "Organization",

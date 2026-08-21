@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 export const metadata: Metadata = {
   title: "Portrait Studio — Transform Your Photo Into Art | ImageCrafter",
   description:
-    "Upload your photo and receive a stunning AI-generated artistic portrait in five signature styles — Renaissance royalty, Starry Night, Ancient Egyptian, Elven fantasy, and comic book hero. Guest checkout — no account required.",
+    "Upload your photo and receive a stunning AI-generated artistic portrait in three signature styles — Renaissance royalty, Starry Night, and Elven fantasy. Guest checkout — no account required.",
 };
 
 async function getStylePacks() {
@@ -31,6 +31,9 @@ async function getStylePacks() {
 
 export default async function PortraitsPage() {
   const stylePacks = await getStylePacks();
+  // Counted from what is actually shippable, never hardcoded — a style held
+  // back for identity failures must not still be advertised.
+  const styleCount = stylePacks.reduce((n, p) => n + p.variants.length, 0);
 
   return (
     <div className="min-h-screen bg-white">
@@ -38,7 +41,7 @@ export default async function PortraitsPage() {
       <section className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 py-24 px-4">
         <div className="relative mx-auto max-w-4xl text-center">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm text-white/80">
-            ✨ 5 signature styles · Guest checkout · Digital + Print
+            ✨ {styleCount} signature styles · Guest checkout · Digital + Print
           </div>
           <h1 className="mb-6 text-5xl font-bold tracking-tight text-white md:text-6xl">
             Your Photo,{" "}
@@ -49,7 +52,7 @@ export default async function PortraitsPage() {
           <p className="mb-8 text-xl text-white/70 max-w-2xl mx-auto">
             Upload a photo with one clear subject — person or pet — and our AI transforms
             it into a stunning artistic portrait. Choose from Renaissance, Starry Night,
-            Ancient Egyptian, Elven, and Comic Book Hero styles.
+            and Elven styles.
           </p>
           <Link
             href="/portraits/create"
@@ -72,7 +75,7 @@ export default async function PortraitsPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
               { step: "1", icon: "📷", title: "Upload your photo", desc: "Any photo with one clear subject — a person or pet. JPEG or PNG up to 10MB." },
-              { step: "2", icon: "🎨", title: "Choose your style", desc: "Pick from five signature styles — Renaissance royalty to comic book hero." },
+              { step: "2", icon: "🎨", title: "Choose your style", desc: "Pick from our signature styles — Renaissance royalty, Starry Night, or Elven fantasy." },
               { step: "3", icon: "⬇️", title: "Download or print", desc: "Get your portrait as a high-res digital download or order a museum-quality print." },
             ].map((item) => (
               <div key={item.step} className="text-center">
