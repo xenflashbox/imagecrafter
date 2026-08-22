@@ -14,7 +14,11 @@ const BUCKET_NAME = process.env.R2_BUCKET || "imagecrafter-prod";
 const PUBLIC_URL = process.env.R2_PUBLIC_URL || "";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const MAX_SIZE_MB = parseInt(process.env.PORTRAIT_MAX_UPLOAD_SIZE_MB || "10");
+// Must stay under Vercel's ~4.5MB function payload cap. Above it the request is
+// rejected at the edge with FUNCTION_PAYLOAD_TOO_LARGE and never reaches this
+// check, so a larger value here would promise a size the platform refuses.
+// The browser downscales bigger photos before upload.
+const MAX_SIZE_MB = parseInt(process.env.PORTRAIT_MAX_UPLOAD_SIZE_MB || "4");
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
 
 export interface UploadPortraitResult {

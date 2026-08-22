@@ -74,7 +74,7 @@ export default async function PortraitsPage() {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
-              { step: "1", icon: "📷", title: "Upload your photo", desc: "Any photo with one clear subject — a person or pet. JPEG or PNG up to 10MB." },
+              { step: "1", icon: "📷", title: "Upload your photo", desc: "Any photo with one clear subject — a person or pet. JPEG, PNG, or WebP up to 25MB." },
               { step: "2", icon: "🎨", title: "Choose your style", desc: "Pick from our signature styles — Renaissance royalty, Starry Night, or Elven fantasy." },
               { step: "3", icon: "⬇️", title: "Download or print", desc: "Get your portrait as a high-res digital download or order a museum-quality print." },
             ].map((item) => (

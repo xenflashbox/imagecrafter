@@ -34,6 +34,58 @@ interface StylePack {
 
 type Step = "upload" | "style" | "generate";
 
+// ─── Photo normalization ─────────────────────────────────────────────────────
+
+const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_PICK_BYTES = 25 * 1024 * 1024;
+const DOWNSCALE_TRIGGER_BYTES = 3 * 1024 * 1024;
+const MAX_UPLOAD_EDGE_PX = 2048;
+
+/**
+ * Shrink oversized photos in the browser before they are uploaded.
+ *
+ * Vercel rejects any function request body over ~4.5MB at the edge with
+ * FUNCTION_PAYLOAD_TOO_LARGE, before our route runs — and most phone photos are
+ * bigger than that, so uploads failed for a large share of real customers.
+ * 2048px is well above what the analysis and swap legs consume, so this costs
+ * nothing in the delivered portrait.
+ */
+async function normalizePhoto(file: File): Promise<File> {
+  if (file.size <= DOWNSCALE_TRIGGER_BYTES) return file;
+
+  let bitmap: ImageBitmap;
+  try {
+    // Applies EXIF rotation, so portrait-orientation phone photos are analyzed upright.
+    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  } catch {
+    bitmap = await createImageBitmap(file);
+  }
+
+  const scale = Math.min(
+    1,
+    MAX_UPLOAD_EDGE_PX / Math.max(bitmap.width, bitmap.height)
+  );
+  const width = Math.round(bitmap.width * scale);
+  const height = Math.round(bitmap.height * scale);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas unavailable");
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close();
+
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, "image/jpeg", 0.92)
+  );
+  if (!blob) throw new Error("encode failed");
+
+  return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", {
+    type: "image/jpeg",
+  });
+}
+
 // ─── Upload Zone ─────────────────────────────────────────────────────────────
 
 function UploadZone({
@@ -49,9 +101,7 @@ function UploadZone({
   const [dragging, setDragging] = useState(false);
 
   const handleFile = (file: File) => {
-    if (file && ["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      onFile(file);
-    }
+    if (file) onFile(file);
   };
 
   const onDrop = useCallback((e: React.DragEvent) => {
@@ -98,7 +148,7 @@ function UploadZone({
             <div className="text-5xl mb-4">📤</div>
             <p className="text-lg font-semibold text-slate-700 mb-2">Drop your photo here</p>
             <p className="text-sm text-slate-500 mb-4">or click to browse</p>
-            <p className="text-xs text-slate-400">JPEG, PNG, or WebP · Max 10MB</p>
+            <p className="text-xs text-slate-400">JPEG, PNG, or WebP · Large photos are resized automatically</p>
           </div>
         )}
       </div>
@@ -543,17 +593,60 @@ function CreatePortraitContent() {
     window.location.href = "/portraits/create";
   };
 
+  // Validate the picked file up front so bad picks fail visibly, not silently
+  const handlePickPhoto = (f: File) => {
+    if (!ACCEPTED_TYPES.includes(f.type)) {
+      setUploadError("That file type isn't supported. Please choose a JPEG, PNG, or WebP photo.");
+      return;
+    }
+    if (f.size > MAX_PICK_BYTES) {
+      setUploadError(
+        `That photo is ${(f.size / 1024 / 1024).toFixed(1)}MB. Please choose one under 25MB.`
+      );
+      return;
+    }
+    setPhotoFile(f);
+    setUploadError(null);
+    setPhotoPreview(URL.createObjectURL(f));
+  };
+
   // Upload photo and proceed to style selection
   const handleUploadAndContinue = async () => {
     if (!photoFile) { setUploadError("Please select a photo first."); return; }
     setIsUploading(true);
     setUploadError(null);
     try {
+      let upload: File;
+      try {
+        upload = await normalizePhoto(photoFile);
+      } catch {
+        setUploadError("We couldn't read that photo. Please try a different JPEG, PNG, or WebP.");
+        return;
+      }
+
       const formData = new FormData();
-      formData.append("photo", photoFile);
+      formData.append("photo", upload);
       const res = await fetch("/api/portraits/upload", { method: "POST", body: formData });
-      const data = await res.json();
-      if (!res.ok || !data.success) { setUploadError(data.error || "Upload failed."); return; }
+
+      // A payload rejected at the edge returns plain text, not JSON — parsing it
+      // blind used to throw and surface as a misleading "Network error".
+      const raw = await res.text();
+      let data: { success?: boolean; error?: string; portraitId?: string; sessionId?: string } = {};
+      try { data = JSON.parse(raw); } catch { /* handled by the status check below */ }
+
+      if (!res.ok || !data.success) {
+        setUploadError(
+          data.error ||
+            (res.status === 413
+              ? "That photo was too large to upload. Please try a smaller one."
+              : `Upload failed (HTTP ${res.status}). Please try again.`)
+        );
+        return;
+      }
+      if (!data.portraitId || !data.sessionId) {
+        setUploadError("Upload succeeded but the response was incomplete. Please try again.");
+        return;
+      }
       setPortraitId(data.portraitId);
       setSessionId(data.sessionId);
 
@@ -679,7 +772,7 @@ function CreatePortraitContent() {
               <h1 className="text-2xl font-bold text-slate-900 mb-1">Upload your photo</h1>
               <p className="text-slate-600">Choose a clear photo of your subject — pet, person, couple, or family.</p>
             </div>
-            <UploadZone onFile={(f) => { setPhotoFile(f); setUploadError(null); setPhotoPreview(URL.createObjectURL(f)); }} preview={photoPreview} error={uploadError} />
+            <UploadZone onFile={handlePickPhoto} preview={photoPreview} error={uploadError} />
             <button
               className="w-full rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-4 text-base transition-colors flex items-center justify-center gap-2"
               onClick={handleUploadAndContinue}

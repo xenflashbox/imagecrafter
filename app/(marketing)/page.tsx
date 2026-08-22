@@ -206,10 +206,10 @@ export default async function LandingPage() {
                     Sign In
                   </Link>
                   <Link
-                    href="/sign-up"
+                    href="/portraits/create"
                     className="px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all text-sm font-medium"
                   >
-                    Get Started
+                    Upload Your Photo
                   </Link>
                 </>
               )}
