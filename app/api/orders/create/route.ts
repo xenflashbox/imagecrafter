@@ -25,8 +25,11 @@ import { cookies } from "next/headers";
 import { PRINT_CATALOG, resolveSku } from "@/lib/services/print-fulfillment";
 import { trackTikTokEvent } from "@/lib/services/tiktok-events";
 import { trackMetaEvent, fbcFromFbclid } from "@/lib/services/meta-events";
+import { requireEnv } from "@/lib/env";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+// Built per request, not at module scope: Next.js collects page data during the
+// build, so a module-scope client makes every build require a live payment key.
+const getStripe = () => new Stripe(requireEnv("STRIPE_SECRET_KEY"));
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
 
 const DIGITAL_PRICE_CENTS = 2995;
@@ -238,7 +241,7 @@ export async function GET(request: NextRequest) {
     sessionConfig.phone_number_collection = { enabled: false };
   }
 
-  const checkoutSession = await stripe.checkout.sessions.create(sessionConfig);
+  const checkoutSession = await getStripe().checkout.sessions.create(sessionConfig);
 
   // Save Stripe session ID to order
   await prisma.order.update({

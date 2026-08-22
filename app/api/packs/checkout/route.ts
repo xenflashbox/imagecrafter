@@ -18,8 +18,11 @@ import { cookies } from "next/headers";
 import { resolvePack, PACK_CATALOG } from "@/lib/services/credits";
 import { trackTikTokEvent } from "@/lib/services/tiktok-events";
 import { trackMetaEvent, fbcFromFbclid } from "@/lib/services/meta-events";
+import { requireEnv } from "@/lib/env";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+// Built per request, not at module scope: Next.js collects page data during the
+// build, so a module-scope client makes every build require a live payment key.
+const getStripe = () => new Stripe(requireEnv("STRIPE_SECRET_KEY"));
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
 
 export async function GET(request: NextRequest) {
@@ -106,7 +109,7 @@ export async function GET(request: NextRequest) {
     sessionConfig.customer_email = user.email;
   }
 
-  const checkoutSession = await stripe.checkout.sessions.create(sessionConfig);
+  const checkoutSession = await getStripe().checkout.sessions.create(sessionConfig);
 
   await trackTikTokEvent({
     event: "InitiateCheckout",
