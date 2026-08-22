@@ -34,6 +34,57 @@ interface StylePack {
 
 type Step = "upload" | "style" | "generate";
 
+// ─── Photo normalization ─────────────────────────────────────────────────────
+
+const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_PICK_BYTES = 25 * 1024 * 1024;
+const DOWNSCALE_TRIGGER_BYTES = 3 * 1024 * 1024;
+const MAX_UPLOAD_EDGE_PX = 2048;
+
+/**
+ * Shrink oversized photos in the browser before they are uploaded.
+ *
+ * The photo goes straight to R2, so size is no longer a platform limit — this is
+ * about the seconds a customer waits on a phone connection. 2048px is well above
+ * what the analysis and swap legs consume, so it costs nothing in the delivered
+ * portrait.
+ */
+async function normalizePhoto(file: File): Promise<File> {
+  if (file.size <= DOWNSCALE_TRIGGER_BYTES) return file;
+
+  let bitmap: ImageBitmap;
+  try {
+    // Applies EXIF rotation, so portrait-orientation phone photos are analyzed upright.
+    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  } catch {
+    bitmap = await createImageBitmap(file);
+  }
+
+  const scale = Math.min(
+    1,
+    MAX_UPLOAD_EDGE_PX / Math.max(bitmap.width, bitmap.height)
+  );
+  const width = Math.round(bitmap.width * scale);
+  const height = Math.round(bitmap.height * scale);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas unavailable");
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  bitmap.close();
+
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, "image/jpeg", 0.92)
+  );
+  if (!blob) throw new Error("encode failed");
+
+  return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", {
+    type: "image/jpeg",
+  });
+}
+
 // ─── Upload Zone ─────────────────────────────────────────────────────────────
 
 function UploadZone({
@@ -49,9 +100,7 @@ function UploadZone({
   const [dragging, setDragging] = useState(false);
 
   const handleFile = (file: File) => {
-    if (file && ["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      onFile(file);
-    }
+    if (file) onFile(file);
   };
 
   const onDrop = useCallback((e: React.DragEvent) => {
@@ -98,7 +147,7 @@ function UploadZone({
             <div className="text-5xl mb-4">📤</div>
             <p className="text-lg font-semibold text-slate-700 mb-2">Drop your photo here</p>
             <p className="text-sm text-slate-500 mb-4">or click to browse</p>
-            <p className="text-xs text-slate-400">JPEG, PNG, or WebP · Max 10MB</p>
+            <p className="text-xs text-slate-400">JPEG, PNG, or WebP · Large photos are resized automatically</p>
           </div>
         )}
       </div>
@@ -235,6 +284,7 @@ function PreviewSection({
   isAuthenticated,
   isSaved,
   isSaving,
+  saveError,
 }: {
   portraitId: string | null;
   previewUrl: string | null;
@@ -248,6 +298,7 @@ function PreviewSection({
   isAuthenticated?: boolean;
   isSaved?: boolean;
   isSaving?: boolean;
+  saveError?: string | null;
 }) {
   if (isGenerating) {
     return (
@@ -371,6 +422,11 @@ function PreviewSection({
             </button>
           )}
         </div>
+        {saveError && (
+          <p className="text-center text-sm text-red-600 bg-red-50 rounded-lg px-4 py-2">
+            {saveError}
+          </p>
+        )}
         <p className="text-center text-xs text-slate-400">
           Regenerate for a different version · Change style or photo to start fresh
         </p>
@@ -385,7 +441,7 @@ function PreviewSection({
               href={`/portraits/${portraitId}/preview`}
               className="flex-1 text-center rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-3 font-semibold text-sm transition-colors"
             >
-              ⬇️ Purchase Digital — $14.95
+              ⬇️ Purchase Digital — $29.95
             </Link>
             <Link
               href={`/portraits/${portraitId}/preview`}
@@ -460,6 +516,7 @@ function CreatePortraitContent() {
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const stepIdx = step === "upload" ? 0 : step === "style" ? 1 : 2;
 
@@ -535,17 +592,86 @@ function CreatePortraitContent() {
     window.location.href = "/portraits/create";
   };
 
+  // Validate the picked file up front so bad picks fail visibly, not silently
+  const handlePickPhoto = (f: File) => {
+    if (!ACCEPTED_TYPES.includes(f.type)) {
+      setUploadError("That file type isn't supported. Please choose a JPEG, PNG, or WebP photo.");
+      return;
+    }
+    if (f.size > MAX_PICK_BYTES) {
+      setUploadError(
+        `That photo is ${(f.size / 1024 / 1024).toFixed(1)}MB. Please choose one under 25MB.`
+      );
+      return;
+    }
+    setPhotoFile(f);
+    setUploadError(null);
+    setPhotoPreview(URL.createObjectURL(f));
+  };
+
   // Upload photo and proceed to style selection
   const handleUploadAndContinue = async () => {
     if (!photoFile) { setUploadError("Please select a photo first."); return; }
     setIsUploading(true);
     setUploadError(null);
     try {
-      const formData = new FormData();
-      formData.append("photo", photoFile);
-      const res = await fetch("/api/portraits/upload", { method: "POST", body: formData });
-      const data = await res.json();
-      if (!res.ok || !data.success) { setUploadError(data.error || "Upload failed."); return; }
+      let upload: File;
+      try {
+        upload = await normalizePhoto(photoFile);
+      } catch {
+        setUploadError("We couldn't read that photo. Please try a different JPEG, PNG, or WebP.");
+        return;
+      }
+
+      const ticketRes = await fetch("/api/portraits/upload-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contentType: upload.type, sizeBytes: upload.size }),
+      });
+      const ticket: {
+        success?: boolean;
+        error?: string;
+        portraitId?: string;
+        sessionId?: string;
+        key?: string;
+        uploadUrl?: string;
+      } = await ticketRes.json().catch(() => ({}));
+
+      if (!ticketRes.ok || !ticket.success || !ticket.uploadUrl || !ticket.key) {
+        setUploadError(
+          ticket.error || `Upload failed (HTTP ${ticketRes.status}). Please try again.`
+        );
+        return;
+      }
+
+      const putRes = await fetch(ticket.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": upload.type },
+        body: upload,
+      });
+      if (!putRes.ok) {
+        setUploadError("We couldn't upload your photo. Please try again.");
+        return;
+      }
+
+      const confirmRes = await fetch("/api/portraits/upload-complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ portraitId: ticket.portraitId, key: ticket.key }),
+      });
+      const data: { success?: boolean; error?: string; portraitId?: string; sessionId?: string } =
+        await confirmRes.json().catch(() => ({}));
+
+      if (!confirmRes.ok || !data.success) {
+        setUploadError(
+          data.error || `Upload failed (HTTP ${confirmRes.status}). Please try again.`
+        );
+        return;
+      }
+      if (!data.portraitId || !data.sessionId) {
+        setUploadError("Upload succeeded but the response was incomplete. Please try again.");
+        return;
+      }
       setPortraitId(data.portraitId);
       setSessionId(data.sessionId);
 
@@ -634,11 +760,14 @@ function CreatePortraitContent() {
       const data = await res.json();
       if (data.success) {
         setIsSaved(true);
+        setSaveError(null);
       } else {
         console.error("Failed to save portrait:", data.error);
+        setSaveError("Failed to save your portrait. Please try again.");
       }
     } catch (err) {
       console.error("Error saving portrait:", err);
+      setSaveError("Failed to save your portrait. Please try again.");
     } finally {
       setIsSaving(false);
     }
@@ -668,7 +797,7 @@ function CreatePortraitContent() {
               <h1 className="text-2xl font-bold text-slate-900 mb-1">Upload your photo</h1>
               <p className="text-slate-600">Choose a clear photo of your subject — pet, person, couple, or family.</p>
             </div>
-            <UploadZone onFile={(f) => { setPhotoFile(f); setUploadError(null); setPhotoPreview(URL.createObjectURL(f)); }} preview={photoPreview} error={uploadError} />
+            <UploadZone onFile={handlePickPhoto} preview={photoPreview} error={uploadError} />
             <button
               className="w-full rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-4 text-base transition-colors flex items-center justify-center gap-2"
               onClick={handleUploadAndContinue}
@@ -753,6 +882,7 @@ function CreatePortraitContent() {
               isAuthenticated={isSignedIn}
               isSaved={isSaved}
               isSaving={isSaving}
+              saveError={saveError}
             />
           </div>
         )}

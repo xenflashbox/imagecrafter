@@ -6,7 +6,7 @@
  *
  * Conversion paths:
  *   A — Guest Portrait: /portraits/create (no auth)
- *   B — Subscription: /sign-up → plans
+ *   B — Credit packs: /api/packs/checkout (sign-in enforced there)
  *   C — Style pack gallery from real DB data
  *
  * SEO: full Open Graph, Twitter Card, JSON-LD.
@@ -16,7 +16,7 @@ import { Metadata } from "next";
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
-import { PRICING_TABLE } from "@/lib/plans";
+import { CreditPackCards } from "@/components/credit-pack-cards";
 import {
   Camera,
   Sparkles,
@@ -37,7 +37,7 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
 export const metadata: Metadata = {
   title: "ImageCrafter — AI Portrait Studio & Image Generator",
   description:
-    "Transform your photo into stunning AI art in seconds. Royal portraits, fantasy scenes, fine art masterpieces — no account needed. Or subscribe for unlimited AI image generation.",
+    "Transform your photo into stunning AI art in seconds. Royal portraits, fantasy scenes, fine art masterpieces — no account needed. Pay only if you love it.",
   openGraph: {
     title: "ImageCrafter — AI Portrait Studio",
     description:
@@ -78,6 +78,18 @@ const websiteSchema = {
     "query-input": "required name=search_term_string",
   },
 };
+
+// Real before/after pairs — actual production two-step pipeline outputs,
+// hosted on R2 CDN (gallery v2: gate-passing P4 regeneration). Not stock, not
+// mock. Egyptian and comic-hero are held back (identity acceptance below the
+// bar) and are intentionally absent — never ship a stranger.
+const GALLERY_CDN = "https://images.imagecrafter.app/gallery/v3";
+const BEFORE_PHOTO = `${GALLERY_CDN}/before/adult-face-thumb.jpg`;
+const AFTER_GALLERY = [
+  { slug: "renaissance", name: "Renaissance", pack: "Royal Gallery" },
+  { slug: "starry-night", name: "Starry Night", pack: "Masterpiece" },
+  { slug: "elven", name: "Elven Royalty", pack: "Fantasy Realm" },
+].map((s) => ({ ...s, url: `${GALLERY_CDN}/thumbs/${s.slug}.jpg` }));
 
 // =============================================================================
 // DATA FETCHING
@@ -134,14 +146,10 @@ export default async function LandingPage() {
   const { userId } = await auth();
   const isSignedIn = Boolean(userId);
 
-  const [stylePacks] = await Promise.all([
-    getStylePacks().catch((err) => {
-      console.error("StylePack fetch failed:", err);
-      return [] as Awaited<ReturnType<typeof getStylePacks>>;
-    }),
-  ]);
-
-  const paidPlans = PRICING_TABLE.filter((p) => p.tier !== "FREE");
+  // No catch-and-render-empty: the gallery IS the homepage. A dead DB must
+  // surface as an error, never as a homepage with a silently missing
+  // gallery (fail-open audit, fix directive P1#3).
+  const stylePacks = await getStylePacks();
 
   return (
     <>
@@ -198,10 +206,10 @@ export default async function LandingPage() {
                     Sign In
                   </Link>
                   <Link
-                    href="/sign-up"
+                    href="/portraits/create"
                     className="px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all text-sm font-medium"
                   >
-                    Get Started
+                    Upload Your Photo
                   </Link>
                 </>
               )}
@@ -317,7 +325,62 @@ export default async function LandingPage() {
         </section>
 
         {/* ================================================================
-            PATH C — STYLE PACK GALLERY (all 7 packs)
+            BEFORE / AFTER — real production pipeline outputs
+        ================================================================ */}
+        <section id="results" className="py-24 px-6 border-t border-white/5">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-14">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-green-500/15 border border-green-500/25 text-green-300 text-sm mb-4">
+                <Camera className="w-3.5 h-3.5" />
+                Real results — one photo, {AFTER_GALLERY.length} styles
+              </div>
+              <h2 className="text-4xl md:text-5xl font-light mb-4">
+                From One Photo to Any Style
+              </h2>
+              <p className="text-white/50 max-w-xl mx-auto">
+                Every image below was generated from the single photo on the left —
+                the same pipeline your photo goes through.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 items-start">
+              {/* Before */}
+              <div className="rounded-2xl overflow-hidden border-2 border-violet-500/50 relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={BEFORE_PHOTO}
+                  alt="Original photo before transformation"
+                  className="w-full aspect-[3/4] object-cover"
+                />
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-3">
+                  <p className="text-xs font-medium text-violet-300">Original photo</p>
+                </div>
+              </div>
+
+              {/* Afters */}
+              {AFTER_GALLERY.map((item) => (
+                <div
+                  key={item.slug}
+                  className="rounded-2xl overflow-hidden border border-white/10 relative group"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={item.url}
+                    alt={`${item.name} style portrait generated from the original photo`}
+                    className="w-full aspect-[3/4] object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-3">
+                    <p className="text-xs font-medium">{item.name}</p>
+                    <p className="text-[10px] text-white/50">{item.pack}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ================================================================
+            PATH C — STYLE PACK GALLERY (active packs)
         ================================================================ */}
         <section id="styles" className="py-24 px-6 border-t border-white/5">
           <div className="max-w-6xl mx-auto">
@@ -343,7 +406,7 @@ export default async function LandingPage() {
                   className="group bg-white/[0.04] rounded-2xl border border-white/10 overflow-hidden hover:border-violet-500/50 hover:bg-white/[0.06] transition-all"
                 >
                   {/* Thumbnail */}
-                  <div className="aspect-video relative overflow-hidden">
+                  <div className="aspect-[3/4] relative overflow-hidden">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={
@@ -395,106 +458,63 @@ export default async function LandingPage() {
         </section>
 
         {/* ================================================================
-            PATH B — SUBSCRIPTION PLANS
+            PATH B — PRICING (real catalog: single portrait + credit packs)
         ================================================================ */}
         <section id="pricing" className="py-24 px-6 border-t border-white/5">
-          <div className="max-w-6xl mx-auto">
+          <div className="max-w-4xl mx-auto">
             <div className="text-center mb-14">
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-violet-500/15 border border-violet-500/25 text-violet-300 text-sm mb-4">
                 <Zap className="w-3.5 h-3.5" />
-                Unlimited AI Image Generation
+                Simple One-Time Pricing
               </div>
               <h2 className="text-4xl md:text-5xl font-light mb-4">
-                Create Without Limits
+                Pay Per Portrait
               </h2>
               <p className="text-white/50 max-w-xl mx-auto">
-                Subscribers get full access to the AI image generator — templates, batch mode,
-                4K resolution, and subscriber discounts on portrait prints.
+                No subscription. Create your portrait free, preview it, and pay only if
+                you love it — full 4K digital download, no watermark.
               </p>
             </div>
 
-            {/* Feature comparison */}
-            <div className="mb-12 max-w-2xl mx-auto bg-white/[0.03] rounded-2xl border border-white/10 p-6">
-              <h3 className="text-sm font-medium text-white/60 mb-4 uppercase tracking-wider">
-                Subscriber advantages
-              </h3>
-              <div className="grid sm:grid-cols-2 gap-3 text-sm">
-                {[
-                  "Unlimited template access",
-                  "15% off portrait prints",
-                  "Batch generate up to 10 images",
-                  "Up to 4K resolution",
-                  "No watermarks",
-                  "Priority generation queue",
-                  "Project & character consistency",
-                  "Full prompt history",
-                ].map((f) => (
-                  <div key={f} className="flex items-center gap-2 text-white/70">
-                    <Check className="w-4 h-4 text-violet-400 shrink-0" />
-                    {f}
-                  </div>
-                ))}
+            {/* Single portrait */}
+            <div className="mb-12 max-w-2xl mx-auto rounded-2xl border border-violet-500/50 bg-gradient-to-b from-violet-900/20 to-transparent p-8 text-center">
+              <div className="flex items-baseline justify-center gap-2 mb-1">
+                <span className="text-4xl font-light">$29.95</span>
+                <span className="text-white/40 text-sm">one-time</span>
               </div>
-            </div>
-
-            {/* Pricing cards */}
-            <div className="grid md:grid-cols-3 gap-6">
-              {paidPlans.map((plan) => (
-                <div
-                  key={plan.tier}
-                  className={`relative rounded-2xl border p-6 flex flex-col ${
-                    plan.highlighted
-                      ? "border-violet-500/60 bg-gradient-to-b from-violet-900/20 to-transparent"
-                      : "border-white/10 bg-white/[0.03]"
-                  }`}
-                >
-                  {plan.highlighted && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                      <span className="px-4 py-1 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-xs font-semibold whitespace-nowrap">
-                        Most Popular
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="mb-6">
-                    <div className="flex items-baseline gap-1 mb-1">
-                      <span className="text-3xl font-light">{plan.price}</span>
-                      <span className="text-white/40 text-sm">/mo</span>
-                    </div>
-                    <h3 className="text-lg font-medium mb-1">{plan.name}</h3>
-                    <p className="text-sm text-white/50">{plan.description}</p>
-                  </div>
-
-                  <ul className="space-y-2.5 mb-8 flex-1">
-                    {plan.features.map((f) => (
-                      <li key={f} className="flex items-start gap-2 text-sm text-white/70">
-                        <Check className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-
-                  <Link
-                    href={plan.tier === "TEAM" ? "/sign-up" : "/sign-up"}
-                    className={`flex items-center justify-center gap-2 py-3 rounded-xl font-medium text-sm transition-all ${
-                      plan.highlighted
-                        ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500"
-                        : "bg-white/8 hover:bg-white/12 border border-white/10"
-                    }`}
-                  >
-                    {plan.cta}
-                    <ArrowRight className="w-4 h-4" />
-                  </Link>
-                </div>
-              ))}
-            </div>
-
-            <p className="text-center text-white/30 text-sm mt-6">
-              Free plan available · No credit card required to start ·{" "}
-              <Link href="/sign-up" className="text-violet-400 hover:text-violet-300 transition-colors">
-                Sign up free
+              <h3 className="text-lg font-medium mb-4">Single Portrait</h3>
+              <ul className="space-y-2.5 mb-8 max-w-xs mx-auto text-left">
+                {[
+                  "Full 4K digital download",
+                  "No watermark",
+                  "Museum-quality prints & canvases available",
+                  "Preview before you pay",
+                ].map((f) => (
+                  <li key={f} className="flex items-start gap-2 text-sm text-white/70">
+                    <Check className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href="/portraits/create"
+                className="inline-flex items-center justify-center gap-2 px-8 py-3 rounded-xl font-medium text-sm bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all"
+              >
+                Create Your Portrait
+                <ArrowRight className="w-4 h-4" />
               </Link>
-            </p>
+            </div>
+
+            {/* Credit packs */}
+            <div className="max-w-2xl mx-auto">
+              <h3 className="text-sm font-medium text-white/60 mb-5 uppercase tracking-wider text-center">
+                Creating more than one? Save with credit packs
+              </h3>
+              <CreditPackCards theme="dark" />
+              <p className="text-center text-white/30 text-sm mt-6">
+                Credits never expire · Each credit unlocks one full 4K portrait download
+              </p>
+            </div>
           </div>
         </section>
 

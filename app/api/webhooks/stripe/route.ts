@@ -12,19 +12,34 @@ import type { PlanTier, SubscriptionStatus } from "@prisma/client";
 import { buildDownloadUrl } from "@/lib/services/download-token";
 import {
   sendDigitalPurchaseEmail,
+  sendPackPurchaseEmail,
   sendPrintPurchaseEmail,
 } from "@/lib/services/email-notification";
 import { createProdigiOrder } from "@/lib/services/print-fulfillment";
+import { grantPackCredits, resolvePack } from "@/lib/services/credits";
+import { trackTikTokEvent } from "@/lib/services/tiktok-events";
+import { trackMetaEvent } from "@/lib/services/meta-events";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
-// Map Stripe price IDs to plan tiers
-const PRICE_TO_PLAN: Record<string, PlanTier> = {
-  [process.env.STRIPE_PRICE_STARTER!]: "STARTER",
-  [process.env.STRIPE_PRICE_PRO!]: "PRO",
-  [process.env.STRIPE_PRICE_TEAM!]: "TEAM",
-};
+// Map Stripe price IDs to plan tiers.
+// 2026-07-05 tier collapse (Amendment A3): only FREE/PRO exist. Legacy
+// STARTER/TEAM Stripe prices map to PRO so grandfathered subscribers renewing
+// on old price IDs keep resolving to a real tier (DB rows were migrated by
+// prisma/migrations/20260705_generation_request_dual_engine_tier_collapse.sql).
+// Only defined price IDs become keys: interpolating an unset env var yields
+// the literal key "undefined", which an undefined priceId lookup would then
+// match — granting PRO with no payment behind it.
+const PRICE_TO_PLAN: Record<string, PlanTier> = Object.fromEntries(
+  [
+    process.env.STRIPE_PRICE_PRO,
+    process.env.STRIPE_PRICE_STARTER,
+    process.env.STRIPE_PRICE_TEAM,
+  ]
+    .filter((id): id is string => Boolean(id))
+    .map((id) => [id, "PRO" as PlanTier])
+);
 
 // Plan configurations — sets both credit system and legacy fields
 const PLAN_CONFIG: Record<
@@ -62,50 +77,21 @@ const PLAN_CONFIG: Record<
     canUseProjects: false,
     maxProjectCount: 0,
   },
-  STARTER: {
-    creditsLimit: 150,
-    maxResolution: "2K",
-    hasProjects: false,
-    hasBatchMode: true,
-    hasApiAccess: false,
-    hasWatermark: false,
-    hasPriorityQueue: false,
-    monthlyImageLimit: 150,
-    canUsePro: false,
-    canUseBatch: true,
-    canUse4K: false,
-    canUseProjects: false,
-    maxProjectCount: 0,
-  },
   PRO: {
     creditsLimit: 400,
     maxResolution: "4K",
     hasProjects: true,
-    hasBatchMode: true,
+    // Batch is founder confirmation #1 — off until that decision lands.
+    hasBatchMode: false,
     hasApiAccess: false,
     hasWatermark: false,
     hasPriorityQueue: true,
     monthlyImageLimit: 400,
     canUsePro: true,
-    canUseBatch: true,
+    canUseBatch: false,
     canUse4K: true,
     canUseProjects: true,
     maxProjectCount: 10,
-  },
-  TEAM: {
-    creditsLimit: 1200,
-    maxResolution: "4K",
-    hasProjects: true,
-    hasBatchMode: true,
-    hasApiAccess: true,
-    hasWatermark: false,
-    hasPriorityQueue: true,
-    monthlyImageLimit: 1200,
-    canUsePro: true,
-    canUseBatch: true,
-    canUse4K: true,
-    canUseProjects: true,
-    maxProjectCount: 50,
   },
 };
 
@@ -186,6 +172,18 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   }
 
   // -------------------------------------------------------------------------
+  // CREDIT PACK FLOW
+  // Detected by packSku in metadata (set by /api/packs/checkout).
+  // Must run before the subscription fallthrough, which errors on
+  // missing metadata.userId.
+  // -------------------------------------------------------------------------
+  const packSku = session.metadata?.packSku;
+  if (packSku) {
+    await handlePackCheckoutCompleted(session, packSku);
+    return;
+  }
+
+  // -------------------------------------------------------------------------
   // SUBSCRIPTION FLOW (existing behavior)
   // -------------------------------------------------------------------------
   const userId = session.metadata?.userId;
@@ -206,6 +204,96 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   // Fetch the subscription details
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
   await handleSubscriptionUpdated(subscription);
+}
+
+async function handlePackCheckoutCompleted(
+  session: Stripe.Checkout.Session,
+  packSku: string
+) {
+  const userId = session.metadata?.packUserId;
+  if (!userId) {
+    // Should be impossible — /api/packs/checkout requires Clerk auth.
+    // Fail loud: without a userId there is no account to credit.
+    throw new Error(
+      `[stripe-webhook] Pack checkout ${session.id} (${packSku}) has no packUserId — cannot grant credits`
+    );
+  }
+
+  const pack = resolvePack(packSku);
+  const credits = pack?.credits ?? parseInt(session.metadata?.credits || "0");
+  if (!credits || credits <= 0) {
+    throw new Error(
+      `[stripe-webhook] Pack checkout ${session.id}: unknown SKU ${packSku} and no credits in metadata — cannot grant`
+    );
+  }
+
+  const result = await grantPackCredits({
+    userId,
+    packSku,
+    credits,
+    stripeSessionId: session.id,
+  });
+
+  if (result.granted) {
+    console.log(
+      `[stripe-webhook] Granted ${credits} credits (${packSku}) to user ${userId} for session ${session.id}`
+    );
+  }
+
+  const amountCents = session.amount_total ?? pack?.priceUsd ?? 0;
+  const email = session.customer_details?.email || null;
+
+  // Sent on the replay path too. The only way we reach this with the grant
+  // already recorded is a previous attempt that failed AFTER writing the
+  // ledger row — most likely here. A duplicate confirmation is a far smaller
+  // problem than a customer who paid and heard nothing.
+  if (email) {
+    await sendPackPurchaseEmail({
+      to: email,
+      name: session.customer_details?.name || undefined,
+      packName: pack?.name || packSku,
+      credits,
+      amount: amountCents,
+      currency: (session.currency || "usd").toUpperCase(),
+    });
+  } else {
+    // The credits ARE granted, so this must not throw and unwind the webhook —
+    // but a paid customer with no confirmation has to be visible in the logs.
+    console.error(
+      `[stripe-webhook] Pack checkout ${session.id} (${packSku}) has no customer email — credits granted, confirmation NOT sent`
+    );
+  }
+
+  if (result.alreadyGranted) {
+    return; // webhook replay — do not re-fire the Purchase pixels
+  }
+
+  await trackTikTokEvent({
+    event: "Purchase",
+    eventId: `purchase_pack_${session.id}`,
+    url: `${process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app"}/api/packs/checkout`,
+    email,
+    externalId: userId,
+    ttclid: session.metadata?.ttclid || null,
+    ttp: session.metadata?.ttp || null,
+    value: amountCents / 100,
+    currency: "USD",
+    contentId: packSku,
+    contentName: pack?.name || packSku,
+  });
+  await trackMetaEvent({
+    event: "Purchase",
+    eventId: `purchase_pack_${session.id}`,
+    url: `${process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app"}/api/packs/checkout`,
+    email,
+    externalId: userId,
+    fbc: session.metadata?.fbc || null,
+    fbp: session.metadata?.fbp || null,
+    value: amountCents / 100,
+    currency: "USD",
+    contentId: packSku,
+    contentName: pack?.name || packSku,
+  });
 }
 
 async function handlePortraitCheckoutCompleted(
@@ -254,6 +342,34 @@ async function handlePortraitCheckoutCompleted(
 
   const stylePackLabel = (order.portrait?.stylePackSlug || "Portrait").replace(/-/g, " ");
   const styleVariantLabel = (order.portrait?.styleVariantSlug || "").replace(/-/g, " ");
+
+  // Ad-platform Purchase — attribution (ttclid/ttp/fbc/fbp) carried via
+  // session metadata from /api/orders/create since the webhook has no
+  // browser context.
+  await trackTikTokEvent({
+    event: "Purchase",
+    eventId: `purchase_${order.id}`,
+    email: customerEmail,
+    ttclid: session.metadata?.ttclid || null,
+    ttp: session.metadata?.ttp || null,
+    value: order.amount / 100,
+    currency: (order.currency || "usd").toUpperCase(),
+    contentId: order.portraitId,
+    contentName: `${stylePackLabel} ${styleVariantLabel}`.trim(),
+    url: `${BASE_URL}/portraits/${order.portraitId}/success`,
+  });
+  await trackMetaEvent({
+    event: "Purchase",
+    eventId: `purchase_${order.id}`,
+    email: customerEmail,
+    fbc: session.metadata?.fbc || null,
+    fbp: session.metadata?.fbp || null,
+    value: order.amount / 100,
+    currency: (order.currency || "usd").toUpperCase(),
+    contentId: order.portraitId,
+    contentName: `${stylePackLabel} ${styleVariantLabel}`.trim(),
+    url: `${BASE_URL}/portraits/${order.portraitId}/success`,
+  });
 
   if (order.type === "digital") {
     // --- DIGITAL ORDER ---
@@ -400,16 +516,27 @@ async function handlePortraitCheckoutCompleted(
           `[stripe-webhook] Prodigi order ${prodigiOrderId} created for print order ${orderId}`
         );
       } catch (prodigiError) {
-        // Log but don't fail the webhook — order is paid, Prodigi can be retried
+        // Don't fail the webhook (payment already settled), but PERSIST the
+        // failure — a log line alone left paid-but-unfulfilled orders
+        // invisible (fail-open audit, fix directive P1#3). Re-submit
+        // manually via /api/print/order.
         console.error(
           `[stripe-webhook] Prodigi submission failed for order ${orderId}:`,
           prodigiError
         );
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { prodigiStatus: "submission_failed" },
+        });
       }
     } else {
       console.warn(
         `[stripe-webhook] Skipping Prodigi submission for order ${orderId}: missing hi-res URL or shipping address`
       );
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { prodigiStatus: "submission_blocked_missing_data" },
+      });
     }
   }
 }
@@ -429,6 +556,12 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 
   // Determine plan from price ID
   const priceId = subscription.items.data[0]?.price.id;
+  if (!priceId) {
+    console.error(
+      `[stripe-webhook] Subscription ${subscription.id} has no price ID — cannot resolve a plan, skipping (fail-closed)`
+    );
+    return;
+  }
   const plan = PRICE_TO_PLAN[priceId] || "FREE";
   const config = PLAN_CONFIG[plan];
 

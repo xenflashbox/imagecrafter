@@ -8,6 +8,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { Webhook } from "svix";
 import { prisma } from "@/lib/prisma";
+import { trackTikTokEvent } from "@/lib/services/tiktok-events";
+import { trackMetaEvent } from "@/lib/services/meta-events";
 
 const webhookSecret = process.env.CLERK_WEBHOOK_SECRET!;
 
@@ -115,6 +117,22 @@ async function handleUserCreated(userData: ClerkUserData) {
   });
 
   console.log(`Created user and free subscription: ${user.id}`);
+
+  // event_id is stable per user so webhook retries dedupe on the ad platforms' side
+  await trackTikTokEvent({
+    event: "CompleteRegistration",
+    eventId: `registration_${user.id}`,
+    email: primaryEmail,
+    externalId: user.id,
+    url: "https://imagecrafter.app/sign-up",
+  });
+  await trackMetaEvent({
+    event: "CompleteRegistration",
+    eventId: `registration_${user.id}`,
+    email: primaryEmail,
+    externalId: user.id,
+    url: "https://imagecrafter.app/sign-up",
+  });
 }
 
 async function handleUserUpdated(userData: ClerkUserData) {

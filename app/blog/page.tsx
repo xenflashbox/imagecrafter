@@ -73,15 +73,11 @@ export default async function BlogPage({
   const page = Math.max(1, parseInt(params.page || "1"));
   const category = params.category;
 
+  // No catch-and-render-empty: a dead CMS must surface as an error page,
+  // not as "a blog with no posts" (fail-open audit, fix directive P1#3).
   const [postsData, categories] = await Promise.all([
-    getBlogPosts({ page, category, limit: 9 }).catch((err) => {
-      console.error("Blog posts fetch failed:", err);
-      return { docs: [], totalDocs: 0, totalPages: 1, page: 1, hasPrevPage: false, hasNextPage: false, prevPage: null, nextPage: null, limit: 9 };
-    }),
-    getCategories().catch((err) => {
-      console.error("Categories fetch failed:", err);
-      return [];
-    }),
+    getBlogPosts({ page, category, limit: 9 }),
+    getCategories(),
   ]);
 
   const { docs: posts, totalPages, hasPrevPage, hasNextPage } = postsData;

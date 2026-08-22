@@ -131,56 +131,51 @@ const structuredData = {
   applicationCategory: "DesignApplication",
   operatingSystem: "Web",
   description:
-    "AI-powered image generation tool that creates professional images from simple text descriptions.",
+    "AI portrait studio — turn your photo into a Renaissance, Starry Night, or Elven fantasy portrait. Full 4K digital downloads and museum-quality prints.",
   url: "https://imagecrafter.app",
   author: {
     "@type": "Organization",
     name: "Xenco Labs",
     url: "https://xencolabs.com",
   },
+  // Real catalog only (founder-approved 2026-08 ladder). No aggregateRating:
+  // a fabricated rating is a Google structured-data policy violation.
   offers: {
     "@type": "AggregateOffer",
-    lowPrice: "0",
-    highPrice: "49",
+    lowPrice: "29.95",
+    highPrice: "149.95",
     priceCurrency: "USD",
     offerCount: "4",
     offers: [
       {
         "@type": "Offer",
-        name: "Free",
-        price: "0",
+        name: "Single Portrait",
+        price: "29.95",
         priceCurrency: "USD",
-        description: "5 images per month, watermarked",
+        description: "One portrait — full 4K digital download, no watermark",
       },
       {
         "@type": "Offer",
-        name: "Starter",
-        price: "9",
+        name: "3-Portrait Pack",
+        price: "39.95",
         priceCurrency: "USD",
-        description: "100 images per month, no watermark",
+        description: "3 portrait credits — never expire",
       },
       {
         "@type": "Offer",
-        name: "Pro",
-        price: "19",
+        name: "10-Portrait Pack",
+        price: "74.95",
         priceCurrency: "USD",
-        description: "500 images per month, 4K, projects",
+        description: "10 portrait credits — never expire",
       },
       {
         "@type": "Offer",
-        name: "Team",
-        price: "49",
+        name: "25-Portrait Pack",
+        price: "149.95",
         priceCurrency: "USD",
-        description: "2000 images per month, API access",
+        description: "25 portrait credits — never expire",
       },
     ],
-  },
-  aggregateRating: {
-    "@type": "AggregateRating",
-    ratingValue: "4.8",
-    ratingCount: "127",
-    bestRating: "5",
-    worstRating: "1",
   },
 };
 
@@ -194,6 +189,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const GA_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+  const TIKTOK_PIXEL_ID = process.env.NEXT_PUBLIC_TIKTOK_PIXEL_ID;
+  const META_PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID;
 
   return (
     <ClerkProvider>
@@ -209,6 +206,8 @@ export default function RootLayout({
           <link rel="preconnect" href="https://fonts.googleapis.com" />
           <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
           <link rel="preconnect" href="https://www.googletagmanager.com" />
+          <link rel="preconnect" href="https://analytics.tiktok.com" />
+          <link rel="preconnect" href="https://connect.facebook.net" />
         </head>
         <body className={`${inter.variable} font-sans antialiased`}>
           {children}
@@ -233,6 +232,56 @@ export default function RootLayout({
               </Script>
             </>
           )}
+
+          {/* TikTok Pixel */}
+          {TIKTOK_PIXEL_ID && (
+            <Script id="tiktok-pixel" strategy="afterInteractive">
+              {`
+                !function (w, d, t) {
+                  w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie","holdConsent","revokeConsent","grantConsent"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.instance=function(t){for(var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var r="https://analytics.tiktok.com/i18n/pixel/events.js",o=n&&n.partner;ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=r,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n||{};n=document.createElement("script");n.type="text/javascript",n.async=!0,n.src=r+"?sdkid="+e+"&lib="+t;e=document.getElementsByTagName("script")[0];e.parentNode.insertBefore(n,e)};
+                  ttq.load('${TIKTOK_PIXEL_ID}');
+                  ttq.page();
+                }(window, document, 'ttq');
+              `}
+            </Script>
+          )}
+
+          {/* Meta Pixel */}
+          {META_PIXEL_ID && (
+            <>
+              <Script id="meta-pixel" strategy="afterInteractive">
+                {`
+                  !function(f,b,e,v,n,t,s)
+                  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+                  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+                  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+                  n.queue=[];t=b.createElement(e);t.async=!0;
+                  t.src=v;s=b.getElementsByTagName(e)[0];
+                  s.parentNode.insertBefore(t,s)}(window, document,'script',
+                  'https://connect.facebook.net/en_US/fbevents.js');
+                  fbq('init', '${META_PIXEL_ID}');
+                  fbq('track', 'PageView');
+                `}
+              </Script>
+              <noscript>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  height="1"
+                  width="1"
+                  style={{ display: "none" }}
+                  alt=""
+                  src={`https://www.facebook.com/tr?id=${META_PIXEL_ID}&ev=PageView&noscript=1`}
+                />
+              </noscript>
+            </>
+          )}
+
+          {/* Ahrefs Web Analytics */}
+          <Script
+            src="https://analytics.ahrefs.com/analytics.js"
+            data-key="3nx4JzGVP31C1ZRQV+ESEw"
+            strategy="afterInteractive"
+          />
         </body>
       </html>
     </ClerkProvider>

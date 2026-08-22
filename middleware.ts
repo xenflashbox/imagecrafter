@@ -23,6 +23,11 @@ const isPublicRoute = createRouteMatcher([
   "/api/orders/(.*)",
   "/api/print/(.*)",
 
+  // Credit packs — routes enforce their own auth policy (guest balance=0,
+  // guest checkout → sign-in redirect). auth.protect() would 404 guests.
+  "/api/credits",
+  "/api/packs/(.*)",
+
   // Blog (public content — fetched from Payload CMS)
   "/blog(.*)",
 

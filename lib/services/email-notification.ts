@@ -16,15 +16,38 @@ import nodemailer from "nodemailer";
 // SMTP TRANSPORT
 // =============================================================================
 
-const transport = nodemailer.createTransport({
-  host: process.env.SMTP_SERVER || "smtp-relay.brevo.com",
-  port: parseInt(process.env.SMTP_PORT || "587"),
-  secure: false, // STARTTLS
-  auth: {
-    user: process.env.LOGIN || process.env.SMTP_USER || "",
-    pass: process.env.BREVO_PAYLOAD_SMTP_API_KEY || process.env.SMTP_PASS || "",
-  },
-});
+let cachedTransport: nodemailer.Transporter | null = null;
+
+/**
+ * Brevo SMTP transport, built on first send.
+ *
+ * The `|| ""` defaults this replaces were the real hazard: an unset credential
+ * looked configured right up to the SMTP handshake. Fail by name instead.
+ */
+function getTransport(): nodemailer.Transporter {
+  if (cachedTransport) return cachedTransport;
+
+  const user = process.env.SMTP_LOGIN;
+  const pass = process.env.BREVO_SMTP_API_KEY;
+  const missing = [
+    !user && "SMTP_LOGIN",
+    !pass && "BREVO_SMTP_API_KEY",
+  ].filter(Boolean);
+  if (missing.length) {
+    throw new Error(
+      `Cannot send email: missing SMTP credentials (${missing.join(", ")}). ` +
+        `Set them in the ImageCrafter vault and Vercel production.`
+    );
+  }
+
+  cachedTransport = nodemailer.createTransport({
+    host: process.env.SMTP_SERVER || "smtp-relay.brevo.com",
+    port: parseInt(process.env.SMTP_PORT || "587"),
+    secure: false, // STARTTLS
+    auth: { user, pass },
+  });
+  return cachedTransport;
+}
 
 const EMAIL_FROM =
   process.env.EMAIL_FROM || "ImageCrafter <hello@imagecrafter.app>";
@@ -168,7 +191,7 @@ export async function sendDigitalPurchaseEmail(
     </p>
   `;
 
-  await transport.sendMail({
+  await getTransport().sendMail({
     from: EMAIL_FROM,
     to,
     subject: `Your portrait is ready to download — ImageCrafter`,
@@ -242,11 +265,75 @@ export async function sendPrintPurchaseEmail(
     </div>
   `;
 
-  await transport.sendMail({
+  await getTransport().sendMail({
     from: EMAIL_FROM,
     to,
     subject: `Print order confirmed — ImageCrafter`,
     html: baseLayout("Print Order Confirmed", body),
+  });
+}
+
+// =============================================================================
+// CREDIT PACK CONFIRMATION
+// =============================================================================
+
+export interface PackPurchaseEmailParams {
+  to: string;
+  name?: string;
+  packName: string;
+  credits: number;
+  amount: number; // in cents
+  currency: string;
+}
+
+export async function sendPackPurchaseEmail(
+  params: PackPurchaseEmailParams
+): Promise<void> {
+  const { to, name, packName, credits, amount, currency } = params;
+
+  const amountFormatted = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currency.toUpperCase(),
+  }).format(amount / 100);
+
+  const body = `
+    <h2 style="margin:0 0 8px;color:#111827;font-size:22px;font-weight:700;">Your credits are ready 🎨</h2>
+    <p style="margin:0 0 24px;color:#6b7280;font-size:15px;">
+      Hi ${name ? name : "there"},<br/>
+      Thank you for your purchase. Your ${packName} has been added to your account.
+    </p>
+
+    <div style="background:#f5f3ff;border:1px solid #e9d5ff;border-radius:10px;padding:20px;margin-bottom:24px;text-align:center;">
+      <p style="margin:0 0 4px;font-size:13px;color:#7c3aed;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Credits added</p>
+      <p style="margin:0;color:#111827;font-size:28px;font-weight:700;">${credits}</p>
+      <p style="margin:6px 0 0;color:#6b7280;font-size:13px;">Portrait downloads — these never expire.</p>
+    </div>
+
+    <div style="text-align:center;margin-bottom:24px;">
+      <a href="${APP_URL}/portraits/create"
+         style="display:inline-block;background:linear-gradient(135deg,#6d28d9,#db2777);color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:16px 40px;border-radius:10px;">
+        Create a Portrait
+      </a>
+    </div>
+
+    <p style="margin:0 0 24px;color:#6b7280;font-size:14px;text-align:center;">
+      Your balance is always visible at
+      <a href="${APP_URL}/settings" style="color:#6d28d9;text-decoration:none;">imagecrafter.app/settings</a>.
+    </p>
+
+    <div style="border-top:1px solid #e5e7eb;padding-top:20px;">
+      <p style="margin:0;color:#9ca3af;font-size:13px;">
+        <strong>Purchase:</strong> ${packName}<br/>
+        <strong>Amount charged:</strong> ${amountFormatted}
+      </p>
+    </div>
+  `;
+
+  await getTransport().sendMail({
+    from: EMAIL_FROM,
+    to,
+    subject: `Your ${packName} is ready — ImageCrafter`,
+    html: baseLayout("Credits Added", body),
   });
 }
 
@@ -293,7 +380,7 @@ export async function sendShippingUpdateEmail(
     </div>
   `;
 
-  await transport.sendMail({
+  await getTransport().sendMail({
     from: EMAIL_FROM,
     to,
     subject: `Your portrait print is on the way — ImageCrafter`,
@@ -363,7 +450,7 @@ export async function sendDownloadReminderEmail(
     </div>
   `;
 
-  await transport.sendMail({
+  await getTransport().sendMail({
     from: EMAIL_FROM,
     to,
     subject: `⏰ Your portrait download expires in 48 hours — ImageCrafter`,
@@ -436,7 +523,7 @@ export async function sendGenerationFailedEmail(
     </div>
   `;
 
-  await transport.sendMail({
+  await getTransport().sendMail({
     from: EMAIL_FROM,
     to,
     subject: `We're sorry — automatic refund issued for order ${orderRef}`,
@@ -512,7 +599,7 @@ export async function sendDeliveryConfirmationEmail(
     </div>
   `;
 
-  await transport.sendMail({
+  await getTransport().sendMail({
     from: EMAIL_FROM,
     to,
     subject: `Your portrait print has arrived! 🎉 — ImageCrafter`,

@@ -32,11 +32,13 @@ model User {
   subscription      Subscription?
   projects          Project[]
   images            Image[]
+  generationRequests GenerationRequest[]
   prompts           PromptHistory[]
   usageRecords      UsageRecord[]
   reviews           Review[]
   portraits         Portrait[]
   orders            Order[]
+  creditLedger      CreditLedger[]
 
   @@index([email])
   @@index([stripeCustomerId])
@@ -103,11 +105,12 @@ enum SubscriptionStatus {
   @@map("ic_SubscriptionStatus")
 }
 
+// Tier collapse (Amendment A3, founder-resolved 2026-07-05): Free / Pro only.
+// Existing STARTER/TEAM rows are explicitly mapped to PRO (grandfathered) in
+// prisma/migrations/20260705_generation_request_dual_engine_tier_collapse.sql
 enum PlanTier {
   FREE
-  STARTER
   PRO
-  TEAM
 
   @@map("ic_PlanTier")
 }
@@ -182,6 +185,66 @@ model CharacterProfile {
 }
 
 // =============================================================================
+// GENERATION REQUESTS (one request -> N Image children -> user picks winner)
+// =============================================================================
+//
+// The image-gen service (image-gen.xencolabs.com) can return one image
+// (POST /api/v1/generate — Free flow) or up to two provider results
+// (POST /api/v1/dual/generate — Pro flow). N is NOT guaranteed to be 2:
+// a provider slot can fail while the other succeeds (status PARTIAL), or the
+// whole call can fail (status FAILED, credits refunded). Persist exactly what
+// the service returned — never fabricate a missing image.
+
+enum GenerationMode {
+  SINGLE
+  DUAL
+
+  @@map("ic_GenerationMode")
+}
+
+enum GenerationRequestStatus {
+  PENDING
+  COMPLETED
+  PARTIAL
+  FAILED
+
+  @@map("ic_GenerationRequestStatus")
+}
+
+model GenerationRequest {
+  id              String                  @id @default(cuid())
+  userId          String
+  user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  mode            GenerationMode          @default(SINGLE)
+  status          GenerationRequestStatus @default(PENDING)
+
+  prompt          String                  @db.Text
+  enhancedPrompt  String?                 @db.Text
+  aspectRatio     String                  @default("1:1")
+  resolution      String                  @default("1K")
+
+  // Credits actually charged for this request (after any partial/total refund)
+  creditsCharged  Int                     @default(0)
+  errorMessage    String?
+  totalLatencyMs  Int?
+
+  // The image the user picked as the winner (dual flow)
+  selectedImageId String?                 @unique
+  selectedImage   Image?                  @relation("GenerationRequestSelectedImage", fields: [selectedImageId], references: [id], onDelete: SetNull)
+
+  images          Image[]
+
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("ic_GenerationRequest")
+}
+
+// =============================================================================
 // IMAGES
 // =============================================================================
 
@@ -214,6 +277,16 @@ model Image {
   modelVersion      String?
   generationTime    Int?
 
+  // Provider metadata from the image-gen service response
+  // (externalId above holds the service's external_id)
+  provider          String?       // "gemini" | "openai" as reported by the service
+  providerLatencyMs Int?          // latency_ms from the service response
+  estimatedCostUsd  Float?        // estimated_cost_usd from the service response
+
+  generationRequestId String?
+  generationRequest   GenerationRequest? @relation(fields: [generationRequestId], references: [id], onDelete: SetNull)
+  selectedForRequest  GenerationRequest? @relation("GenerationRequestSelectedImage")
+
   templateId        String?
   template          Template?     @relation(fields: [templateId], references: [id])
   presetId          String?
@@ -240,6 +313,7 @@ model Image {
   @@index([projectId])
   @@index([generatedAt])
   @@index([status])
+  @@index([generationRequestId])
   @@map("ic_Image")
 }
 
@@ -586,6 +660,26 @@ model Order {
   @@index([status])
   @@index([prodigiOrderId])
   @@map("ic_Order")
+}
+
+// Purchased portrait credits (packs). Append-only ledger — balance is
+// SUM(delta), computed in a transaction. Separate from Subscription's
+// monthly-reset credits: pack credits never expire (founder decision 2026-08-14).
+model CreditLedger {
+  id              String   @id @default(cuid())
+  userId          String
+  delta           Int      // +N on pack grant, -1 on redemption
+  reason          String   // "pack_grant" | "portrait_redeem" | "refund" | "admin_adjust"
+  stripeSessionId String?  @unique // idempotency key for pack grants (webhook replays)
+  orderId         String?  // Order created/updated by a redemption
+  portraitId      String?
+  packSku         String?  // "PACK_3" | "PACK_10" | "PACK_25"
+  createdAt       DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("ic_CreditLedger")
 }
 
 model StylePack {

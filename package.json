@@ -20,6 +20,7 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@aws-sdk/client-s3": "^3.953.0",
     "@aws-sdk/lib-storage": "^3.953.0",
+    "@aws-sdk/s3-request-presigner": "3.953.0",
     "@clerk/nextjs": "^6.39.0",
     "@prisma/client": "^6.2.0",
     "@radix-ui/react-dialog": "^1.1.4",

@@ -11,8 +11,9 @@
  *   Art Prints:      GLOBAL-FAP-{WIDTH}X{HEIGHT}
  *   Framed Prints:   GLOBAL-CFPM-{WIDTH}X{HEIGHT}  (attribute: color=black|white|natural|gold|silver)
  *   Canvas:          GLOBAL-CAN-{WIDTH}X{HEIGHT}   (attribute: wrap=ImageWrap|Black|White)
- *   Framed Canvas:   GLOBAL-CFC-{WIDTH}X{HEIGHT}   (attribute: color=black|white|natural|gold)
+ *   Framed Canvas:   GLOBAL-FRA-CAN-{WIDTH}X{HEIGHT} (attributes: color AND wrap — both required)
  */
+
 
 // =============================================================================
 // CONFIGURATION
@@ -57,24 +58,24 @@ export interface PrintProduct {
 
 export const PRINT_CATALOG: PrintProduct[] = [
   // --- ART PRINTS (Fine Art Paper) ---
-  { sku: "ART-8x10",   prodigiSku: "GLOBAL-FAP-8X10",   name: '8×10" Art Print',   format: "art_print",      size: '8×10"',   dimensionsIn: "8X10",   priceUsd: 2995 },
-  { sku: "ART-12x16",  prodigiSku: "GLOBAL-FAP-12X16",  name: '12×16" Art Print',  format: "art_print",      size: '12×16"',  dimensionsIn: "12X16",  priceUsd: 4995 },
-  { sku: "ART-16x20",  prodigiSku: "GLOBAL-FAP-16X20",  name: '16×20" Art Print',  format: "art_print",      size: '16×20"',  dimensionsIn: "16X20",  priceUsd: 4995 },
-  { sku: "ART-24x36",  prodigiSku: "GLOBAL-FAP-24X36",  name: '24×36" Art Print',  format: "art_print",      size: '24×36"',  dimensionsIn: "24X36",  priceUsd: 6995 },
+  { sku: "ART-8x10",   prodigiSku: "GLOBAL-FAP-8X10",   name: '8×10" Art Print',   format: "art_print",      size: '8×10"',   dimensionsIn: "8X10",   priceUsd: 4995 },
+  { sku: "ART-12x16",  prodigiSku: "GLOBAL-FAP-12X16",  name: '12×16" Art Print',  format: "art_print",      size: '12×16"',  dimensionsIn: "12X16",  priceUsd: 6995 },
+  { sku: "ART-16x20",  prodigiSku: "GLOBAL-FAP-16X20",  name: '16×20" Art Print',  format: "art_print",      size: '16×20"',  dimensionsIn: "16X20",  priceUsd: 8995 },
+  { sku: "ART-24x36",  prodigiSku: "GLOBAL-FAP-24X36",  name: '24×36" Art Print',  format: "art_print",      size: '24×36"',  dimensionsIn: "24X36",  priceUsd: 14995 },
 
   // --- FRAMED PRINTS (Classic Framed Metal) ---
-  { sku: "FRAME-8x10",  prodigiSku: "GLOBAL-CFPM-8X10",  name: '8×10" Framed Print',  format: "framed_print", size: '8×10"',  dimensionsIn: "8X10",  priceUsd: 4995, frameOptions: ["black","white","natural","gold","silver"], defaultFrame: "black" },
-  { sku: "FRAME-12x16", prodigiSku: "GLOBAL-CFPM-12X16", name: '12×16" Framed Print', format: "framed_print", size: '12×16"', dimensionsIn: "12X16", priceUsd: 6995, frameOptions: ["black","white","natural","gold","silver"], defaultFrame: "black" },
-  { sku: "FRAME-16x20", prodigiSku: "GLOBAL-CFPM-16X20", name: '16×20" Framed Print', format: "framed_print", size: '16×20"', dimensionsIn: "16X20", priceUsd: 8995, frameOptions: ["black","white","natural","gold","silver"], defaultFrame: "black" },
+  { sku: "FRAME-8x10",  prodigiSku: "GLOBAL-CFPM-8X10",  name: '8×10" Framed Print',  format: "framed_print", size: '8×10"',  dimensionsIn: "8X10",  priceUsd: 8995, frameOptions: ["black","white","natural","gold","silver"], defaultFrame: "black" },
+  { sku: "FRAME-12x16", prodigiSku: "GLOBAL-CFPM-12X16", name: '12×16" Framed Print', format: "framed_print", size: '12×16"', dimensionsIn: "12X16", priceUsd: 10995, frameOptions: ["black","white","natural","gold","silver"], defaultFrame: "black" },
+  { sku: "FRAME-16x20", prodigiSku: "GLOBAL-CFPM-16X20", name: '16×20" Framed Print', format: "framed_print", size: '16×20"', dimensionsIn: "16X20", priceUsd: 11995, frameOptions: ["black","white","natural","gold","silver"], defaultFrame: "black" },
 
   // --- CANVAS (Stretched) ---
-  { sku: "CANVAS-12x12", prodigiSku: "GLOBAL-CAN-12X12", name: '12×12" Canvas',    format: "canvas", size: '12×12"', dimensionsIn: "12X12", priceUsd: 5995, wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
-  { sku: "CANVAS-16x20", prodigiSku: "GLOBAL-CAN-16X20", name: '16×20" Canvas',    format: "canvas", size: '16×20"', dimensionsIn: "16X20", priceUsd: 6995, wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
-  { sku: "CANVAS-24x36", prodigiSku: "GLOBAL-CAN-24X36", name: '24×36" Canvas',    format: "canvas", size: '24×36"', dimensionsIn: "24X36", priceUsd: 9995, wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
+  { sku: "CANVAS-12x12", prodigiSku: "GLOBAL-CAN-12X12", name: '12×12" Canvas',    format: "canvas", size: '12×12"', dimensionsIn: "12X12", priceUsd: 9995, wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
+  { sku: "CANVAS-16x20", prodigiSku: "GLOBAL-CAN-16X20", name: '16×20" Canvas',    format: "canvas", size: '16×20"', dimensionsIn: "16X20", priceUsd: 14995, wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
+  { sku: "CANVAS-24x36", prodigiSku: "GLOBAL-CAN-24X36", name: '24×36" Canvas',    format: "canvas", size: '24×36"', dimensionsIn: "24X36", priceUsd: 19995, wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
 
   // --- FRAMED CANVAS ---
-  { sku: "FCANVAS-16x20", prodigiSku: "GLOBAL-CFC-16X20", name: '16×20" Framed Canvas', format: "framed_canvas", size: '16×20"', dimensionsIn: "16X20", priceUsd: 9995, frameOptions: ["black","white","natural","gold"], defaultFrame: "black" },
-  { sku: "FCANVAS-24x36", prodigiSku: "GLOBAL-CFC-24X36", name: '24×36" Framed Canvas', format: "framed_canvas", size: '24×36"', dimensionsIn: "24X36", priceUsd: 12995, frameOptions: ["black","white","natural","gold"], defaultFrame: "black" },
+  { sku: "FCANVAS-16x20", prodigiSku: "GLOBAL-FRA-CAN-16X20", name: '16×20" Framed Canvas', format: "framed_canvas", size: '16×20"', dimensionsIn: "16X20", priceUsd: 19995, frameOptions: ["black","white","natural","gold"], defaultFrame: "black", wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
+  { sku: "FCANVAS-24x36", prodigiSku: "GLOBAL-FRA-CAN-24X36", name: '24×36" Framed Canvas', format: "framed_canvas", size: '24×36"', dimensionsIn: "24X36", priceUsd: 29995, frameOptions: ["black","white","natural","gold"], defaultFrame: "black", wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
 ];
 
 // Legacy Phase 3 SKU aliases → new catalog (backward compatible)
@@ -240,25 +241,25 @@ export async function createProdigiOrder(
     throw new Error(`Unknown print SKU: ${params.sku}`);
   }
 
-  // Build Prodigi SKU attributes (frame color for framed prints, wrap for canvas)
+  // Build Prodigi SKU attributes. Framed prints need color; canvas needs wrap;
+  // framed canvas (GLOBAL-FRA-CAN) requires BOTH color and wrap or Prodigi 400s.
   const attributes: Record<string, string> = {};
-  if (
-    (product.format === "framed_print" || product.format === "framed_canvas") &&
-    params.frame
-  ) {
-    attributes.color = params.frame;
-  } else if (product.format === "canvas" && params.wrap) {
-    attributes.wrap = params.wrap;
-  } else if (product.format === "canvas") {
-    attributes.wrap = product.defaultWrap || "ImageWrap";
-  } else if (
-    (product.format === "framed_print" || product.format === "framed_canvas") &&
-    product.defaultFrame
-  ) {
-    attributes.color = product.defaultFrame;
+  if (product.format === "framed_print" || product.format === "framed_canvas") {
+    attributes.color = params.frame || product.defaultFrame || "black";
+  }
+  if (product.format === "canvas" || product.format === "framed_canvas") {
+    attributes.wrap = params.wrap || product.defaultWrap || "ImageWrap";
   }
 
-  // Build callback URL including webhook secret for verification
+  // Build callback URL including webhook secret for verification.
+  // The order is already paid for, so a missing secret must not block
+  // fulfilment — but it does mean every status callback will be rejected,
+  // so say so loudly rather than losing tracking updates in silence.
+  if (!WEBHOOK_SECRET) {
+    console.error(
+      `[prodigi] PRODIGI_WEBHOOK_SECRET is not configured — order ${params.orderId} will receive NO status/tracking updates; status must be reconciled manually`
+    );
+  }
   const callbackUrl = WEBHOOK_SECRET
     ? `${APP_URL}/api/webhooks/prodigi?secret=${encodeURIComponent(WEBHOOK_SECRET)}`
     : `${APP_URL}/api/webhooks/prodigi`;
@@ -296,23 +297,43 @@ export async function createProdigiOrder(
     },
   };
 
-  const response = await prodigiRequest<{ outcome: string; order: { id: string; status: { stage: string } } }>(
-    "POST",
-    "/Orders",
-    requestBody
-  );
+  const response = await prodigiRequest<{
+    outcome: string;
+    order: { id: string; status?: { stage?: string; issues?: unknown[] } };
+  }>("POST", "/Orders", requestBody);
 
-  if (response.outcome !== "Created") {
+  // Prodigi success outcomes (v4 docs): Created, CreatedWithIssues (order accepted
+  // but has issues, e.g. UsSalesTaxWarning or RequiresPaymentAuthorisation), OnHold
+  // (dashboard pause window active — status unavailable until window expires),
+  // AlreadyExists (idempotent replay). Everything else is a failure.
+  const outcome = (response.outcome || "").toLowerCase();
+  const SUCCESS_OUTCOMES = new Set(["created", "createdwithissues", "onhold", "alreadyexists"]);
+
+  if (!SUCCESS_OUTCOMES.has(outcome)) {
     throw new Error(`Prodigi order creation failed with outcome: ${response.outcome}`);
   }
+  if (!response.order?.id) {
+    throw new Error(
+      `Prodigi returned success outcome "${response.outcome}" but no order id — refusing to treat as created`
+    );
+  }
+
+  if (outcome === "createdwithissues") {
+    console.warn(
+      `[print-fulfillment] Prodigi order ${response.order.id} created WITH ISSUES for Order ${params.orderId}: ${JSON.stringify(response.order.status?.issues ?? [])}`
+    );
+  }
+
+  const stage =
+    response.order.status?.stage || (outcome === "onhold" ? "OnHold" : "InProgress");
 
   console.log(
-    `[print-fulfillment] Prodigi order ${response.order.id} created for Order ${params.orderId} (${USE_SANDBOX ? "SANDBOX" : "PRODUCTION"})`
+    `[print-fulfillment] Prodigi order ${response.order.id} accepted (outcome=${response.outcome}, stage=${stage}) for Order ${params.orderId} (${USE_SANDBOX ? "SANDBOX" : "PRODUCTION"})`
   );
 
   return {
     prodigiOrderId: response.order.id,
-    stage: response.order.status?.stage || "InProgress",
+    stage,
   };
 }
 
@@ -349,16 +370,6 @@ export function extractTracking(
     trackingUrl: first.tracking?.url || null,
     carrier: first.carrier?.name || null,
   };
-}
-
-/**
- * Verify a Prodigi webhook request by checking the secret query param.
- * Returns true if the secret matches or no secret is configured.
- */
-export function verifyProdigiWebhook(requestSecret: string | null): boolean {
-  if (!WEBHOOK_SECRET) return true;
-  if (!requestSecret) return false;
-  return requestSecret === WEBHOOK_SECRET;
 }
 
 /** Check if we're running in sandbox mode */

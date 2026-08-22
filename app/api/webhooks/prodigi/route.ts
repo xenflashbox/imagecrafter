@@ -18,10 +18,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
-  verifyProdigiWebhook,
   extractTracking,
   type ProdigiWebhookPayload,
 } from "@/lib/services/print-fulfillment";
+import { verifyProdigiWebhook } from "@/lib/services/prodigi-webhook-auth";
 import { sendShippingUpdateEmail } from "@/lib/services/email-notification";
 
 // Prodigi sends POST to this endpoint — must be in publicRoutes (middleware)

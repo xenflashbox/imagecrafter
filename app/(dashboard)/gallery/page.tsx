@@ -93,6 +93,7 @@ export default function GalleryPage() {
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [loadingImages, setLoadingImages] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Portrait history state
   const [portraits, setPortraits] = useState<PortraitItem[]>([]);
@@ -136,9 +137,11 @@ export default function GalleryPage() {
       if (data.success) {
         setImages((prev) => append ? [...prev, ...data.images] : data.images);
         setPagination(data.pagination);
+        setLoadError(null);
       }
     } catch (err) {
       console.error("Failed to load images:", err);
+      setLoadError("Failed to load your images. Please refresh the page.");
     } finally {
       setLoadingImages(false);
       setLoadingMore(false);
@@ -157,6 +160,7 @@ export default function GalleryPage() {
       }
     } catch (err) {
       console.error("Failed to load portraits:", err);
+      setLoadError("Failed to load your portraits. Please refresh the page.");
     } finally {
       setLoadingPortraits(false);
       setPortraitsLoaded(true);
@@ -347,6 +351,12 @@ export default function GalleryPage() {
 
       <div className="max-w-7xl mx-auto px-6 py-8">
 
+        {loadError && (
+          <div className="text-red-400 text-sm bg-red-500/10 px-4 py-3 rounded-xl mb-6">
+            {loadError}
+          </div>
+        )}
+
         {/* ===== IMAGES TAB ===== */}
         {tab === "images" && (
           <>
@@ -395,7 +405,7 @@ export default function GalleryPage() {
                           src={img.thumbnailUrl || img.imageUrl}
                           alt={img.originalPrompt}
                           className={`w-full object-cover transition-transform duration-300 group-hover:scale-105 ${
-                            viewMode === "grid" ? "aspect-video" : ""
+                            viewMode === "grid" ? "aspect-[3/4]" : ""
                           }`}
                         />
 
