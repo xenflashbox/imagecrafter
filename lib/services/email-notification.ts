@@ -21,21 +21,14 @@ let cachedTransport: nodemailer.Transporter | null = null;
 /**
  * Brevo SMTP transport, built on first send.
  *
- * Two naming generations are both live: the vault uses SMTP_LOGIN /
- * BREVO_SMTP_API_KEY, Vercel production still carries the older LOGIN /
- * BREVO_PAYLOAD_SMTP_API_KEY. Both are read until Vercel is aligned to the
- * vault, because dropping either name silently unauthenticates one
- * environment.
- *
  * The `|| ""` defaults this replaces were the real hazard: an unset credential
  * looked configured right up to the SMTP handshake. Fail by name instead.
  */
 function getTransport(): nodemailer.Transporter {
   if (cachedTransport) return cachedTransport;
 
-  const user = process.env.SMTP_LOGIN || process.env.LOGIN;
-  const pass =
-    process.env.BREVO_SMTP_API_KEY || process.env.BREVO_PAYLOAD_SMTP_API_KEY;
+  const user = process.env.SMTP_LOGIN;
+  const pass = process.env.BREVO_SMTP_API_KEY;
   const missing = [
     !user && "SMTP_LOGIN",
     !pass && "BREVO_SMTP_API_KEY",
