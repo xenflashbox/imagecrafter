@@ -24,11 +24,6 @@ const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_SIZE_MB = parseInt(process.env.PORTRAIT_MAX_UPLOAD_SIZE_MB || "25");
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
 
-// The legacy path POSTs the photo through a Vercel function, which rejects any
-// body over ~4.5MB at the edge before our code runs. Promising more than the
-// platform accepts would surface as an opaque 413, so this path caps lower.
-const PROXY_MAX_SIZE_BYTES = 4 * 1024 * 1024;
-
 const UPLOAD_URL_TTL_SECONDS = 300;
 
 export interface UploadPortraitResult {
@@ -72,18 +67,6 @@ export function validatePhotoMeta(
   }
 
   return { valid: true, contentType };
-}
-
-/**
- * Validate a file that was POSTed through a Vercel function.
- * Checks type and size; does NOT check content (Claude does that).
- */
-export function validatePhotoFile(
-  buffer: Buffer,
-  contentType: string,
-  fileSizeBytes: number
-): ValidatePhotoResult {
-  return validatePhotoMeta(contentType, fileSizeBytes, PROXY_MAX_SIZE_BYTES);
 }
 
 /** R2 key a portrait's source photo must live at. */

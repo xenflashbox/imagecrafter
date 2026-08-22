@@ -44,11 +44,10 @@ const MAX_UPLOAD_EDGE_PX = 2048;
 /**
  * Shrink oversized photos in the browser before they are uploaded.
  *
- * Vercel rejects any function request body over ~4.5MB at the edge with
- * FUNCTION_PAYLOAD_TOO_LARGE, before our route runs — and most phone photos are
- * bigger than that, so uploads failed for a large share of real customers.
- * 2048px is well above what the analysis and swap legs consume, so this costs
- * nothing in the delivered portrait.
+ * The photo goes straight to R2, so size is no longer a platform limit — this is
+ * about the seconds a customer waits on a phone connection. 2048px is well above
+ * what the analysis and swap legs consume, so it costs nothing in the delivered
+ * portrait.
  */
 async function normalizePhoto(file: File): Promise<File> {
   if (file.size <= DOWNSCALE_TRIGGER_BYTES) return file;
@@ -624,22 +623,48 @@ function CreatePortraitContent() {
         return;
       }
 
-      const formData = new FormData();
-      formData.append("photo", upload);
-      const res = await fetch("/api/portraits/upload", { method: "POST", body: formData });
+      const ticketRes = await fetch("/api/portraits/upload-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contentType: upload.type, sizeBytes: upload.size }),
+      });
+      const ticket: {
+        success?: boolean;
+        error?: string;
+        portraitId?: string;
+        sessionId?: string;
+        key?: string;
+        uploadUrl?: string;
+      } = await ticketRes.json().catch(() => ({}));
 
-      // A payload rejected at the edge returns plain text, not JSON — parsing it
-      // blind used to throw and surface as a misleading "Network error".
-      const raw = await res.text();
-      let data: { success?: boolean; error?: string; portraitId?: string; sessionId?: string } = {};
-      try { data = JSON.parse(raw); } catch { /* handled by the status check below */ }
-
-      if (!res.ok || !data.success) {
+      if (!ticketRes.ok || !ticket.success || !ticket.uploadUrl || !ticket.key) {
         setUploadError(
-          data.error ||
-            (res.status === 413
-              ? "That photo was too large to upload. Please try a smaller one."
-              : `Upload failed (HTTP ${res.status}). Please try again.`)
+          ticket.error || `Upload failed (HTTP ${ticketRes.status}). Please try again.`
+        );
+        return;
+      }
+
+      const putRes = await fetch(ticket.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": upload.type },
+        body: upload,
+      });
+      if (!putRes.ok) {
+        setUploadError("We couldn't upload your photo. Please try again.");
+        return;
+      }
+
+      const confirmRes = await fetch("/api/portraits/upload-complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ portraitId: ticket.portraitId, key: ticket.key }),
+      });
+      const data: { success?: boolean; error?: string; portraitId?: string; sessionId?: string } =
+        await confirmRes.json().catch(() => ({}));
+
+      if (!confirmRes.ok || !data.success) {
+        setUploadError(
+          data.error || `Upload failed (HTTP ${confirmRes.status}). Please try again.`
         );
         return;
       }
