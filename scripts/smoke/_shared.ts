@@ -12,6 +12,8 @@
  * These scripts make ONE real service call each — real spend, real rows.
  */
 
+import { readFileSync } from "node:fs";
+
 export function loadEnv(): void {
   try {
     // Node >= 20.12 — does not override vars already set in the environment.
@@ -20,6 +22,58 @@ export function loadEnv(): void {
     // No .env (e.g. CI with real env vars) — fine, requireEnv will fail loud
     // if something is actually missing.
   }
+  assertDatabaseIsNotProduction();
+}
+
+function hostOf(url: string): string | null {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Refuse to run a smoke test against the production database.
+ *
+ * `.env` holds the production credential, and `loadEnvFile` above fills in
+ * DATABASE_URL from it whenever the caller did not supply one — so the default
+ * path silently targets production. In 2026-08 that wrote 147 test rows,
+ * including Vision descriptions of real children, into the live database.
+ * Comparing the resolved host against `.env`'s is the check that would have
+ * caught it; a filename claiming to be a smoke DB is not evidence.
+ */
+function assertDatabaseIsNotProduction(): void {
+  const active = process.env.DATABASE_URL;
+  if (!active) fail("DATABASE_URL is not set");
+
+  let prodLine: string | undefined;
+  try {
+    prodLine = readFileSync(".env", "utf8")
+      .split("\n")
+      .find((l) => l.startsWith("DATABASE_URL="));
+  } catch {
+    // fall through to the missing-baseline failure below
+  }
+  if (!prodLine) {
+    fail(
+      "Cannot read DATABASE_URL from .env, so the production host is unknown " +
+        "and this run cannot be proven safe. Run from the repo root."
+    );
+  }
+
+  const prodHost = hostOf(prodLine.slice("DATABASE_URL=".length).trim().replace(/^"|"$/g, ""));
+  const activeHost = hostOf(active);
+  if (!prodHost || !activeHost) fail("DATABASE_URL is not a parseable URL");
+
+  if (prodHost === activeHost) {
+    fail(
+      `DATABASE_URL points at PRODUCTION (${activeHost}).\n` +
+        "  Smoke tests write real rows. Pass an isolated Neon branch instead:\n" +
+        "  DATABASE_URL=$(cat /path/to/branch-credential) npx tsx scripts/smoke/<script>.ts"
+    );
+  }
+  console.log(`→ Preflight: database host ${activeHost} is not production`);
 }
 
 export function fail(message: string): never {

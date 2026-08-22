@@ -14,10 +14,12 @@
  * Creates a throwaway smoke user + portraits; deletes ALL smoke rows in
  * a finally block (ledger, orders, portraits, user).
  *
- * Run: npx tsx scripts/smoke/credits-smoke.ts
+ * Run: DATABASE_URL=$(cat <isolated-branch-credential>) npx tsx scripts/smoke/credits-smoke.ts
+ * The run aborts if DATABASE_URL resolves to the production host.
  */
 
 import { prisma } from "../../lib/prisma";
+import { loadEnv } from "./_shared";
 import {
   grantPackCredits,
   getCreditBalance,
@@ -68,6 +70,8 @@ const paidOrderData = {
 };
 
 async function main() {
+  loadEnv();
+
   await prisma.user.create({
     data: { id: USER_ID, email: paidOrderData.email, updatedAt: new Date() },
   });
