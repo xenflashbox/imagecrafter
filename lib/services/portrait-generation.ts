@@ -455,18 +455,33 @@ const SINGLE_PASS_STYLES = new Set(["renaissance", "starry-night"]);
 const IP_SENSITIVE_STYLES = new Set(["comic-hero"]);
 
 const ASYNC_POLL_INTERVAL_MS = 3_000;
-// Per single job, not cumulative — the stand-in leg and the swap leg each get
-// their own budget. Measured on comic-hero/nano_banana_pro: 1 stand-in job in
-// 12 exceeds 300s, observed max 373.0s (PLAN/results/standin-latency.md). The
-// shipped default stays 300s until the founder rules on #65; the override is
-// what lets the test harness reach a verdict on a style that sits on the line.
-const ASYNC_POLL_TIMEOUT_MS = Number(process.env.ASYNC_POLL_TIMEOUT_MS) || 300_000;
+// Per single job, not cumulative. Measured on comic-hero/nano_banana_pro: 1
+// stand-in job in 12 exceeds 300s, observed max 373.0s
+// (PLAN/results/standin-latency.md), so the old 300s default abandoned paid
+// work that was about to succeed. STANDIN_PHASE_BUDGET_MS below is what keeps
+// the retries from adding up past the route's function budget.
+const ASYNC_POLL_TIMEOUT_MS = Number(process.env.ASYNC_POLL_TIMEOUT_MS) || 480_000;
+
+/**
+ * Whole-phase ceiling for stand-in generation, shared across all retry
+ * attempts. The per-attempt timeout alone is not a safe bound: three attempts
+ * each waiting ASYNC_POLL_TIMEOUT_MS can outlast the route's 800s Fluid
+ * compute budget, which kills the request with FUNCTION_INVOCATION_TIMEOUT and
+ * loses the portrait after real spend. Leaves ~200s for analysis, swap, gates
+ * and upscale.
+ */
+const STANDIN_PHASE_BUDGET_MS =
+  Number(process.env.STANDIN_PHASE_BUDGET_MS) || 600_000;
 
 /** Generate a stand-in scene on a PINNED engine via the async endpoint. */
 async function generatePinnedScene(
   prompt: string,
-  engine: { provider: string; model?: string }
+  engine: { provider: string; model?: string },
+  phaseDeadline: number
 ): Promise<{ sceneUrl: string } | { error: string }> {
+  if (Date.now() >= phaseDeadline) {
+    return { error: "Stand-in phase budget exhausted before submitting a job" };
+  }
   let res;
   try {
     res = await postToService("/api/v1/async/generate", {
@@ -491,7 +506,7 @@ async function generatePinnedScene(
     };
   }
 
-  const deadline = Date.now() + ASYNC_POLL_TIMEOUT_MS;
+  const deadline = Math.min(Date.now() + ASYNC_POLL_TIMEOUT_MS, phaseDeadline);
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, ASYNC_POLL_INTERVAL_MS));
     let poll;
@@ -523,7 +538,13 @@ async function generatePinnedScene(
       };
     }
   }
-  return { error: `Stand-in job ${jobId} timed out after ${ASYNC_POLL_TIMEOUT_MS / 1000}s` };
+  const waited = Math.round((Date.now() - (deadline - ASYNC_POLL_TIMEOUT_MS)) / 1000);
+  return {
+    error:
+      deadline === phaseDeadline
+        ? `Stand-in job ${jobId} abandoned after ${waited}s — stand-in phase budget exhausted`
+        : `Stand-in job ${jobId} timed out after ${ASYNC_POLL_TIMEOUT_MS / 1000}s`,
+  };
 }
 
 /**
@@ -534,14 +555,19 @@ async function generatePinnedScene(
  */
 export async function generateStandInScene(
   prompt: string,
-  styleVariantSlug?: string
+  styleVariantSlug?: string,
+  phaseDeadline?: number
 ): Promise<{ sceneUrl: string } | { error: string }> {
   const engine = styleVariantSlug ? STYLE_ENGINE[styleVariantSlug] : undefined;
   if (engine) {
     console.log(
       `[PortraitGen] Style "${styleVariantSlug}" pinned to ${engine.provider}${engine.model ? `/${engine.model}` : ""} (bake-off winner)`
     );
-    return generatePinnedScene(prompt, engine);
+    return generatePinnedScene(
+      prompt,
+      engine,
+      phaseDeadline ?? Date.now() + STANDIN_PHASE_BUDGET_MS
+    );
   }
 
   let res;
@@ -883,12 +909,22 @@ export async function generatePortrait(
       | { ok: false; kind: "verifier" }
       | { ok: false; kind: "mismatch" };
 
+    // One clock for every stand-in attempt in this request, including the
+    // acceptance-gate retry below. Per-attempt timeouts alone do not bound the
+    // request: 2 acquire calls × 3 attempts each could outlast the route's 800s
+    // budget and die with FUNCTION_INVOCATION_TIMEOUT after real spend.
+    const standInPhaseDeadline = Date.now() + STANDIN_PHASE_BUDGET_MS;
+
     const acquireStandIn = async (): Promise<StandInOutcome> => {
       for (let attempt = 1; attempt <= MAX_STANDIN_ATTEMPTS; attempt++) {
         console.log(
           `[PortraitGen] Step 1: generating stand-in scene (attempt ${attempt}/${MAX_STANDIN_ATTEMPTS})`
         );
-        const scene = await generateStandInScene(enhancedPrompt, styleVariantSlug);
+        const scene = await generateStandInScene(
+          enhancedPrompt,
+          styleVariantSlug,
+          standInPhaseDeadline
+        );
         if ("error" in scene) {
           console.error("[PortraitGen] Stand-in scene failed:", scene.error);
           return { ok: false, kind: "engine", message: scene.error };
