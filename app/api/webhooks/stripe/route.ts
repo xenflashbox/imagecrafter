@@ -19,8 +19,11 @@ import { createProdigiOrder } from "@/lib/services/print-fulfillment";
 import { grantPackCredits, resolvePack } from "@/lib/services/credits";
 import { trackTikTokEvent } from "@/lib/services/tiktok-events";
 import { trackMetaEvent } from "@/lib/services/meta-events";
+import { requireEnv } from "@/lib/env";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+// Built per request, not at module scope: Next.js collects page data during the
+// build, so a module-scope client makes every build require a live payment key.
+const getStripe = () => new Stripe(requireEnv("STRIPE_SECRET_KEY"));
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
 // Map Stripe price IDs to plan tiers.
@@ -107,7 +110,7 @@ export async function POST(request: NextRequest) {
   let event: Stripe.Event;
 
   try {
-    event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    event = getStripe().webhooks.constructEvent(body, signature, webhookSecret);
   } catch (err) {
     console.error("Webhook signature verification failed:", err);
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
@@ -202,7 +205,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   });
 
   // Fetch the subscription details
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
   await handleSubscriptionUpdated(subscription);
 }
 
