@@ -1,0 +1,40 @@
+# Vercel does NOT fall back to .gitignore — without this file every local file
+# is uploaded to the build, including .env and the real-face test corpus.
+
+# local env files — production values come from Vercel/Infisical, never from here
+.env
+.env*.local
+
+# dependencies / build output
+/node_modules
+/.pnp
+.pnp.js
+.pnpm-store
+/.next/
+/out/
+/build
+/coverage
+*.tsbuildinfo
+
+# misc
+.DS_Store
+*.pem
+.vercel
+.git
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+test-screenshot*.png
+test-screenshots/
+imagecrafter.zip
+
+# REAL faces (incl. children) — must never leave this machine
+docs/
+scripts/faceswap-timebox/
+scripts/smoke/output/
+
+# operational notes and agent state — not source
+.claude/
+PLAN/
+*.md
+!README.md
