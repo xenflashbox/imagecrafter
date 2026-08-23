@@ -246,6 +246,21 @@ function UploadZone({
 
 // ─── Style Pack Selector ──────────────────────────────────────────────────────
 
+// A style only carries imagery once a real pipeline output for it exists on R2,
+// so most tiles render name-only until their example is generated.
+function StyleThumb({ src, name }: { src: string; name: string }) {
+  if (!src) {
+    return (
+      <div className="flex size-full items-center justify-center bg-gradient-to-br from-surface-raised to-surface p-2">
+        <span className="text-center text-xs font-medium leading-tight text-ink-subtle">
+          {name}
+        </span>
+      </div>
+    );
+  }
+  return <Image src={src} alt={name} fill className="object-cover" unoptimized />;
+}
+
 function StylePackSelector({
   packs,
   selectedPack,
@@ -277,13 +292,7 @@ function StylePackSelector({
                 }`}
               >
                 <div className="relative aspect-square bg-surface-raised">
-                  <Image
-                    src={pack.thumbnailUrl}
-                    alt={pack.name}
-                    fill
-                    className="object-cover"
-                    unoptimized
-                  />
+                  <StyleThumb src={pack.thumbnailUrl} name={pack.name} />
                   {active && (
                     <div className="absolute inset-0 flex items-center justify-center bg-accent-soft">
                       <span className="flex size-7 items-center justify-center rounded-full bg-accent text-white">
@@ -319,13 +328,7 @@ function StylePackSelector({
                   }`}
                 >
                   <div className="relative aspect-square bg-surface-raised">
-                    <Image
-                      src={variant.sampleImageUrl}
-                      alt={variant.name}
-                      fill
-                      className="object-cover"
-                      unoptimized
-                    />
+                    <StyleThumb src={variant.sampleImageUrl} name={variant.name} />
                     {active && (
                       <div className="absolute inset-0 flex items-center justify-center bg-accent-soft">
                         <span className="flex size-6 items-center justify-center rounded-full bg-accent text-white">
@@ -581,6 +584,7 @@ function CreatePortraitContent() {
   const [packsError, setPacksError] = useState<string | null>(null);
   const [selectedPack, setSelectedPack] = useState<StylePack | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<StyleVariant | null>(null);
+  const [userScene, setUserScene] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStep, setGenerationStep] = useState("Analyzing your photo…");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -787,6 +791,8 @@ function CreatePortraitContent() {
   // Generate portrait
   const handleGenerate = async () => {
     if (!portraitId || !selectedPack || !selectedVariant) return;
+    const scene = userScene.trim();
+    if (selectedPack.slug === "custom-scene" && !scene) return;
     setIsGenerating(true);
     setGenerationError(null);
     setStep("generate");
@@ -810,6 +816,7 @@ function CreatePortraitContent() {
           stylePackSlug: selectedPack.slug,
           styleVariantSlug: selectedVariant.slug,
           sessionId,
+          ...(scene ? { userScene: scene } : {}),
         }),
       });
       const data = await res.json();
@@ -970,13 +977,39 @@ function CreatePortraitContent() {
               />
             )}
 
+            {selectedPack?.slug === "custom-scene" && (
+              <div className="flex flex-col gap-2">
+                <label htmlFor="user-scene" className="text-sm font-semibold text-ink">
+                  Describe your scene
+                </label>
+                <textarea
+                  id="user-scene"
+                  value={userScene}
+                  onChange={(e) => setUserScene(e.target.value)}
+                  rows={3}
+                  maxLength={400}
+                  placeholder="e.g. standing on a windswept cliff at sunset, wearing a long wool coat"
+                  className="w-full rounded-xl border border-rim bg-surface-raised p-3 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+                />
+                <p className="text-xs text-ink-faint">
+                  {userScene.trim().length === 0
+                    ? "Required for a custom scene."
+                    : `${userScene.length}/400`}
+                </p>
+              </div>
+            )}
+
             <div className="flex gap-3">
               <QuietButton onClick={() => setStep("upload")} className="flex-1 py-3 text-sm">
                 <ArrowLeft /> Change Photo
               </QuietButton>
               <PrimaryButton
                 onClick={handleGenerate}
-                disabled={!selectedPack || !selectedVariant}
+                disabled={
+                  !selectedPack ||
+                  !selectedVariant ||
+                  (selectedPack.slug === "custom-scene" && !userScene.trim())
+                }
                 className="flex-1 py-3 text-sm"
               >
                 <Sparkles /> Generate Portrait

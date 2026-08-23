@@ -15,11 +15,24 @@ const prisma = new PrismaClient();
 // PACK + VARIANT DATA (from PRD Section 4.5 + 6.1)
 // =============================================================================
 
-// Real production-pipeline gallery assets, hosted on R2/CDN (Phase 2).
-// Shipping styles reference their real two-step output thumbnail; every other
-// style is deactivated and carries no imagery — no stock/placeholder images ship.
+// Real production-pipeline gallery assets, hosted on R2/CDN. Every style in the
+// catalog is selectable; a style only carries imagery once a real two-step
+// output for it exists on R2 — no stock or placeholder images ship, and the
+// picker renders a name-only tile for the rest.
 const R2_GALLERY_THUMBS = "https://images.imagecrafter.app/gallery/v1/thumbs";
-const SHIPPING_VARIANT_BY_PACK: Record<string, string> = {
+
+// Variants with a verified thumbnail on R2 (probed, not assumed). Every other
+// variant returns "" until its example is generated.
+const VARIANTS_WITH_THUMB = new Set([
+  "renaissance",
+  "starry-night",
+  "egyptian",
+  "elven",
+  "comic-hero",
+]);
+
+// The variant whose thumbnail represents its whole pack in the pack grid.
+const PACK_COVER_VARIANT: Record<string, string> = {
   "royal-gallery": "renaissance",
   masterpiece: "starry-night",
   "time-traveler": "egyptian",
@@ -27,9 +40,8 @@ const SHIPPING_VARIANT_BY_PACK: Record<string, string> = {
   "pop-culture": "comic-hero",
 };
 const galleryAsset = (packSlug: string, variantSlug: string, _size = 400): string => {
-  const shipping = SHIPPING_VARIANT_BY_PACK[packSlug];
-  if (variantSlug === "thumb") return shipping ? `${R2_GALLERY_THUMBS}/${shipping}.jpg` : "";
-  return variantSlug === shipping ? `${R2_GALLERY_THUMBS}/${variantSlug}.jpg` : "";
+  const slug = variantSlug === "thumb" ? PACK_COVER_VARIANT[packSlug] : variantSlug;
+  return slug && VARIANTS_WITH_THUMB.has(slug) ? `${R2_GALLERY_THUMBS}/${slug}.jpg` : "";
 };
 
 const STYLE_PACKS = [
@@ -280,7 +292,7 @@ const STYLE_PACKS = [
     category: "fine-art",
     sortOrder: 6,
     thumbnailUrl: galleryAsset("fine-art", "thumb", 300),
-    isActive: false, // not shipping in v1 — no verified production gallery output
+    isActive: true,
     isPremium: false,
     variants: [
       { slug: "oil-painting", name: "Oil on Canvas", description: "Classical oil portrait with visible brushwork", sortOrder: 1, sampleImageUrl: galleryAsset("fine-art", "oil-painting"), promptTemplate: `A masterful oil portrait of {{subject}} painted in the classical academic tradition. Rich, layered paint application with visible brushwork — thick impasto in highlights, thin transparent glazes in shadows. The subject is posed naturally with a warm, genuine expression. {{style_modifiers}}. Neutral background that keeps focus on the subject. Warm, natural color palette with accurate skin tones and subtle color temperature shifts between light and shadow sides. Masterful edge control — sharp focus on eyes and features, softer edges on hair and clothing. Classical oil portrait on stretched canvas, gallery quality, timeless and elegant.`, styleModifiers: { mood: "timeless, honest, classically beautiful", palette: "natural warm tones, accurate skin, rich earth palette", lighting: "classic portrait studio, 45-degree key light from upper left" } },
@@ -305,7 +317,7 @@ const STYLE_PACKS = [
     category: "custom",
     sortOrder: 7,
     thumbnailUrl: galleryAsset("custom-scene", "thumb", 300),
-    isActive: false, // not shipping in v1 — no verified production gallery output
+    isActive: true,
     isPremium: true,
     variants: [
       {
@@ -345,9 +357,11 @@ async function seedStylePacks() {
     console.log(`✓ Pack: ${pack.name} (${pack.slug})`);
     packCount++;
 
-    // Upsert each variant — only the verified shipping variant per pack is active
+    // Every variant in the catalog is active. Holding styles back on gate
+    // statistics kept the one person who can judge a likeness from ever seeing
+    // them; quality calls are made on the output, not before it exists.
     for (const variantData of variants) {
-      const isActive = variantData.slug === SHIPPING_VARIANT_BY_PACK[packFields.slug];
+      const isActive = true;
       await prisma.styleVariant.upsert({
         where: {
           stylePackId_slug: {
