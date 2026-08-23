@@ -43,7 +43,6 @@ import {
   checkStylePresence,
   checkIdentityPresence,
   checkStandInFidelity,
-  rankStandInCandidates,
   checkIpSafety,
   type PortraitSubjectAnalysis,
 } from "./portrait-analysis";
@@ -374,20 +373,32 @@ export const STYLE_ENGINE: Record<string, { provider: string; model?: string }> 
 };
 
 /**
- * How many stand-in candidates to render per attempt, judged side by side so
- * the best one is chosen rather than the first that clears the veto.
- *
- * Three, because that is the count the founder's own production method uses:
- * "I'll give it two or three different versions... I'll find the one that locks
- * in the look." These engines are high-variance (rule #49) — three renders of
- * one prompt routinely include one real portrait and two unusable ones — so the
- * selection step, not the prompt, is what carries the quality.
+ * How many stand-in candidates to render per attempt. They exist so the
+ * fidelity veto has somewhere to fall back to, NOT so one can be judged best:
+ * comparative ranking was measured and did not pay
+ * (PLAN/results/best-of-n-verdict.md), so we now take the first that clears
+ * the veto.
  *
  * The candidates render in PARALLEL, so this costs engine spend but roughly no
- * wall-clock against the old sequential retry loop, which could serialise three
- * generations inside the same phase budget.
+ * wall-clock against a sequential retry loop.
  */
 const STANDIN_CANDIDATES = Number(process.env.STANDIN_CANDIDATES) || 3;
+
+/**
+ * Total identity swaps allowed per portrait, including the first. The gate
+ * passes roughly 2 swaps in 3 (rule #49, measured both styles), so three
+ * attempts put the effective pass rate near 96% — and a swap is $0.08/~17s
+ * against a stand-in set that dominates both cost and latency.
+ */
+const SWAP_ATTEMPTS = Number(process.env.SWAP_ATTEMPTS) || 3;
+
+/**
+ * How far into the request a swap retry may still START. The stand-in phase is
+ * allowed 600s of the route's 800s budget, so a fixed attempt count alone does
+ * not bound us — the same reasoning as STANDIN_PHASE_BUDGET_MS. 700s leaves a
+ * swap, its gate, and the upscale/storage tail.
+ */
+const SWAP_RETRY_CUTOFF_MS = Number(process.env.SWAP_RETRY_CUTOFF_MS) || 700_000;
 
 // Styles whose output is checked for third-party IP. comic-hero is the only
 // one that asks an engine for a genre defined by living trademarks; the rest
@@ -793,10 +804,10 @@ export async function generatePortrait(
     | { ok: false; kind: "verifier" }
     | { ok: false; kind: "mismatch" };
 
-  // One clock for every stand-in attempt in this request, including the
-  // acceptance-gate retry below. Per-attempt timeouts alone do not bound the
-  // request: 2 acquire calls × 3 attempts each could outlast the route's 800s
-  // budget and die with FUNCTION_INVOCATION_TIMEOUT after real spend.
+  // One clock for every stand-in attempt in this request. Per-attempt timeouts
+  // alone do not bound the request: parallel candidates that each retry could
+  // outlast the route's 800s budget and die with FUNCTION_INVOCATION_TIMEOUT
+  // after real spend.
   const standInPhaseDeadline = Date.now() + STANDIN_PHASE_BUDGET_MS;
 
   const acquireStandIn = async (): Promise<StandInOutcome> => {
@@ -845,21 +856,14 @@ export async function generatePortrait(
       return { ok: false, kind: "mismatch" };
     }
 
-    const best = await rankStandInCandidates(portrait.sourceImageUrl, eligible);
-    if (best === null) {
-      // Degrade, do not abort: every candidate here already cleared the
-      // fidelity veto and the acceptance gate still runs downstream, so a
-      // blind ranker costs quality, not safety. Surfaced loudly because it
-      // silently reverts us to the coin-flip this selection step replaced.
-      console.error(
-        `[PortraitGen] Stand-in ranking UNAVAILABLE — falling back to the first of ${eligible.length} eligible candidates`
-      );
-      return { ok: true, sceneUrl: eligible[0] };
-    }
-    console.log(
-      `[PortraitGen] Selected stand-in candidate ${best + 1}/${eligible.length} eligible`
-    );
-    return { ok: true, sceneUrl: eligible[best] };
+    // First eligible candidate, not a ranked one. Comparative ranking was
+    // measured and did not pay (PLAN/results/best-of-n-verdict.md): across 4
+    // divergent head-to-heads it went 2-1-1 by gate and 1-2-1 by eye, and in
+    // one run it vetoed the candidate that produced the better likeness. The
+    // ranker had nothing to work with — it called 17/18 candidates defect-free,
+    // because N candidates from a pinned engine come back near-identical.
+    console.log(`[PortraitGen] Using first of ${eligible.length} eligible stand-ins`);
+    return { ok: true, sceneUrl: eligible[0] };
   };
 
   const firstStandIn = await acquireStandIn();
@@ -930,31 +934,36 @@ export async function generatePortrait(
   // Step 8c: acceptance gate. The old retry fired only on "photoreal"
   // (inverted risk: it pushed outputs AWAY from likeness); now a retry must win
   // on BOTH axes or the portrait fails honestly.
+  // The retry re-rolls the SWAP against the same stand-in. The swap does not
+  // repaint a face onto a fixed scene — it redraws the whole composition, and
+  // measurably reframes it in both directions (PLAN/results/best-of-n-verdict.md,
+  // #78b) — so a second swap onto one stand-in is a genuinely independent draw,
+  // at a fraction of the cost of regenerating the stand-in set.
   let verdict = await assessOutput(swap.imageUrl);
-  if (!verdict.pass) {
-    // The retry regenerates the STAND-IN, not just the swap. The swap can
-    // only redraw the face; build, skin tone and head geometry are inherited
-    // from the scene, so re-rolling the swap against the same stand-in keeps
-    // the input that lost the identity in the first place.
-    console.log(
-      `[PortraitGen] Acceptance gate failed (identity=${verdict.identity}, style=${verdict.style}, ip=${verdict.ip}) — retrying with a fresh stand-in`
-    );
-    const retryStandIn = await acquireStandIn();
-    if (retryStandIn.ok) {
-      const retry = await swapFaceIntoScene({
-        photoUrl: portrait.sourceImageUrl,
-        sceneUrl: retryStandIn.sceneUrl,
-        subjectKind,
-        subjectAge: analysis.primarySubject.ageBracket,
-      });
-      if (retry.success && retry.imageUrl) {
-        const retryVerdict = await assessOutput(retry.imageUrl);
-        if (retryVerdict.pass) {
-          swap = retry;
-          verdict = retryVerdict;
-        }
-      }
+  for (let attempt = 2; attempt <= SWAP_ATTEMPTS && !verdict.pass; attempt++) {
+    if (Date.now() - startTime > SWAP_RETRY_CUTOFF_MS) {
+      console.warn(
+        `[PortraitGen] Skipping swap attempt ${attempt} — request budget nearly spent`
+      );
+      break;
     }
+    console.log(
+      `[PortraitGen] Acceptance gate failed (identity=${verdict.identity}, style=${verdict.style}, ip=${verdict.ip}) — swap attempt ${attempt}/${SWAP_ATTEMPTS}`
+    );
+    const retry = await swapFaceIntoScene({
+      photoUrl: portrait.sourceImageUrl,
+      sceneUrl,
+      subjectKind,
+      subjectAge: analysis.primarySubject.ageBracket,
+    });
+    if (!retry.success || !retry.imageUrl) {
+      console.error(`[PortraitGen] Swap attempt ${attempt} failed:`, retry.error);
+      continue;
+    }
+    const retryVerdict = await assessOutput(retry.imageUrl);
+    // Keep the losing image too — gateFailure needs something to report on.
+    swap = retry;
+    verdict = retryVerdict;
   }
 
   if (!verdict.pass) {
