@@ -764,29 +764,26 @@ export async function generatePortrait(
     };
   };
 
-  // The rejected image URL is logged so a blocked portrait can actually be
-  // inspected: "identity=different" is a claim about an image, and without the
-  // URL there is no way to tell a correct rejection from a gate false-positive.
-  const gateFailure = async (
-    identity: string,
-    style: string,
-    ip: string,
-    rejectedUrl: string
-  ) => {
+  // The IP axis is the only hard block left in this gate. Identity and style
+  // verdicts are recorded and the image is delivered regardless: the gate has
+  // demonstrated errors in both directions, and a verdict the customer never
+  // sees cannot be corrected. Trademark exposure is legal, not taste, so it
+  // still fails closed.
+  const ipBlock = async (identity: string, style: string, ip: string, rejectedUrl: string) => {
     console.error(
-      `[PortraitGen] Acceptance gate FAILED after retry (identity=${identity}, style=${style}, ip=${ip}) — portrait blocked; rejected=${rejectedUrl}`
+      `[PortraitGen] IP gate FAILED (identity=${identity}, style=${style}, ip=${ip}) — portrait blocked; rejected=${rejectedUrl}`
     );
     await prisma.portrait.update({
       where: { id: portraitId },
       data: {
         status: "failed",
-        errorMessage: `Output failed acceptance gate (identity=${identity}, style=${style}, ip=${ip})`,
+        errorMessage: `Output failed IP safety check (ip=${ip})`,
       },
     });
     return {
       success: false as const,
       error:
-        "The generated portrait didn't match your photo closely enough. Please try again.",
+        "We couldn't produce this style for your photo. Please try a different style.",
       errorType: "generation" as const,
     };
   };
@@ -931,15 +928,16 @@ export async function generatePortrait(
     };
   }
 
-  // Step 8c: acceptance gate. The old retry fired only on "photoreal"
-  // (inverted risk: it pushed outputs AWAY from likeness); now a retry must win
-  // on BOTH axes or the portrait fails honestly.
+  // Step 8c: acceptance gate. A failing verdict still buys retries — a better
+  // draw is worth $0.08 — but it no longer decides whether the customer gets an
+  // image.
   // The retry re-rolls the SWAP against the same stand-in. The swap does not
   // repaint a face onto a fixed scene — it redraws the whole composition, and
   // measurably reframes it in both directions (PLAN/results/best-of-n-verdict.md,
   // #78b) — so a second swap onto one stand-in is a genuinely independent draw,
   // at a fraction of the cost of regenerating the stand-in set.
   let verdict = await assessOutput(swap.imageUrl);
+  let swapAttempts = 1;
   for (let attempt = 2; attempt <= SWAP_ATTEMPTS && !verdict.pass; attempt++) {
     if (Date.now() - startTime > SWAP_RETRY_CUTOFF_MS) {
       console.warn(
@@ -956,22 +954,30 @@ export async function generatePortrait(
       subjectKind,
       subjectAge: analysis.primarySubject.ageBracket,
     });
+    swapAttempts = attempt;
     if (!retry.success || !retry.imageUrl) {
       console.error(`[PortraitGen] Swap attempt ${attempt} failed:`, retry.error);
       continue;
     }
     const retryVerdict = await assessOutput(retry.imageUrl);
-    // Keep the losing image too — gateFailure needs something to report on.
     swap = retry;
     verdict = retryVerdict;
   }
 
-  if (!verdict.pass) {
-    return gateFailure(verdict.identity, verdict.style, verdict.ip, swap.imageUrl!);
+  if (verdict.ip !== "clean") {
+    return ipBlock(verdict.identity, verdict.style, verdict.ip, swap.imageUrl!);
   }
-  console.log(
-    `[PortraitGen] Acceptance gate PASSED (identity=${verdict.identity}, style=${verdict.style}, ip=${verdict.ip})`
-  );
+  if (verdict.pass) {
+    console.log(
+      `[PortraitGen] Acceptance gate PASSED (identity=${verdict.identity}, style=${verdict.style}, ip=${verdict.ip}) after ${swapAttempts} swap(s)`
+    );
+  } else {
+    // Delivered anyway, verdict recorded on the row. The URL is logged so the
+    // call can be second-guessed against the actual image.
+    console.warn(
+      `[PortraitGen] Acceptance gate did not pass (identity=${verdict.identity}, style=${verdict.style}) after ${swapAttempts} swap(s) — DELIVERING, verdict recorded; image=${swap.imageUrl}`
+    );
+  }
 
   // swap.imageUrl is guaranteed here: the initial swap was checked above and
   // the retry is only adopted when retry.imageUrl is present.
@@ -1086,6 +1092,7 @@ export async function generatePortrait(
       previewImageUrl: previewUpload.url,
       hiResImageUrl: hiResImageUrl || null,
       generationTimeMs,
+      gateVerdict: { ...verdict, swapAttempts },
       // Clear any failure message from a previous attempt — a successful
       // regeneration otherwise leaves stale error text on a "preview" row.
       errorMessage: null,
