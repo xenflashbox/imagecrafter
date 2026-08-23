@@ -10,19 +10,28 @@
  * Stripe checkout will collect email for guests.
  */
 
-import { useState } from "react";
-import Image from "next/image";
+import { useEffect, useState } from "react";
+import NextImage from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import type { PrintProduct, PrintFormat, FrameColor, CanvasWrap } from "@/lib/services/print-fulfillment";
+import {
+  ArrowLeft,
+  Brush,
+  Frame,
+  Lock,
+  Printer,
+  Sparkles,
+  type LucideIcon,
+} from "lucide-react";
+import type { PrintFormat, FrameColor, CanvasWrap } from "@/lib/services/print-fulfillment";
 import { PRINT_CATALOG } from "@/lib/services/print-fulfillment";
+import { SiteHeader, SiteFooter } from "@/components/site-chrome";
 
-// Format display config
-const FORMAT_LABELS: Record<PrintFormat, { label: string; emoji: string; desc: string }> = {
-  art_print:     { label: "Art Print",     emoji: "🖼️",  desc: "Fine art paper, unframed. Ships flat, frame it yourself." },
-  framed_print:  { label: "Framed Print",  emoji: "🪞",  desc: "Classic metal frame, ready to hang on arrival." },
-  canvas:        { label: "Canvas",        emoji: "🎨",  desc: "Stretched canvas on quality wooden bars, gallery-ready." },
-  framed_canvas: { label: "Framed Canvas", emoji: "✨",  desc: "Gallery canvas inside an elegant frame. The premium option." },
+const FORMAT_LABELS: Record<PrintFormat, { label: string; icon: LucideIcon; desc: string }> = {
+  art_print:     { label: "Art Print",     icon: Printer,  desc: "Fine art paper, unframed. Ships flat, frame it yourself." },
+  framed_print:  { label: "Framed Print",  icon: Frame,    desc: "Classic metal frame, ready to hang on arrival." },
+  canvas:        { label: "Canvas",        icon: Brush,    desc: "Stretched canvas on quality wooden bars, gallery-ready." },
+  framed_canvas: { label: "Framed Canvas", icon: Sparkles, desc: "Gallery canvas inside an elegant frame. The premium option." },
 };
 
 const FRAME_COLOR_LABELS: Record<FrameColor, { label: string; hex: string }> = {
@@ -39,6 +48,14 @@ const WRAP_LABELS: Record<CanvasWrap, string> = {
   White:     "White Sides",
 };
 
+function StepHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="mb-3 text-xs font-medium tracking-widest text-ink-faint uppercase">
+      {children}
+    </h2>
+  );
+}
+
 export default function PrintOptionsPage() {
   const { id: portraitId } = useParams<{ id: string }>();
 
@@ -48,6 +65,39 @@ export default function PrintOptionsPage() {
   const [selectedSku, setSelectedSku] = useState<string>("ART-8x10");
   const [selectedFrame, setSelectedFrame] = useState<FrameColor>("black");
   const [selectedWrap, setSelectedWrap] = useState<CanvasWrap>("ImageWrap");
+
+  // The customer must see the artwork they are about to pay to have printed.
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!portraitId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/portraits/${portraitId}`);
+        const data = await res.json();
+        if (cancelled) return;
+
+        if (!res.ok || !data.success) {
+          setPreviewError(data.error || `We couldn't load your portrait (HTTP ${res.status}).`);
+          return;
+        }
+        if (!data.portrait?.previewImageUrl) {
+          setPreviewError("This portrait has no preview image yet.");
+          return;
+        }
+        setPreviewUrl(data.portrait.previewImageUrl);
+      } catch {
+        if (!cancelled) setPreviewError("We couldn't reach the server to load your portrait.");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [portraitId]);
 
   const formatProducts = PRINT_CATALOG.filter((p) => p.format === selectedFormat);
   const selectedProduct = PRINT_CATALOG.find((p) => p.sku === selectedSku);
@@ -84,78 +134,93 @@ export default function PrintOptionsPage() {
     : "";
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white">
-      {/* Nav */}
-      <div className="border-b border-white/10 px-4 py-4">
-        <div className="mx-auto max-w-6xl flex items-center justify-between">
+    <div className="flex min-h-screen flex-col bg-canvas text-ink">
+      <SiteHeader
+        links={false}
+        cta={
           <Link
             href={`/portraits/${portraitId}/preview`}
-            className="text-sm text-gray-400 hover:text-white transition-colors"
+            className="flex items-center gap-1.5 text-sm text-ink-muted transition-colors hover:text-ink"
           >
-            ← Back to preview
+            <ArrowLeft className="size-3.5" /> Back to preview
           </Link>
-          <span className="text-sm font-medium text-gray-300">Choose your print</span>
-        </div>
-      </div>
+        }
+      />
 
-      <div className="mx-auto max-w-6xl px-4 py-10">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
-
-          {/* LEFT: Portrait preview */}
-          <div className="sticky top-6">
-            <div className="rounded-2xl overflow-hidden bg-gray-900 border border-white/10 shadow-2xl aspect-square flex items-center justify-center">
-              <div className="text-gray-600 text-center p-8">
-                <div className="text-5xl mb-3">🎨</div>
-                <p className="text-sm">Your portrait preview</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Watermarked — full resolution unlocked after purchase
-                </p>
-              </div>
+      <div className="mx-auto w-full max-w-6xl flex-1 px-6 pt-28 pb-16">
+        <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-2">
+          {/* LEFT: the artwork being ordered */}
+          <div className="lg:sticky lg:top-28">
+            <div className="artframe relative aspect-square bg-surface">
+              {previewUrl ? (
+                <>
+                  <NextImage
+                    src={previewUrl}
+                    alt="Your portrait"
+                    fill
+                    className="object-cover"
+                    unoptimized
+                    priority
+                  />
+                  <div className="absolute right-0 bottom-4 left-0 z-10 text-center">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-black/70 px-4 py-2 text-xs backdrop-blur-sm">
+                      <Lock className="size-3" />
+                      Watermarked preview — the print is full resolution
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex h-full items-center justify-center px-8 text-center text-sm text-ink-faint">
+                  {previewError ?? "Loading your portrait…"}
+                </div>
+              )}
             </div>
 
-            {/* Size visualization hint */}
             {selectedProduct && (
-              <div className="mt-4 p-4 rounded-xl bg-white/5 border border-white/10 text-center">
-                <p className="text-sm text-gray-300">
-                  <span className="font-semibold text-white">{selectedProduct.size}</span>
-                  {" "}{selectedProduct.name.replace(selectedProduct.size, "").replace('"', "").trim()}
+              <div className="mt-4 rounded-xl border border-rim bg-surface p-4 text-center">
+                <p className="text-sm text-ink-muted">
+                  <span className="font-semibold text-ink">{selectedProduct.size}</span>{" "}
+                  {selectedProduct.name.replace(selectedProduct.size, "").replace('"', "").trim()}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">Museum-quality production · Ships worldwide</p>
+                <p className="mt-1 text-xs text-ink-faint">
+                  Museum-quality production · Ships worldwide
+                </p>
               </div>
             )}
           </div>
 
-          {/* RIGHT: Configuration */}
-          <div className="space-y-8">
+          {/* RIGHT: configuration */}
+          <div className="flex flex-col gap-8">
             <div>
-              <h1 className="text-2xl font-bold text-white mb-1">Order a museum-quality print</h1>
-              <p className="text-gray-400 text-sm">
+              <h1 className="font-display mb-2 text-3xl font-light">
+                Order a museum-quality print
+              </h1>
+              <p className="text-sm text-ink-muted">
                 Every print is produced by professional labs and ships directly to your door.
               </p>
             </div>
 
             {/* STEP 1: Format */}
             <div>
-              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">
-                Step 1 — Choose format
-              </h2>
+              <StepHeading>Step 1 — Choose format</StepHeading>
               <div className="grid grid-cols-2 gap-3">
                 {formats.map((fmt) => {
                   const cfg = FORMAT_LABELS[fmt];
                   const isActive = selectedFormat === fmt;
+                  const Icon = cfg.icon;
                   return (
                     <button
                       key={fmt}
                       onClick={() => handleFormatChange(fmt)}
-                      className={`rounded-xl border p-4 text-left transition-all ${
+                      className={`rounded-xl border p-4 text-left transition-all [&_svg]:size-5 ${
                         isActive
-                          ? "border-purple-500 bg-purple-900/30 shadow-lg shadow-purple-900/20"
-                          : "border-white/10 bg-white/5 hover:border-white/30"
+                          ? "border-accent-rim bg-accent-soft"
+                          : "border-rim bg-surface hover:border-rim-strong"
                       }`}
                     >
-                      <div className="text-2xl mb-2">{cfg.emoji}</div>
-                      <div className="text-sm font-semibold text-white">{cfg.label}</div>
-                      <div className="text-xs text-gray-500 mt-1 leading-tight">{cfg.desc}</div>
+                      <Icon className={`mb-2 ${isActive ? "text-accent" : "text-ink-subtle"}`} />
+                      <div className="text-sm font-semibold">{cfg.label}</div>
+                      <div className="mt-1 text-xs leading-tight text-ink-faint">{cfg.desc}</div>
                     </button>
                   );
                 })}
@@ -164,9 +229,7 @@ export default function PrintOptionsPage() {
 
             {/* STEP 2: Size */}
             <div>
-              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">
-                Step 2 — Choose size
-              </h2>
+              <StepHeading>Step 2 — Choose size</StepHeading>
               <div className="grid grid-cols-2 gap-2">
                 {formatProducts.map((product) => {
                   const isActive = selectedSku === product.sku;
@@ -176,12 +239,12 @@ export default function PrintOptionsPage() {
                       onClick={() => setSelectedSku(product.sku)}
                       className={`rounded-xl border p-3 text-center transition-all ${
                         isActive
-                          ? "border-purple-500 bg-purple-900/30"
-                          : "border-white/10 bg-white/5 hover:border-white/30"
+                          ? "border-accent-rim bg-accent-soft"
+                          : "border-rim bg-surface hover:border-rim-strong"
                       }`}
                     >
-                      <div className="text-sm font-bold text-white">{product.size}</div>
-                      <div className="text-xs text-gray-400 mt-0.5">
+                      <div className="text-sm font-semibold">{product.size}</div>
+                      <div className="mt-0.5 text-xs text-ink-muted">
                         ${(product.priceUsd / 100).toFixed(2)}
                       </div>
                     </button>
@@ -193,10 +256,8 @@ export default function PrintOptionsPage() {
             {/* STEP 3: Frame / Wrap color (conditional) */}
             {selectedProduct?.frameOptions && (
               <div>
-                <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">
-                  Step 3 — Choose frame color
-                </h2>
-                <div className="flex gap-3 flex-wrap">
+                <StepHeading>Step 3 — Choose frame color</StepHeading>
+                <div className="flex flex-wrap gap-3">
                   {selectedProduct.frameOptions.map((color) => {
                     const cfg = FRAME_COLOR_LABELS[color];
                     const isActive = selectedFrame === color;
@@ -210,12 +271,12 @@ export default function PrintOptionsPage() {
                         }`}
                       >
                         <div
-                          className={`w-8 h-8 rounded-full border-2 transition-all ${
-                            isActive ? "border-purple-400 scale-110" : "border-white/20"
+                          className={`size-8 rounded-full border-2 transition-all ${
+                            isActive ? "scale-110 border-accent" : "border-rim-strong"
                           }`}
                           style={{ backgroundColor: cfg.hex }}
                         />
-                        <span className="text-xs text-gray-400">{cfg.label}</span>
+                        <span className="text-xs text-ink-muted">{cfg.label}</span>
                       </button>
                     );
                   })}
@@ -225,20 +286,18 @@ export default function PrintOptionsPage() {
 
             {selectedProduct?.wrapOptions && (
               <div>
-                <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">
-                  Step 3 — Choose canvas wrap
-                </h2>
-                <div className="space-y-2">
+                <StepHeading>Step 3 — Choose canvas wrap</StepHeading>
+                <div className="flex flex-col gap-2">
                   {selectedProduct.wrapOptions.map((wrap) => {
                     const isActive = selectedWrap === wrap;
                     return (
                       <button
                         key={wrap}
                         onClick={() => setSelectedWrap(wrap)}
-                        className={`w-full text-left rounded-lg border px-4 py-3 text-sm transition-all ${
+                        className={`w-full rounded-lg border px-4 py-3 text-left text-sm transition-all ${
                           isActive
-                            ? "border-purple-500 bg-purple-900/30 text-white"
-                            : "border-white/10 bg-white/5 text-gray-400 hover:border-white/30"
+                            ? "border-accent-rim bg-accent-soft text-ink"
+                            : "border-rim bg-surface text-ink-muted hover:border-rim-strong"
                         }`}
                       >
                         {WRAP_LABELS[wrap]}
@@ -249,49 +308,48 @@ export default function PrintOptionsPage() {
               </div>
             )}
 
-            {/* CHECKOUT CTA */}
-            <div className="pt-2">
-              <div className="rounded-2xl bg-gradient-to-br from-purple-900/60 to-pink-900/60 border border-purple-500/30 p-6">
-                <div className="flex items-center justify-between mb-4">
+            {/* CHECKOUT */}
+            <div>
+              <div className="rounded-2xl border border-accent-rim bg-surface p-6">
+                <div className="mb-4 flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-white font-bold text-lg">
+                    <p className="text-lg font-semibold">
                       {selectedProduct?.name || "Select a product"}
                     </p>
-                    <p className="text-gray-400 text-sm">
+                    <p className="text-sm text-ink-muted">
                       {selectedProduct?.format && FORMAT_LABELS[selectedProduct.format]?.label}
-                      {selectedProduct?.frameOptions && ` · ${FRAME_COLOR_LABELS[selectedFrame]?.label} frame`}
+                      {selectedProduct?.frameOptions &&
+                        ` · ${FRAME_COLOR_LABELS[selectedFrame]?.label} frame`}
                       {selectedProduct?.wrapOptions && ` · ${WRAP_LABELS[selectedWrap]}`}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-white">{priceFormatted}</p>
-                    <p className="text-xs text-gray-400">incl. shipping</p>
+                    <p className="text-2xl font-semibold">{priceFormatted}</p>
+                    <p className="text-xs text-ink-faint">incl. shipping</p>
                   </div>
                 </div>
 
                 <a
                   href={buildCheckoutUrl()}
-                  className="block w-full text-center py-4 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 font-bold text-white text-lg transition-all transform hover:scale-[1.02] shadow-lg"
+                  className="block w-full rounded-xl bg-gradient-to-r from-accent to-accent-2 py-4 text-center text-base font-semibold transition-all hover:brightness-110"
                 >
-                  Order This Print →
+                  Order This Print
                 </a>
 
-                <div className="flex items-center justify-center gap-4 mt-4 text-xs text-gray-500">
-                  <span>🔒 Secure checkout via Stripe</span>
-                  <span>·</span>
-                  <span>📦 Ships worldwide</span>
-                  <span>·</span>
-                  <span>No account required</span>
-                </div>
+                <p className="mt-4 text-center text-xs text-ink-faint">
+                  Secure checkout via Stripe · Ships worldwide · No account required
+                </p>
               </div>
 
-              <p className="text-center text-xs text-gray-600 mt-4">
+              <p className="mt-4 text-center text-xs text-ink-faint">
                 Estimated delivery: 5–10 business days.
               </p>
             </div>
           </div>
         </div>
       </div>
-    </main>
+
+      <SiteFooter />
+    </div>
   );
 }

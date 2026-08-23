@@ -2,15 +2,59 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===========================================================================
+   ImageCrafter design tokens — "Gallery Noir"
+   One dark ground, one violet→fuchsia accent, a neutral ink ramp.
+   Every surface in the product reads from these. Never hardcode a hex or a
+   slate-* class in a page: that is how the wizard drifted to light mode while
+   the marketing page stayed dark.
+   =========================================================================== */
+
 :root {
-  --background: #06060a;
-  --foreground: #ffffff;
+  /* Ground */
+  --canvas: #06060a;
+  --surface: #0c0c12;
+  --surface-raised: #12121a;
+
+  /* Ink */
+  --ink: #ffffff;
+  --ink-muted: rgba(255, 255, 255, 0.6);
+  --ink-subtle: rgba(255, 255, 255, 0.4);
+  --ink-faint: rgba(255, 255, 255, 0.28);
+
+  /* Frame */
+  --rim: rgba(255, 255, 255, 0.1);
+  --rim-strong: rgba(255, 255, 255, 0.18);
+
+  /* Accent */
+  --accent: #8b5cf6;
+  --accent-2: #d946ef;
+  --accent-soft: rgba(139, 92, 246, 0.15);
+  --accent-rim: rgba(139, 92, 246, 0.35);
+
+  /* Signal */
+  --positive: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+
+  /* Rhythm — a 4px base, used as the only spacing scale */
+  --step: 0.25rem;
+
+  /* Tailwind bridge (kept for existing consumers) */
+  --background: var(--canvas);
+  --foreground: var(--ink);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--canvas);
+  color: var(--ink);
   font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+/* Display type carries the gallery voice; body type stays out of the way. */
+.font-display {
+  font-family: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  font-optical-sizing: auto;
 }
 
 /* Custom scrollbar */
@@ -24,12 +68,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--rim);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--rim-strong);
 }
 
 /* Selection */
@@ -40,7 +84,7 @@ body {
 
 /* Focus styles */
 *:focus-visible {
-  outline: 2px solid rgba(139, 92, 246, 0.5);
+  outline: 2px solid var(--accent-rim);
   outline-offset: 2px;
 }
 
@@ -72,10 +116,19 @@ html {
 
 /* Gradient text */
 .gradient-text {
-  background: linear-gradient(to right, #8b5cf6, #d946ef, #06b6d4);
+  background: linear-gradient(to right, var(--accent), var(--accent-2), #06b6d4);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+/* Fixed chrome sits on a veil so artwork scrolls under it without bleeding
+   through. A literal rgba, not `bg-canvas/80`: Tailwind v3 drops the opacity
+   modifier on a var()-based color and would render this fully opaque. */
+.chrome-veil {
+  background: rgba(6, 6, 10, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 /* Glass effect */
@@ -83,7 +136,32 @@ html {
   background: rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--rim);
+}
+
+/* The signature: artwork sits in a lit frame, the way a print sits on a wall.
+   This is the one element that should be recognisable with the logo removed. */
+.artframe {
+  position: relative;
+  border-radius: 1rem;
+  overflow: hidden;
+  border: 1px solid var(--rim);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 24px 60px -24px rgba(139, 92, 246, 0.35);
+}
+
+.artframe::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.12),
+    transparent 38%
+  );
 }
 
 /* Hide scrollbar for specific elements */
@@ -97,6 +175,6 @@ html {
 
 /* Clerk customizations */
 .cl-rootBox {
-  --clerk-background: #0c0c12;
-  --clerk-surface: #12121a;
+  --clerk-background: var(--surface);
+  --clerk-surface: var(--surface-raised);
 }

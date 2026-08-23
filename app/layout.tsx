@@ -1,12 +1,22 @@
 import type { Metadata, Viewport } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
-import { Inter } from "next/font/google";
+import { Manrope, Fraunces } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 
-const inter = Inter({
+// Body: a quiet geometric sans. Display: an editorial serif — this product
+// sells museum prints, so headings should read gallery, not dashboard.
+const manrope = Manrope({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-manrope",
+  display: "swap",
+});
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-fraunces",
+  display: "swap",
+  axes: ["SOFT", "WONK", "opsz"],
 });
 
 // =============================================================================
@@ -209,7 +219,9 @@ export default function RootLayout({
           <link rel="preconnect" href="https://analytics.tiktok.com" />
           <link rel="preconnect" href="https://connect.facebook.net" />
         </head>
-        <body className={`${inter.variable} font-sans antialiased`}>
+        <body
+          className={`${manrope.variable} ${fraunces.variable} font-sans antialiased`}
+        >
           {children}
 
           {/* Google Analytics */}
