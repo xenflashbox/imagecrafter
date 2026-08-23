@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
+import { ensureUser } from "@/lib/ensure-user";
 import Stripe from "stripe";
 import { cookies } from "next/headers";
 import { resolvePack, PACK_CATALOG } from "@/lib/services/credits";
@@ -51,16 +52,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(signInUrl);
   }
 
-  const user = await prisma.user.findUnique({
+  await ensureUser(userId);
+  const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
     select: { email: true, stripeCustomerId: true },
   });
-  if (!user) {
-    return NextResponse.json(
-      { success: false, error: "Account not found. Please sign in again." },
-      { status: 403 }
-    );
-  }
 
   // --- Ad attribution context ---
   const cookieStore = await cookies();
