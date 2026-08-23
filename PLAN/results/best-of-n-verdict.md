@@ -133,6 +133,20 @@ identity cue. The clause is now conditional on head covering actually being visi
    candidate that was a framed painting — criterion 1 (PORTRAIT NOT A PAGE) should
    arguably have caught that.
 
+## What shipped from this (972cdb1)
+
+Recommendations 1-3 are in `portrait-generation.ts`: the fidelity veto is untouched,
+`rankStandInCandidates` is no longer called from production (it stays exported for the
+harness), and the gate-failure retry now re-swaps onto the **same** stand-in up to
+`SWAP_ATTEMPTS` (3) times instead of regenerating the stand-in set. Recommendation 4
+(#78b, uncontrolled recomposition) is still open.
+
+**This is not free, and the renaissance sample says so.** Renaissance had one divergent
+run and the ranker won it, so PICKED was 2/3 there against FIRST's 1/3. The swap-retry is
+what is expected to compensate — three draws at ~2/3 each — but that expectation is
+modelled, not measured. It needs the same 3-runs-per-style treatment before it is claimed
+as a quality improvement.
+
 ## Honest caveats
 
 - n=3 runs per style, n=4 divergent head-to-heads. Small.
