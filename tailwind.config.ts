@@ -10,11 +10,36 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["var(--font-inter)", "system-ui", "sans-serif"],
+        sans: ["var(--font-manrope)", "system-ui", "sans-serif"],
+        display: ["var(--font-fraunces)", "Georgia", "serif"],
       },
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
+        canvas: "var(--canvas)",
+        surface: {
+          DEFAULT: "var(--surface)",
+          raised: "var(--surface-raised)",
+        },
+        ink: {
+          DEFAULT: "var(--ink)",
+          muted: "var(--ink-muted)",
+          subtle: "var(--ink-subtle)",
+          faint: "var(--ink-faint)",
+        },
+        rim: {
+          DEFAULT: "var(--rim)",
+          strong: "var(--rim-strong)",
+        },
+        accent: {
+          DEFAULT: "var(--accent)",
+          2: "var(--accent-2)",
+          soft: "var(--accent-soft)",
+          rim: "var(--accent-rim)",
+        },
+        positive: "var(--positive)",
+        warning: "var(--warning)",
+        danger: "var(--danger)",
       },
       backgroundImage: {
         "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",

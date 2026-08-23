@@ -6,12 +6,15 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import { auth } from "@clerk/nextjs/server";
+import { ArrowRight, Camera, Check, Download, Palette, Printer } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { SiteHeader, SiteFooter } from "@/components/site-chrome";
 
 export const metadata: Metadata = {
   title: "Portrait Studio — Transform Your Photo Into Art | ImageCrafter",
   description:
-    "Upload your photo and receive a stunning AI-generated artistic portrait in three signature styles — Renaissance royalty, Starry Night, and Elven fantasy. Guest checkout — no account required.",
+    "Upload your photo and receive a stunning AI-generated artistic portrait. Guest checkout — no account required.",
 };
 
 async function getStylePacks() {
@@ -30,131 +33,178 @@ async function getStylePacks() {
 }
 
 export default async function PortraitsPage() {
+  const { userId } = await auth();
   const stylePacks = await getStylePacks();
   // Counted from what is actually shippable, never hardcoded — a style held
   // back for identity failures must not still be advertised.
   const styleCount = stylePacks.reduce((n, p) => n + p.variants.length, 0);
+  // Same reason the count is derived: naming styles in prose goes stale the
+  // moment the catalog changes.
+  const styleNames = stylePacks.flatMap((p) => p.variants.map((v) => v.name));
+
+  const steps = [
+    {
+      icon: <Camera />,
+      title: "Upload your photo",
+      desc: "One clear subject — a person or a pet. JPEG, PNG, or WebP up to 25MB.",
+    },
+    {
+      icon: <Palette />,
+      title: "Choose your style",
+      desc: "Pick the era you want to be painted into. Every style is a different studio setup.",
+    },
+    {
+      icon: <Download />,
+      title: "Download or print",
+      desc: "Take the high-resolution file, or have a museum-quality print shipped to you.",
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="flex min-h-screen flex-col bg-canvas text-ink">
+      <SiteHeader
+        cta={
+          userId ? (
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-sm font-medium transition-all hover:bg-white/15"
+            >
+              Dashboard <ArrowRight className="size-3.5" />
+            </Link>
+          ) : (
+            <Link
+              href="/portraits/create"
+              className="rounded-xl bg-gradient-to-r from-accent to-accent-2 px-4 py-2 text-sm font-medium transition-all hover:brightness-110"
+            >
+              Upload Your Photo
+            </Link>
+          )
+        }
+      />
+
       {/* Hero */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 py-24 px-4">
-        <div className="relative mx-auto max-w-4xl text-center">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm text-white/80">
-            ✨ {styleCount} signature styles · Guest checkout · Digital + Print
+      <section className="relative overflow-hidden px-6 pt-32 pb-20">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute top-0 left-1/2 size-[600px] -translate-x-1/2 rounded-full bg-accent-soft blur-3xl" />
+        </div>
+        <div className="relative mx-auto max-w-3xl text-center">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-accent-rim bg-accent-soft px-4 py-1.5 text-sm text-ink-muted">
+            <Palette className="size-3.5" />
+            {styleCount} signature {styleCount === 1 ? "style" : "styles"} · Guest checkout
           </div>
-          <h1 className="mb-6 text-5xl font-bold tracking-tight text-white md:text-6xl">
-            Your Photo,{" "}
-            <span className="bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-              Transformed Into Art
+          <h1 className="font-display mb-6 text-5xl leading-[1.05] font-light tracking-tight md:text-6xl">
+            Your photo,{" "}
+            <span className="bg-gradient-to-r from-accent to-accent-2 bg-clip-text text-transparent">
+              painted into another era
             </span>
           </h1>
-          <p className="mb-8 text-xl text-white/70 max-w-2xl mx-auto">
-            Upload a photo with one clear subject — person or pet — and our AI transforms
-            it into a stunning artistic portrait. Choose from Renaissance, Starry Night,
-            and Elven styles.
+          <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-ink-muted">
+            Upload one photo with a single clear subject — a person or a pet — and we
+            paint them into the scene you choose.
           </p>
           <Link
             href="/portraits/create"
-            className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 hover:bg-white/90 transition-colors"
+            className="group inline-flex items-center gap-3 rounded-2xl bg-gradient-to-r from-accent to-accent-2 px-8 py-4 text-base font-semibold transition-all hover:brightness-110"
           >
-            📷 Create Your Portrait
+            <Camera className="size-5" />
+            Create Your Portrait
+            <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" />
           </Link>
-          <p className="mt-4 text-sm text-white/50">
-            No account required · From $29.95 · Delivered in seconds
+          <p className="mt-4 text-sm text-ink-faint">
+            No account required · From $29.95 · Preview before you buy
           </p>
         </div>
       </section>
 
-      {/* How it Works */}
-      <section className="py-16 px-4 bg-slate-50">
+      {/* How it works */}
+      <section className="border-t border-rim px-6 py-20">
         <div className="mx-auto max-w-5xl">
-          <h2 className="text-center text-3xl font-bold text-slate-900 mb-12">
+          <h2 className="font-display mb-14 text-center text-3xl font-light">
             Three steps to your portrait
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              { step: "1", icon: "📷", title: "Upload your photo", desc: "Any photo with one clear subject — a person or pet. JPEG, PNG, or WebP up to 25MB." },
-              { step: "2", icon: "🎨", title: "Choose your style", desc: "Pick from our signature styles — Renaissance royalty, Starry Night, or Elven fantasy." },
-              { step: "3", icon: "⬇️", title: "Download or print", desc: "Get your portrait as a high-res digital download or order a museum-quality print." },
-            ].map((item) => (
-              <div key={item.step} className="text-center">
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-purple-100 text-3xl">
+          <div className="grid grid-cols-1 gap-10 md:grid-cols-3">
+            {steps.map((item, i) => (
+              <div key={item.title} className="flex flex-col items-center text-center">
+                <div className="mb-5 flex size-14 items-center justify-center rounded-2xl border border-rim bg-surface text-accent [&_svg]:size-6">
                   {item.icon}
                 </div>
-                <div className="mb-2 text-4xl font-bold text-purple-200">{item.step}</div>
-                <h3 className="mb-2 text-lg font-semibold text-slate-900">{item.title}</h3>
-                <p className="text-slate-600 text-sm">{item.desc}</p>
+                <div className="mb-2 text-xs font-medium tracking-widest text-ink-faint tabular-nums">
+                  STEP {i + 1}
+                </div>
+                <h3 className="mb-2 text-lg font-medium">{item.title}</h3>
+                <p className="max-w-xs text-sm leading-relaxed text-ink-subtle">{item.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Style Pack Gallery */}
-      <section className="py-16 px-4">
-        <div className="mx-auto max-w-7xl">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-slate-900 mb-4">Choose your style</h2>
-            <p className="text-slate-600 max-w-2xl mx-auto">
-              From classical oil paintings to anime and fantasy — every pack includes multiple
-              style variants to find your perfect look.
+      {/* Style pack gallery */}
+      <section className="border-t border-rim px-6 py-20">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-14 text-center">
+            <h2 className="font-display mb-4 text-3xl font-light">Choose your style</h2>
+            <p className="mx-auto max-w-xl text-ink-muted">
+              {styleNames.length > 0
+                ? `Every pack is a different studio setup — ${styleNames.join(", ")}.`
+                : "Style packs are being updated. Check back shortly."}
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Flex-wrap, not a fixed grid: a partial row stays centred no matter
+              how many packs are live. */}
+          <div className="flex flex-wrap justify-center gap-6">
             {stylePacks.map((pack) => (
-              <div
+              <Link
                 key={pack.id}
-                className="group overflow-hidden rounded-2xl border border-slate-200 shadow-md hover:shadow-xl transition-all duration-300"
+                href={`/portraits/create?pack=${pack.slug}`}
+                className="group w-full overflow-hidden rounded-2xl border border-rim bg-surface transition-all hover:border-accent-rim sm:w-72"
               >
-                {/* Sample image grid */}
-                <div className="relative aspect-[4/3] overflow-hidden bg-slate-100">
+                <div className="relative aspect-[4/3] overflow-hidden bg-surface-raised">
                   {pack.variants.length > 0 ? (
-                    <div className="grid grid-cols-2 h-full">
+                    <div className="grid h-full grid-cols-2">
                       {pack.variants.slice(0, 4).map((variant) => (
-                        <div key={variant.id} className="relative overflow-hidden bg-slate-200">
+                        <div key={variant.id} className="relative overflow-hidden">
                           <Image
                             src={variant.sampleImageUrl}
                             alt={variant.name}
                             fill
-                            className="object-cover group-hover:scale-105 transition-transform duration-500"
+                            className="object-cover transition-transform duration-500 group-hover:scale-105"
                             unoptimized
                           />
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="flex h-full items-center justify-center text-4xl">🎨</div>
-                  )}
-                  {pack.isPremium && (
-                    <div className="absolute top-3 right-3 rounded-full bg-amber-500 px-2 py-1 text-xs font-semibold text-white">
-                      ✨ Premium
+                    <div className="flex h-full items-center justify-center text-ink-faint">
+                      <Palette className="size-8" />
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                  <div className="absolute bottom-3 left-3 text-white text-xs font-medium">
-                    {pack.variants.length} styles
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+                  <div className="absolute bottom-3 left-3 text-xs font-medium text-ink-muted">
+                    {pack.variants.length}{" "}
+                    {pack.variants.length === 1 ? "style" : "styles"}
                   </div>
                 </div>
 
-                <div className="p-4">
-                  <h3 className="font-bold text-slate-900 text-lg mb-1">{pack.name}</h3>
-                  <p className="text-sm text-purple-600 font-medium mb-2">{pack.tagline}</p>
-                  <p className="text-sm text-slate-600 line-clamp-2">{pack.description}</p>
+                <div className="p-5">
+                  <h3 className="mb-1 text-lg font-medium">{pack.name}</h3>
+                  <p className="mb-2 text-sm font-medium text-accent">{pack.tagline}</p>
+                  <p className="line-clamp-2 text-sm text-ink-subtle">{pack.description}</p>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
 
-          <div className="text-center mt-12">
+          <div className="mt-14 text-center">
             <Link
               href="/portraits/create"
-              className="inline-flex items-center gap-2 rounded-xl bg-purple-600 px-10 py-4 text-base font-semibold text-white hover:bg-purple-700 transition-colors"
+              className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-accent to-accent-2 px-10 py-4 text-base font-semibold transition-all hover:brightness-110"
             >
-              📷 Start Creating — Free Preview
+              <Camera className="size-5" />
+              Start Creating — Free Preview
             </Link>
-            <p className="mt-3 text-sm text-slate-500">
+            <p className="mt-4 text-sm text-ink-faint">
               See a watermarked preview free. Purchase to unlock full resolution.
             </p>
           </div>
@@ -162,58 +212,81 @@ export default async function PortraitsPage() {
       </section>
 
       {/* Pricing */}
-      <section className="py-16 px-4 bg-slate-50">
+      <section className="border-t border-rim px-6 py-20">
         <div className="mx-auto max-w-3xl">
-          <h2 className="text-center text-3xl font-bold text-slate-900 mb-12">Simple pricing</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="rounded-2xl border-2 border-purple-200 p-6 bg-white">
-              <div className="flex items-center gap-3 mb-4">
-                <span className="text-2xl">⬇️</span>
-                <h3 className="text-xl font-bold text-slate-900">Digital Download</h3>
+          <h2 className="font-display mb-14 text-center text-3xl font-light">
+            Simple pricing
+          </h2>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            {[
+              {
+                icon: <Download />,
+                title: "Digital Download",
+                price: "$29.95",
+                note: "One-time purchase",
+                items: [
+                  "Full resolution (up to 4K)",
+                  "No watermark",
+                  "Instant delivery via email",
+                  "Download up to 5 times",
+                  "No account required",
+                ],
+              },
+              {
+                icon: <Printer />,
+                title: "Art Print",
+                price: "from $49.95",
+                note: "Multiple sizes · Free US shipping",
+                items: [
+                  "Museum-quality print",
+                  "Canvas, framed, or art print",
+                  "Ships worldwide",
+                  "Tracking included",
+                ],
+              },
+            ].map((tier) => (
+              <div
+                key={tier.title}
+                className="rounded-2xl border border-rim bg-surface p-6"
+              >
+                <div className="mb-4 flex items-center gap-3 text-accent [&_svg]:size-5">
+                  {tier.icon}
+                  <h3 className="text-lg font-medium text-ink">{tier.title}</h3>
+                </div>
+                <div className="mb-1 text-4xl font-light">{tier.price}</div>
+                <p className="mb-6 text-sm text-ink-faint">{tier.note}</p>
+                <ul className="flex flex-col gap-2.5 text-sm text-ink-muted">
+                  {tier.items.map((item) => (
+                    <li key={item} className="flex items-center gap-2">
+                      <Check className="size-4 shrink-0 text-positive" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <div className="text-4xl font-bold text-slate-900 mb-1">$29.95</div>
-              <p className="text-sm text-slate-500 mb-6">One-time purchase</p>
-              <ul className="space-y-2 text-sm text-slate-700">
-                {["Full-resolution (up to 4K)", "No watermark", "Instant delivery via email", "Download up to 5 times", "No account required"].map((item) => (
-                  <li key={item} className="flex items-center gap-2">
-                    <span className="text-green-500">✓</span> {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="rounded-2xl border-2 border-amber-200 p-6 bg-white">
-              <div className="flex items-center gap-3 mb-4">
-                <span className="text-2xl">🖨️</span>
-                <h3 className="text-xl font-bold text-slate-900">Art Print</h3>
-              </div>
-              <div className="text-4xl font-bold text-slate-900 mb-1">from $49.95</div>
-              <p className="text-sm text-slate-500 mb-6">Multiple sizes · Free US shipping</p>
-              <ul className="space-y-2 text-sm text-slate-700">
-                {["Museum-quality print", "Canvas, framed, or art print", "Ships worldwide", "Tracking included"].map((item) => (
-                  <li key={item} className="flex items-center gap-2">
-                    <span className="text-green-500">✓</span> {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* Final CTA */}
-      <section className="py-20 px-4 bg-gradient-to-br from-purple-600 to-pink-600 text-white text-center">
-        <h2 className="text-4xl font-bold mb-4">Ready to create your portrait?</h2>
-        <p className="text-xl text-white/80 mb-8 max-w-xl mx-auto">
-          See your free watermarked preview in under 30 seconds. No account needed.
+      <section className="border-t border-rim px-6 py-20 text-center">
+        <h2 className="font-display mb-4 text-4xl font-light">
+          Ready to create your portrait?
+        </h2>
+        <p className="mx-auto mb-8 max-w-xl text-lg text-ink-muted">
+          See your free watermarked preview. No account needed.
         </p>
         <Link
           href="/portraits/create"
-          className="inline-flex items-center gap-2 rounded-xl bg-white px-10 py-4 text-base font-semibold text-purple-600 hover:bg-white/90 transition-colors"
+          className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-accent to-accent-2 px-10 py-4 text-base font-semibold transition-all hover:brightness-110"
         >
-          📷 Upload Your Photo Now
+          <Camera className="size-5" />
+          Upload Your Photo Now
         </Link>
       </section>
+
+      <SiteFooter />
     </div>
   );
 }

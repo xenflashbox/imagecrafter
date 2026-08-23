@@ -19,15 +19,14 @@ import { prisma } from "@/lib/prisma";
 import { CreditPackCards } from "@/components/credit-pack-cards";
 import {
   Camera,
-  Sparkles,
   Check,
   ArrowRight,
   Zap,
   Palette,
   ShoppingBag,
   Rss,
-  Crown,
 } from "lucide-react";
+import { SiteHeader, Wordmark } from "@/components/site-chrome";
 import NewsletterSignup from "./NewsletterSignup";
 
 export const dynamic = "force-dynamic";
@@ -105,7 +104,6 @@ async function getStylePacks() {
       name: true,
       tagline: true,
       thumbnailUrl: true,
-      isPremium: true,
       category: true,
       variants: {
         where: { isActive: true },
@@ -158,64 +156,34 @@ export default async function LandingPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
       />
 
-      <div className="min-h-screen bg-[#06060a] text-white">
-        {/* ================================================================
-            NAV
-        ================================================================ */}
-        <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/5 bg-[#06060a]/80 backdrop-blur-xl">
-          <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-            {/* Logo */}
-            <Link href="/" className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-white" />
-              </div>
-              <span className="font-semibold text-lg tracking-tight">ImageCrafter</span>
-            </Link>
-
-            {/* Nav links */}
-            <div className="hidden md:flex items-center gap-6 text-sm text-white/60">
-              <Link href="#portraits" className="hover:text-white transition-colors">
-                Portraits
+      <div className="min-h-screen bg-canvas text-ink">
+        <SiteHeader
+          cta={
+            isSignedIn ? (
+              <Link
+                href="/dashboard"
+                className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-sm font-medium transition-all hover:bg-white/15"
+              >
+                Dashboard <ArrowRight className="size-3.5" />
               </Link>
-              <Link href="#styles" className="hover:text-white transition-colors">
-                Style Packs
-              </Link>
-              <Link href="#pricing" className="hover:text-white transition-colors">
-                Pricing
-              </Link>
-              <Link href="/blog" className="hover:text-white transition-colors">
-                Blog
-              </Link>
-            </div>
-
-            {/* CTA */}
-            <div className="flex items-center gap-3">
-              {isSignedIn ? (
+            ) : (
+              <>
                 <Link
-                  href="/dashboard"
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 transition-all text-sm font-medium"
+                  href="/sign-in"
+                  className="hidden text-sm text-ink-muted transition-colors hover:text-ink sm:block"
                 >
-                  Dashboard <ArrowRight className="w-3.5 h-3.5" />
+                  Sign In
                 </Link>
-              ) : (
-                <>
-                  <Link
-                    href="/sign-in"
-                    className="text-sm text-white/60 hover:text-white transition-colors hidden sm:block"
-                  >
-                    Sign In
-                  </Link>
-                  <Link
-                    href="/portraits/create"
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all text-sm font-medium"
-                  >
-                    Upload Your Photo
-                  </Link>
-                </>
-              )}
-            </div>
-          </div>
-        </nav>
+                <Link
+                  href="/portraits/create"
+                  className="rounded-xl bg-gradient-to-r from-accent to-accent-2 px-4 py-2 text-sm font-medium transition-all hover:brightness-110"
+                >
+                  Upload Your Photo
+                </Link>
+              </>
+            )
+          }
+        />
 
         {/* ================================================================
             PATH A — HERO: PORTRAIT STUDIO (no auth required)
@@ -292,14 +260,15 @@ export default async function LandingPage() {
               </div>
             </div>
 
-            {/* Style pack preview grid — top 4 packs */}
+            {/* Flex-wrap, not a fixed grid: a partial row stays centred no
+                matter how many packs are live. A grid leaves the hole. */}
             {stylePacks.length > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-4xl mx-auto">
+              <div className="flex flex-wrap justify-center gap-3 max-w-4xl mx-auto">
                 {stylePacks.slice(0, 4).map((pack) => (
                   <Link
                     key={pack.id}
                     href={`/portraits/create?pack=${pack.slug}`}
-                    className="group relative rounded-2xl overflow-hidden aspect-[3/4] bg-white/5 border border-white/10 hover:border-violet-500/50 transition-all"
+                    className="artframe group relative w-[calc(50%-0.375rem)] sm:w-44 md:w-52 aspect-[3/4] bg-surface hover:border-accent-rim transition-all"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -308,14 +277,9 @@ export default async function LandingPage() {
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                    {pack.isPremium && (
-                      <div className="absolute top-3 right-3">
-                        <Crown className="w-4 h-4 text-amber-400" />
-                      </div>
-                    )}
-                    <div className="absolute bottom-0 left-0 right-0 p-4">
+                    <div className="absolute bottom-0 left-0 right-0 p-4 z-10">
                       <p className="font-medium text-sm">{pack.name}</p>
-                      <p className="text-xs text-white/50 mt-0.5 line-clamp-1">{pack.tagline}</p>
+                      <p className="text-xs text-ink-subtle mt-0.5 line-clamp-1">{pack.tagline}</p>
                     </div>
                   </Link>
                 ))}
@@ -343,17 +307,17 @@ export default async function LandingPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 items-start">
+            <div className="flex flex-wrap justify-center gap-4">
               {/* Before */}
-              <div className="rounded-2xl overflow-hidden border-2 border-violet-500/50 relative">
+              <div className="artframe relative w-[calc(50%-0.5rem)] sm:w-40 lg:w-44 border-accent-rim">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={BEFORE_PHOTO}
                   alt="Original photo before transformation"
                   className="w-full aspect-[3/4] object-cover"
                 />
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-3">
-                  <p className="text-xs font-medium text-violet-300">Original photo</p>
+                <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/90 to-transparent p-3">
+                  <p className="text-xs font-medium text-accent">Original photo</p>
                 </div>
               </div>
 
@@ -361,7 +325,7 @@ export default async function LandingPage() {
               {AFTER_GALLERY.map((item) => (
                 <div
                   key={item.slug}
-                  className="rounded-2xl overflow-hidden border border-white/10 relative group"
+                  className="artframe group relative w-[calc(50%-0.5rem)] sm:w-40 lg:w-44"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -369,9 +333,9 @@ export default async function LandingPage() {
                     alt={`${item.name} style portrait generated from the original photo`}
                     className="w-full aspect-[3/4] object-cover group-hover:scale-105 transition-transform duration-500"
                   />
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-3">
+                  <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/90 to-transparent p-3">
                     <p className="text-xs font-medium">{item.name}</p>
-                    <p className="text-[10px] text-white/50">{item.pack}</p>
+                    <p className="text-[10px] text-ink-subtle">{item.pack}</p>
                   </div>
                 </div>
               ))}
@@ -398,12 +362,12 @@ export default async function LandingPage() {
               </p>
             </div>
 
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            <div className="flex flex-wrap justify-center gap-5">
               {stylePacks.map((pack) => (
                 <Link
                   key={pack.id}
                   href={`/portraits/create?pack=${pack.slug}`}
-                  className="group bg-white/[0.04] rounded-2xl border border-white/10 overflow-hidden hover:border-violet-500/50 hover:bg-white/[0.06] transition-all"
+                  className="group w-full sm:w-64 rounded-2xl border border-rim bg-surface overflow-hidden hover:border-accent-rim transition-all"
                 >
                   {/* Thumbnail */}
                   <div className="aspect-[3/4] relative overflow-hidden">
@@ -415,26 +379,20 @@ export default async function LandingPage() {
                       alt={pack.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
-                    {pack.isPremium && (
-                      <div className="absolute top-2.5 right-2.5 flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs">
-                        <Crown className="w-3 h-3" />
-                        Premium
-                      </div>
-                    )}
                   </div>
 
                   {/* Info */}
                   <div className="p-4">
                     <div className="flex items-start justify-between gap-2 mb-2">
-                      <h3 className="font-medium text-sm group-hover:text-violet-300 transition-colors">
+                      <h3 className="font-medium text-sm group-hover:text-accent transition-colors">
                         {pack.name}
                       </h3>
                       <CategoryBadge category={pack.category} />
                     </div>
-                    <p className="text-xs text-white/40 line-clamp-2 leading-relaxed">
+                    <p className="text-xs text-ink-subtle line-clamp-2 leading-relaxed">
                       {pack.tagline}
                     </p>
-                    <div className="mt-3 flex items-center gap-1 text-xs text-violet-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="mt-3 flex items-center gap-1 text-xs text-accent font-medium opacity-0 group-hover:opacity-100 transition-opacity">
                       Create with this style <ArrowRight className="w-3 h-3" />
                     </div>
                   </div>
@@ -526,13 +484,10 @@ export default async function LandingPage() {
             <div className="grid md:grid-cols-4 gap-10 mb-12">
               {/* Brand */}
               <div className="md:col-span-2">
-                <Link href="/" className="flex items-center gap-2.5 mb-4">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
-                    <Sparkles className="w-4 h-4 text-white" />
-                  </div>
-                  <span className="font-semibold text-lg">ImageCrafter</span>
-                </Link>
-                <p className="text-white/40 text-sm leading-relaxed max-w-xs">
+                <div className="mb-4">
+                  <Wordmark />
+                </div>
+                <p className="text-ink-subtle text-sm leading-relaxed max-w-xs">
                   AI portrait studio and image generation platform. Transform photos into
                   art that you'll treasure forever.
                 </p>

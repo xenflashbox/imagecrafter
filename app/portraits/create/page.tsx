@@ -11,6 +11,23 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  Camera,
+  Check,
+  Download,
+  Loader2,
+  Lock,
+  LogIn,
+  Palette,
+  RefreshCw,
+  Sparkles,
+  Upload,
+  UserRound,
+} from "lucide-react";
+import { SiteHeader, SiteFooter } from "@/components/site-chrome";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -27,12 +44,14 @@ interface StylePack {
   name: string;
   tagline: string;
   description: string;
-  isPremium: boolean;
   thumbnailUrl: string;
   variants: StyleVariant[];
 }
 
 type Step = "upload" | "style" | "generate";
+
+// Height of the fixed SiteHeader (py-4 + a size-8 wordmark + hairline border).
+const CHROME_OFFSET = "65px";
 
 // ─── Photo normalization ─────────────────────────────────────────────────────
 
@@ -85,6 +104,57 @@ async function normalizePhoto(file: File): Promise<File> {
   });
 }
 
+// ─── Shared controls ─────────────────────────────────────────────────────────
+
+function PrimaryButton({
+  children,
+  className = "",
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      {...props}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent to-accent-2 px-4 font-semibold text-white transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100 [&_svg]:size-4 ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function QuietButton({
+  children,
+  className = "",
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      {...props}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl border border-rim bg-surface px-4 font-semibold text-ink-muted transition-colors hover:border-rim-strong hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:size-4 ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Notice({
+  tone,
+  icon,
+  children,
+}: {
+  tone: "info" | "danger";
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const rim = tone === "danger" ? "border-danger" : "border-rim";
+  const ink = tone === "danger" ? "text-danger" : "text-ink-subtle";
+  return (
+    <div className={`flex items-start gap-3 rounded-xl border ${rim} bg-surface p-3`}>
+      <span className={`mt-px flex-shrink-0 ${ink} [&_svg]:size-4`}>{icon}</span>
+      <div className="text-xs leading-relaxed text-ink-muted">{children}</div>
+    </div>
+  );
+}
+
 // ─── Upload Zone ─────────────────────────────────────────────────────────────
 
 function UploadZone({
@@ -111,14 +181,14 @@ function UploadZone({
   }, []);
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <div
-        className={`relative flex flex-col items-center justify-center rounded-2xl border-2 border-dashed cursor-pointer min-h-[320px] transition-all ${
+        className={`relative flex min-h-[320px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed transition-all ${
           dragging
-            ? "border-purple-500 bg-purple-50"
+            ? "border-accent bg-accent-soft"
             : preview
-            ? "border-slate-200 bg-slate-50"
-            : "border-slate-300 bg-slate-50 hover:border-purple-400 hover:bg-purple-50"
+            ? "border-rim bg-surface"
+            : "border-rim bg-surface hover:border-accent-rim"
         }`}
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
@@ -134,37 +204,42 @@ function UploadZone({
         />
         {preview ? (
           <>
-            <Image src={preview} alt="Your photo" fill className="object-contain rounded-2xl p-2" />
-            <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity rounded-2xl bg-black/40">
-              <div className="text-white text-center">
-                <p className="text-2xl mb-2">📷</p>
+            <Image src={preview} alt="Your photo" fill className="rounded-2xl object-contain p-2" />
+            <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/60 opacity-0 transition-opacity hover:opacity-100">
+              <div className="flex flex-col items-center gap-2 text-white">
+                <Camera className="size-6" />
                 <p className="text-sm font-medium">Click to change photo</p>
               </div>
             </div>
           </>
         ) : (
-          <div className="text-center p-8">
-            <div className="text-5xl mb-4">📤</div>
-            <p className="text-lg font-semibold text-slate-700 mb-2">Drop your photo here</p>
-            <p className="text-sm text-slate-500 mb-4">or click to browse</p>
-            <p className="text-xs text-slate-400">JPEG, PNG, or WebP · Large photos are resized automatically</p>
+          <div className="flex flex-col items-center gap-2 p-8 text-center">
+            <div className="mb-2 flex size-12 items-center justify-center rounded-full bg-accent-soft ring-1 ring-accent-rim">
+              <Upload className="size-5 text-accent" />
+            </div>
+            <p className="text-lg font-semibold text-ink">Drop your photo here</p>
+            <p className="text-sm text-ink-subtle">or click to browse</p>
+            <p className="text-xs text-ink-faint">
+              JPEG, PNG, or WebP · Large photos are resized automatically
+            </p>
           </div>
         )}
       </div>
 
       {error && (
-        <div className="flex items-start gap-3 rounded-lg bg-red-50 border border-red-200 p-3">
-          <span className="text-red-500 flex-shrink-0">⚠️</span>
-          <p className="text-sm text-red-700">{error}</p>
-        </div>
+        <Notice tone="danger" icon={<AlertTriangle />}>
+          {error}
+        </Notice>
       )}
 
-      <div className="rounded-lg bg-blue-50 border border-blue-100 p-3">
-        <p className="text-xs text-blue-700">
-          <strong>Tips for best results:</strong> Use a well-lit photo with a clear, forward-facing
-          subject. Avoid heavy shadows, blur, or very small subjects.
-        </p>
-      </div>
+      {/* The pipeline hard-rejects multi-subject photos. Say so here rather than
+          letting the customer discover it as a failed generation. */}
+      <Notice tone="info" icon={<UserRound />}>
+        <strong className="font-semibold text-ink">One subject per portrait.</strong>{" "}
+        A single person or a single pet — group photos of couples or families are
+        declined by the studio. Use a well-lit, forward-facing photo and avoid heavy
+        shadows, blur, or very small subjects.
+      </Notice>
     </div>
   );
 }
@@ -185,83 +260,86 @@ function StylePackSelector({
   onSelectVariant: (variant: StyleVariant) => void;
 }) {
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <div>
-        <h3 className="text-sm font-semibold text-slate-700 mb-3">Choose a Style Pack</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {packs.map((pack) => (
-            <button
-              key={pack.id}
-              onClick={() => { onSelectPack(pack); onSelectVariant(pack.variants[0]); }}
-              className={`relative rounded-xl overflow-hidden border-2 text-left transition-all ${
-                selectedPack?.id === pack.id
-                  ? "border-purple-500 shadow-md"
-                  : "border-slate-200 hover:border-slate-300"
-              }`}
-            >
-              <div className="aspect-square bg-slate-100 relative">
-                <Image
-                  src={pack.thumbnailUrl}
-                  alt={pack.name}
-                  fill
-                  className="object-cover"
-                  unoptimized
-                />
-                {pack.isPremium && (
-                  <div className="absolute top-1.5 right-1.5 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                    ✨ Pro
-                  </div>
-                )}
-                {selectedPack?.id === pack.id && (
-                  <div className="absolute inset-0 bg-purple-600/20 flex items-center justify-center">
-                    <span className="text-2xl drop-shadow">✅</span>
-                  </div>
-                )}
-              </div>
-              <div className="p-2">
-                <p className="text-xs font-semibold text-slate-800 truncate">{pack.name}</p>
-                <p className="text-[10px] text-slate-500 truncate">{pack.tagline}</p>
-              </div>
-            </button>
-          ))}
+        <h3 className="mb-3 text-sm font-semibold text-ink">Choose a Style Pack</h3>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {packs.map((pack) => {
+            const active = selectedPack?.id === pack.id;
+            return (
+              <button
+                key={pack.id}
+                onClick={() => { onSelectPack(pack); onSelectVariant(pack.variants[0]); }}
+                className={`relative overflow-hidden rounded-xl border text-left transition-all ${
+                  active
+                    ? "border-accent shadow-[0_12px_32px_-16px_var(--accent)]"
+                    : "border-rim hover:border-rim-strong"
+                }`}
+              >
+                <div className="relative aspect-square bg-surface-raised">
+                  <Image
+                    src={pack.thumbnailUrl}
+                    alt={pack.name}
+                    fill
+                    className="object-cover"
+                    unoptimized
+                  />
+                  {active && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-accent-soft">
+                      <span className="flex size-7 items-center justify-center rounded-full bg-accent text-white">
+                        <Check className="size-4" />
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="bg-surface p-2">
+                  <p className="truncate text-xs font-semibold text-ink">{pack.name}</p>
+                  <p className="truncate text-[10px] text-ink-subtle">{pack.tagline}</p>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {selectedPack && (
         <div>
-          <h3 className="text-sm font-semibold text-slate-700 mb-3">
+          <h3 className="mb-3 text-sm font-semibold text-ink">
             Choose a style within {selectedPack.name}
           </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {selectedPack.variants.map((variant) => (
-              <button
-                key={variant.id}
-                onClick={() => onSelectVariant(variant)}
-                className={`relative rounded-lg overflow-hidden border-2 text-left transition-all ${
-                  selectedVariant?.id === variant.id
-                    ? "border-purple-500 shadow-sm"
-                    : "border-slate-200 hover:border-slate-300"
-                }`}
-              >
-                <div className="aspect-square bg-slate-100 relative">
-                  <Image
-                    src={variant.sampleImageUrl}
-                    alt={variant.name}
-                    fill
-                    className="object-cover"
-                    unoptimized
-                  />
-                  {selectedVariant?.id === variant.id && (
-                    <div className="absolute inset-0 bg-purple-600/20 flex items-center justify-center">
-                      <span className="text-xl drop-shadow">✅</span>
-                    </div>
-                  )}
-                </div>
-                <div className="p-1.5">
-                  <p className="text-[11px] font-medium text-slate-800 truncate">{variant.name}</p>
-                </div>
-              </button>
-            ))}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {selectedPack.variants.map((variant) => {
+              const active = selectedVariant?.id === variant.id;
+              return (
+                <button
+                  key={variant.id}
+                  onClick={() => onSelectVariant(variant)}
+                  className={`relative overflow-hidden rounded-lg border text-left transition-all ${
+                    active ? "border-accent" : "border-rim hover:border-rim-strong"
+                  }`}
+                >
+                  <div className="relative aspect-square bg-surface-raised">
+                    <Image
+                      src={variant.sampleImageUrl}
+                      alt={variant.name}
+                      fill
+                      className="object-cover"
+                      unoptimized
+                    />
+                    {active && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-accent-soft">
+                        <span className="flex size-6 items-center justify-center rounded-full bg-accent text-white">
+                          <Check className="size-3.5" />
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="bg-surface p-1.5">
+                    <p className="truncate text-[11px] font-medium text-ink">{variant.name}</p>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -302,55 +380,50 @@ function PreviewSection({
 }) {
   if (isGenerating) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-6">
-        <div className="relative h-24 w-24">
-          <div className="h-24 w-24 rounded-full border-4 border-purple-100 border-t-purple-600 animate-spin" />
-          <span className="absolute inset-0 flex items-center justify-center text-2xl">✨</span>
+      <div className="flex min-h-[400px] flex-col items-center justify-center gap-6">
+        <div className="relative size-24">
+          <div className="size-24 animate-spin rounded-full border-4 border-rim border-t-accent" />
+          <span className="absolute inset-0 flex items-center justify-center">
+            <Sparkles className="size-6 text-accent" />
+          </span>
         </div>
         <div className="text-center">
-          <p className="text-lg font-semibold text-slate-900 mb-1">Creating your portrait…</p>
-          <p className="text-sm text-slate-500">{generationStep}</p>
+          <p className="mb-1 font-display text-xl text-ink">Creating your portrait…</p>
+          <p className="text-sm text-ink-subtle">{generationStep}</p>
         </div>
-        <div className="w-64 h-2 bg-slate-200 rounded-full overflow-hidden">
-          <div className="h-full bg-purple-600 rounded-full animate-pulse w-3/4" />
+        <div className="h-1.5 w-64 overflow-hidden rounded-full bg-surface-raised">
+          <div className="h-full w-3/4 animate-pulse rounded-full bg-gradient-to-r from-accent to-accent-2" />
         </div>
-        <p className="text-xs text-slate-400">This usually takes 15–30 seconds</p>
+        <p className="text-xs text-ink-faint">This usually takes 15–30 seconds</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
-        <div className="text-5xl">😕</div>
-        <div className="text-center max-w-sm">
-          <p className="text-lg font-semibold text-slate-900 mb-2">Generation failed</p>
-          <p className="text-sm text-slate-600">{error}</p>
+      <div className="flex min-h-[400px] flex-col items-center justify-center gap-5">
+        <div className="flex size-12 items-center justify-center rounded-full border border-danger">
+          <AlertTriangle className="size-5 text-danger" />
         </div>
-        <div className="flex flex-wrap gap-2 justify-center">
+        <div className="max-w-sm text-center">
+          <p className="mb-2 font-display text-xl text-ink">Generation failed</p>
+          <p className="text-sm text-ink-muted">{error}</p>
+        </div>
+        <div className="flex flex-wrap justify-center gap-2">
           {onRegenerate && (
-            <button
-              onClick={onRegenerate}
-              className="rounded-lg bg-purple-600 hover:bg-purple-700 px-4 py-2 text-sm text-white font-medium"
-            >
-              🔄 Try Again
-            </button>
+            <PrimaryButton onClick={onRegenerate} className="py-2 text-sm">
+              <RefreshCw /> Try Again
+            </PrimaryButton>
           )}
           {onChangeStyle && (
-            <button
-              onClick={onChangeStyle}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              🎨 Different Style
-            </button>
+            <QuietButton onClick={onChangeStyle} className="py-2 text-sm">
+              <Palette /> Different Style
+            </QuietButton>
           )}
           {onNewPhoto && (
-            <button
-              onClick={onNewPhoto}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              📷 New Photo
-            </button>
+            <QuietButton onClick={onNewPhoto} className="py-2 text-sm">
+              <Camera /> New Photo
+            </QuietButton>
           )}
         </div>
       </div>
@@ -359,98 +432,88 @@ function PreviewSection({
 
   if (previewUrl) {
     return (
-      <div className="space-y-6">
-        <div className="relative rounded-2xl overflow-hidden shadow-xl">
-          <Image src={previewUrl} alt="Your portrait preview" width={800} height={800} className="w-full" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-          <div className="absolute bottom-4 left-4 right-4 text-center">
-            <div className="inline-flex items-center gap-2 rounded-full bg-black/60 px-4 py-2 text-sm text-white">
-              🔒 Watermarked preview — purchase to unlock full resolution
+      <div className="flex flex-col gap-6">
+        <div className="artframe relative">
+          <Image
+            src={previewUrl}
+            alt="Your portrait preview"
+            width={800}
+            height={800}
+            className="w-full"
+          />
+          <div className="absolute inset-x-4 bottom-4 z-10 text-center">
+            <div className="inline-flex items-center gap-2 rounded-full bg-black/70 px-4 py-2 text-xs text-white backdrop-blur">
+              <Lock className="size-3.5" />
+              Watermarked preview — purchase to unlock full resolution
             </div>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap gap-2 justify-center">
+        <div className="flex flex-wrap justify-center gap-2">
           {onRegenerate && (
-            <button
-              onClick={onRegenerate}
-              className="rounded-lg bg-slate-100 hover:bg-slate-200 px-4 py-2 text-sm text-slate-700 font-medium transition-colors flex items-center gap-1.5"
-            >
-              🔄 Regenerate
-            </button>
+            <QuietButton onClick={onRegenerate} className="py-2 text-sm">
+              <RefreshCw /> Regenerate
+            </QuietButton>
           )}
           {onChangeStyle && (
-            <button
-              onClick={onChangeStyle}
-              className="rounded-lg bg-slate-100 hover:bg-slate-200 px-4 py-2 text-sm text-slate-700 font-medium transition-colors flex items-center gap-1.5"
-            >
-              🎨 Change Style
-            </button>
+            <QuietButton onClick={onChangeStyle} className="py-2 text-sm">
+              <Palette /> Change Style
+            </QuietButton>
           )}
           {onNewPhoto && (
-            <button
-              onClick={onNewPhoto}
-              className="rounded-lg bg-slate-100 hover:bg-slate-200 px-4 py-2 text-sm text-slate-700 font-medium transition-colors flex items-center gap-1.5"
-            >
-              📷 New Photo
-            </button>
+            <QuietButton onClick={onNewPhoto} className="py-2 text-sm">
+              <Camera /> New Photo
+            </QuietButton>
           )}
           {onSaveToAccount && (
-            <button
+            <QuietButton
               onClick={onSaveToAccount}
               disabled={isSaved || isSaving}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors flex items-center gap-1.5 ${
-                isSaved
-                  ? "bg-green-100 text-green-700 cursor-default"
-                  : isSaving
-                  ? "bg-slate-100 text-slate-400 cursor-wait"
-                  : isAuthenticated
-                  ? "bg-blue-100 hover:bg-blue-200 text-blue-700"
-                  : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-              }`}
+              className={`py-2 text-sm ${isSaved ? "!text-positive" : ""}`}
             >
               {isSaving ? (
-                <>⟳ Saving...</>
+                <><Loader2 className="animate-spin" /> Saving…</>
               ) : isSaved ? (
-                <>✅ Saved</>
+                <><Check /> Saved</>
               ) : isAuthenticated ? (
-                <>💾 Save to Account</>
+                <><Download /> Save to Account</>
               ) : (
-                <>🔐 Sign In to Save</>
+                <><LogIn /> Sign In to Save</>
               )}
-            </button>
+            </QuietButton>
           )}
         </div>
         {saveError && (
-          <p className="text-center text-sm text-red-600 bg-red-50 rounded-lg px-4 py-2">
+          <Notice tone="danger" icon={<AlertTriangle />}>
             {saveError}
-          </p>
+          </Notice>
         )}
-        <p className="text-center text-xs text-slate-400">
+        <p className="text-center text-xs text-ink-faint">
           Regenerate for a different version · Change style or photo to start fresh
         </p>
 
-        <div className="rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-100 p-6">
-          <h3 className="text-lg font-bold text-slate-900 mb-1">Love your portrait?</h3>
-          <p className="text-sm text-slate-600 mb-4">
-            Purchase to remove the watermark and get full 4K resolution — delivered instantly to your email.
+        <div className="rounded-2xl border border-accent-rim bg-surface p-6">
+          <h3 className="mb-1 font-display text-xl text-ink">Love your portrait?</h3>
+          <p className="mb-4 text-sm text-ink-muted">
+            Purchase to remove the watermark and get full 4K resolution — delivered
+            instantly to your email.
           </p>
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row">
             <Link
               href={`/portraits/${portraitId}/preview`}
-              className="flex-1 text-center rounded-xl bg-purple-600 hover:bg-purple-700 text-white px-4 py-3 font-semibold text-sm transition-colors"
+              className="flex-1 rounded-xl bg-gradient-to-r from-accent to-accent-2 px-4 py-3 text-center text-sm font-semibold text-white transition-all hover:brightness-110"
             >
-              ⬇️ Purchase Digital — $29.95
+              Purchase Digital — $29.95
             </Link>
             <Link
               href={`/portraits/${portraitId}/preview`}
-              className="flex-1 text-center rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 px-4 py-3 font-semibold text-sm transition-colors"
+              className="flex-1 rounded-xl border border-rim px-4 py-3 text-center text-sm font-semibold text-ink-muted transition-colors hover:border-rim-strong hover:text-ink"
             >
               See All Options
             </Link>
           </div>
-          <p className="text-xs text-slate-400 mt-3 text-center">
+          <p className="mt-3 text-center text-xs text-ink-faint">
             No account required · Secure checkout · Instant delivery
           </p>
         </div>
@@ -464,26 +527,33 @@ function PreviewSection({
 // ─── Step indicator ─────────────────────────────────────────────────────────
 
 function StepIndicator({ current }: { current: Step }) {
-  const steps: Array<{ id: Step; label: string; icon: string }> = [
-    { id: "upload", label: "Upload", icon: "📷" },
-    { id: "style", label: "Style", icon: "🎨" },
-    { id: "generate", label: "Preview", icon: "✨" },
+  const steps: Array<{ id: Step; label: string; icon: typeof Camera }> = [
+    { id: "upload", label: "Upload", icon: Camera },
+    { id: "style", label: "Style", icon: Palette },
+    { id: "generate", label: "Preview", icon: Sparkles },
   ];
   const idx = steps.findIndex((s) => s.id === current);
 
   return (
-    <div className="flex items-center gap-2 flex-1">
+    <div className="flex flex-1 items-center gap-2">
       {steps.map((step, i) => {
         const done = i < idx;
         const active = i === idx;
+        const Icon = done ? Check : step.icon;
         return (
-          <div key={step.id} className="flex items-center gap-2 flex-1">
-            <div className={`flex items-center gap-1.5 ${active ? "text-purple-600" : done ? "text-green-600" : "text-slate-400"}`}>
-              <span className="text-base">{done ? "✅" : step.icon}</span>
-              <span className="text-xs font-medium hidden sm:block">{step.label}</span>
+          <div key={step.id} className="flex flex-1 items-center gap-2">
+            <div
+              className={`flex items-center gap-1.5 ${
+                active ? "text-accent" : done ? "text-positive" : "text-ink-faint"
+              }`}
+            >
+              <Icon className="size-4" />
+              <span className="hidden text-xs font-medium sm:block">{step.label}</span>
             </div>
             {i < steps.length - 1 && (
-              <div className={`flex-1 h-0.5 rounded ${done ? "bg-green-400" : "bg-slate-200"}`} />
+              <div
+                className={`h-px flex-1 rounded ${done ? "bg-positive" : "bg-rim"}`}
+              />
             )}
           </div>
         );
@@ -497,7 +567,7 @@ function StepIndicator({ current }: { current: Step }) {
 function CreatePortraitContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isSignedIn, userId } = useAuth();
+  const { isSignedIn } = useAuth();
 
   const [step, setStep] = useState<Step>("upload");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -508,6 +578,7 @@ function CreatePortraitContent() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [stylePacks, setStylePacks] = useState<StylePack[]>([]);
   const [packsLoading, setPacksLoading] = useState(false);
+  const [packsError, setPacksError] = useState<string | null>(null);
   const [selectedPack, setSelectedPack] = useState<StylePack | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<StyleVariant | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -519,6 +590,41 @@ function CreatePortraitContent() {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const stepIdx = step === "upload" ? 0 : step === "style" ? 1 : 2;
+
+  /**
+   * Load the style catalog.
+   *
+   * Every exit surfaces: an empty catalog used to leave `stylePacks` as `[]`
+   * with no error, which is what produced a "Choose a Style Pack" heading over
+   * an empty grid — and left `handleRetry` selecting from an empty array.
+   */
+  const loadStylePacks = useCallback(async () => {
+    setPacksLoading(true);
+    setPacksError(null);
+    try {
+      const packsRes = await fetch("/api/portraits/style-packs");
+      const packsData = await packsRes.json().catch(() => ({}));
+
+      if (!packsRes.ok || !packsData.success) {
+        setPacksError(
+          packsData.error || `We couldn't load the style catalog (HTTP ${packsRes.status}).`
+        );
+        return;
+      }
+      if (!packsData.stylePacks?.length) {
+        setPacksError("No styles are available right now. Please try again shortly.");
+        return;
+      }
+
+      setStylePacks(packsData.stylePacks);
+      setSelectedPack(packsData.stylePacks[0]);
+      setSelectedVariant(packsData.stylePacks[0].variants[0] || null);
+    } catch {
+      setPacksError("Network error loading styles. Please check your connection and try again.");
+    } finally {
+      setPacksLoading(false);
+    }
+  }, []);
 
   // Restore session state from sessionStorage on mount
   useEffect(() => {
@@ -533,14 +639,16 @@ function CreatePortraitContent() {
       setPreviewUrl(savedPreviewUrl);
       setPhotoPreview(savedSourceUrl);
       setStep("generate");
+      // Restoring straight to the preview still needs the catalog: "Change Style"
+      // and "Regenerate" both read from it.
+      loadStylePacks();
     } else if (savedPortraitId && savedSourceUrl) {
       setPortraitId(savedPortraitId);
       setSessionId(savedSessionId);
       setPhotoPreview(savedSourceUrl);
-      // Load style packs and go to style step
       loadStylePacks().then(() => setStep("style"));
     }
-  }, [searchParams]);
+  }, [searchParams, loadStylePacks]);
 
   // Save session state to sessionStorage when it changes
   useEffect(() => {
@@ -550,22 +658,6 @@ function CreatePortraitContent() {
     if (photoPreview) sessionStorage.setItem("ic_sourceUrl", photoPreview);
   }, [portraitId, sessionId, previewUrl, photoPreview]);
 
-  // Helper to load style packs
-  const loadStylePacks = async () => {
-    setPacksLoading(true);
-    try {
-      const packsRes = await fetch("/api/portraits/style-packs");
-      const packsData = await packsRes.json();
-      if (packsData.success && packsData.stylePacks.length > 0) {
-        setStylePacks(packsData.stylePacks);
-        setSelectedPack(packsData.stylePacks[0]);
-        setSelectedVariant(packsData.stylePacks[0].variants[0] || null);
-      }
-    } finally {
-      setPacksLoading(false);
-    }
-  };
-
   // Handle retry/change style - go back to style selection, keep the uploaded photo
   // Clears preview URL so regeneration creates a fresh version
   const handleRetry = () => {
@@ -573,10 +665,14 @@ function CreatePortraitContent() {
     setPreviewUrl(null);
     setIsSaved(false);
     sessionStorage.removeItem("ic_previewUrl");
-    // Reset selected style to force user to pick again
-    setSelectedPack(stylePacks[0] || null);
-    setSelectedVariant(stylePacks[0]?.variants[0] || null);
     setStep("style");
+    if (stylePacks.length === 0) {
+      loadStylePacks();
+      return;
+    }
+    // Reset selected style to force user to pick again
+    setSelectedPack(stylePacks[0]);
+    setSelectedVariant(stylePacks[0].variants[0] || null);
   };
 
   // Clear all session data and start fresh
@@ -774,62 +870,95 @@ function CreatePortraitContent() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Progress header */}
-      <div className="sticky top-0 z-10 bg-white border-b border-slate-200">
-        <div className="mx-auto max-w-2xl px-4 py-4">
-          <div className="flex items-center justify-between mb-3">
-            <Link href="/portraits" className="text-sm text-slate-500 hover:text-slate-700">
-              ← Style Gallery
-            </Link>
-            <span className="text-sm font-medium text-slate-600">Step {stepIdx + 1} of 3</span>
-          </div>
+    <div className="flex min-h-screen flex-col bg-canvas">
+      <SiteHeader
+        cta={
+          <span className="text-xs font-medium tabular-nums text-ink-subtle">
+            Step {stepIdx + 1} of 3
+          </span>
+        }
+      />
+
+      {/* Progress rail — sits directly under the fixed site chrome */}
+      <div
+        className="chrome-veil sticky z-40 border-b border-rim"
+        style={{ top: CHROME_OFFSET, marginTop: CHROME_OFFSET }}
+      >
+        <div className="mx-auto flex max-w-2xl items-center gap-4 px-6 py-3">
+          <Link
+            href="/portraits"
+            className="flex items-center gap-1.5 text-xs text-ink-subtle transition-colors hover:text-ink"
+          >
+            <ArrowLeft className="size-3.5" />
+            <span className="hidden sm:inline">Style Gallery</span>
+          </Link>
           <StepIndicator current={step} />
         </div>
       </div>
 
       {/* Content */}
-      <div className="mx-auto max-w-2xl px-4 py-8">
+      <div className="mx-auto w-full max-w-2xl flex-1 px-6 py-10">
         {/* Step 1: Upload */}
         {step === "upload" && (
-          <div className="space-y-6">
+          <div className="flex flex-col gap-6">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 mb-1">Upload your photo</h1>
-              <p className="text-slate-600">Choose a clear photo of your subject — pet, person, couple, or family.</p>
+              <h1 className="mb-1 font-display text-3xl tracking-tight text-ink">
+                Upload your photo
+              </h1>
+              <p className="text-sm text-ink-muted">
+                One clear photo of your subject. We&apos;ll paint them into the era you choose.
+              </p>
             </div>
             <UploadZone onFile={handlePickPhoto} preview={photoPreview} error={uploadError} />
-            <button
-              className="w-full rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-4 text-base transition-colors flex items-center justify-center gap-2"
+            <PrimaryButton
+              className="w-full py-4 text-base"
               onClick={handleUploadAndContinue}
               disabled={!photoFile || isUploading}
             >
               {isUploading ? (
-                <><span className="animate-spin">⟳</span> Uploading…</>
+                <><Loader2 className="animate-spin" /> Uploading…</>
               ) : (
-                <>Continue to Style Selection →</>
+                <>Continue to Style Selection <ArrowRight /></>
               )}
-            </button>
+            </PrimaryButton>
           </div>
         )}
 
         {/* Step 2: Style */}
         {step === "style" && (
-          <div className="space-y-6">
+          <div className="flex flex-col gap-6">
             <div className="flex items-start gap-4">
               {photoPreview && (
-                <div className="relative h-16 w-16 rounded-lg overflow-hidden flex-shrink-0 border border-slate-200">
+                <div className="relative size-16 flex-shrink-0 overflow-hidden rounded-lg border border-rim">
                   <Image src={photoPreview} alt="Your photo" fill className="object-cover" />
                 </div>
               )}
               <div>
-                <h1 className="text-2xl font-bold text-slate-900 mb-1">Choose your style</h1>
-                <p className="text-slate-600">Select a style pack, then a specific style variant.</p>
+                <h1 className="mb-1 font-display text-3xl tracking-tight text-ink">
+                  Choose your style
+                </h1>
+                <p className="text-sm text-ink-muted">
+                  Select a style pack, then a specific style within it.
+                </p>
               </div>
             </div>
 
             {packsLoading ? (
               <div className="flex items-center justify-center py-16">
-                <div className="h-8 w-8 rounded-full border-4 border-purple-100 border-t-purple-600 animate-spin" />
+                <Loader2 className="size-8 animate-spin text-accent" />
+              </div>
+            ) : packsError ? (
+              <div className="flex flex-col items-center gap-4 rounded-2xl border border-rim bg-surface py-14 text-center">
+                <div className="flex size-11 items-center justify-center rounded-full border border-danger">
+                  <AlertTriangle className="size-5 text-danger" />
+                </div>
+                <div className="max-w-xs">
+                  <p className="mb-1 font-semibold text-ink">Styles didn&apos;t load</p>
+                  <p className="text-sm text-ink-muted">{packsError}</p>
+                </div>
+                <QuietButton onClick={loadStylePacks} className="py-2 text-sm">
+                  <RefreshCw /> Retry
+                </QuietButton>
               </div>
             ) : (
               <StylePackSelector
@@ -842,31 +971,34 @@ function CreatePortraitContent() {
             )}
 
             <div className="flex gap-3">
-              <button
-                onClick={() => setStep("upload")}
-                className="flex-1 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold py-3 text-sm transition-colors"
-              >
-                ← Change Photo
-              </button>
-              <button
+              <QuietButton onClick={() => setStep("upload")} className="flex-1 py-3 text-sm">
+                <ArrowLeft /> Change Photo
+              </QuietButton>
+              <PrimaryButton
                 onClick={handleGenerate}
                 disabled={!selectedPack || !selectedVariant}
-                className="flex-1 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 text-sm transition-colors"
+                className="flex-1 py-3 text-sm"
               >
-                ✨ Generate Portrait
-              </button>
+                <Sparkles /> Generate Portrait
+              </PrimaryButton>
             </div>
-            <p className="text-center text-xs text-slate-400">Free watermarked preview. Purchase to unlock full resolution.</p>
+            <p className="text-center text-xs text-ink-faint">
+              Free watermarked preview. Purchase to unlock full resolution.
+            </p>
           </div>
         )}
 
         {/* Step 3: Generate/Preview */}
         {step === "generate" && (
-          <div className="space-y-6">
+          <div className="flex flex-col gap-6">
             {!isGenerating && !generationError && previewUrl && (
               <div>
-                <h1 className="text-2xl font-bold text-slate-900 mb-1">Your portrait is ready!</h1>
-                <p className="text-slate-600">Purchase to download the full-resolution version without the watermark.</p>
+                <h1 className="mb-1 font-display text-3xl tracking-tight text-ink">
+                  Your portrait is ready
+                </h1>
+                <p className="text-sm text-ink-muted">
+                  Purchase to download the full-resolution version without the watermark.
+                </p>
               </div>
             )}
             <PreviewSection
@@ -887,6 +1019,8 @@ function CreatePortraitContent() {
           </div>
         )}
       </div>
+
+      <SiteFooter />
     </div>
   );
 }
@@ -895,8 +1029,8 @@ function CreatePortraitContent() {
 export default function CreatePortraitPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="h-12 w-12 rounded-full border-4 border-purple-100 border-t-purple-600 animate-spin" />
+      <div className="flex min-h-screen items-center justify-center bg-canvas">
+        <Loader2 className="size-10 animate-spin text-accent" />
       </div>
     }>
       <CreatePortraitContent />

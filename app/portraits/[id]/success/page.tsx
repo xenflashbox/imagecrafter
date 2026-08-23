@@ -15,11 +15,21 @@ import { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
+import {
+  ArrowLeft,
+  Camera,
+  CheckCircle2,
+  Download,
+  Printer,
+  RefreshCw,
+  Ticket,
+} from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { auth } from "@clerk/nextjs/server";
 import { buildDownloadUrl } from "@/lib/services/download-token";
 import { CreditPackCards } from "@/components/credit-pack-cards";
+import { SiteHeader, SiteFooter } from "@/components/site-chrome";
 
 export const metadata: Metadata = {
   title: "Order Confirmed — ImageCrafter Portrait Studio",
@@ -32,6 +42,10 @@ const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
 interface Props {
   params: Promise<{ id: string }>;
   searchParams: Promise<{ orderId?: string; session_id?: string }>;
+}
+
+function Panel({ children }: { children: React.ReactNode }) {
+  return <div className="rounded-2xl border border-rim bg-surface p-6">{children}</div>;
 }
 
 export default async function PortraitSuccessPage({ params, searchParams }: Props) {
@@ -131,18 +145,17 @@ export default async function PortraitSuccessPage({ params, searchParams }: Prop
     : null;
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-purple-950 via-gray-950 to-gray-950 text-white py-16 px-4">
-      <div className="max-w-2xl mx-auto">
+    <div className="flex min-h-screen flex-col bg-canvas text-ink">
+      <SiteHeader links={false} />
 
-        {/* ---------------------------------------------------------------- */}
-        {/* SUCCESS HEADER */}
-        {/* ---------------------------------------------------------------- */}
-        <div className="text-center mb-10">
+      <div className="mx-auto w-full max-w-2xl flex-1 px-6 pt-28 pb-16">
+        {/* Header */}
+        <div className="mb-10 text-center">
           {isPaid ? (
             <>
-              <div className="text-6xl mb-4">🎉</div>
-              <h1 className="text-3xl font-bold text-white mb-2">Payment confirmed!</h1>
-              <p className="text-purple-200 text-lg">
+              <CheckCircle2 className="mx-auto mb-5 size-12 text-positive" />
+              <h1 className="font-display mb-2 text-3xl font-light">Payment confirmed</h1>
+              <p className="text-ink-muted">
                 {isDigital
                   ? "Your high-resolution portrait is ready to download."
                   : "Your museum-quality print is on its way to production."}
@@ -150,27 +163,24 @@ export default async function PortraitSuccessPage({ params, searchParams }: Prop
             </>
           ) : (
             <>
-              <div className="text-5xl mb-4 animate-spin">⏳</div>
-              <h1 className="text-3xl font-bold text-white mb-2">Processing your order…</h1>
-              <p className="text-purple-200">
+              <div className="mx-auto mb-6 size-12 animate-spin rounded-full border-4 border-rim border-t-accent" />
+              <h1 className="font-display mb-2 text-3xl font-light">Processing your order…</h1>
+              <p className="text-ink-muted">
                 This usually takes just a moment. Please refresh in a few seconds.
               </p>
               <a
                 href={`/portraits/${portraitId}/success?orderId=${orderId}`}
-                className="inline-block mt-4 px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm font-medium transition-colors"
+                className="mt-6 inline-flex items-center gap-2 rounded-xl border border-rim px-6 py-2.5 text-sm font-medium transition-colors hover:border-rim-strong [&_svg]:size-4"
               >
-                Refresh
+                <RefreshCw /> Refresh
               </a>
             </>
           )}
         </div>
 
-        {/* ---------------------------------------------------------------- */}
-        {/* PORTRAIT PREVIEW */}
-        {/* ---------------------------------------------------------------- */}
-        {order.portrait?.previewImageUrl && (
-          <div className="rounded-2xl overflow-hidden mb-8 border border-white/10 shadow-2xl">
-            <div className="relative aspect-square">
+        <div className="flex flex-col gap-6">
+          {order.portrait?.previewImageUrl && (
+            <div className="artframe relative aspect-square bg-surface">
               <Image
                 src={order.portrait.previewImageUrl}
                 alt="Your portrait"
@@ -180,150 +190,159 @@ export default async function PortraitSuccessPage({ params, searchParams }: Prop
                 priority
               />
             </div>
-          </div>
-        )}
+          )}
 
-        {/* ---------------------------------------------------------------- */}
-        {/* ORDER SUMMARY CARD */}
-        {/* ---------------------------------------------------------------- */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
-          <h2 className="font-semibold text-white mb-4 text-lg">Order summary</h2>
-          <dl className="space-y-3 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-gray-400">Style</dt>
-              <dd className="text-white capitalize">{stylePackLabel} — {styleVariantLabel}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-gray-400">Type</dt>
-              <dd className="text-white">{isDigital ? "Digital Download" : `Fine Art Print (${order.printSize || "Custom"})`}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-gray-400">Amount</dt>
-              <dd className="text-white font-semibold">{amountFormatted}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-gray-400">Order ref</dt>
-              <dd className="text-white font-mono text-xs">{orderId.slice(0, 8).toUpperCase()}</dd>
-            </div>
-          </dl>
-        </div>
-
-        {/* ---------------------------------------------------------------- */}
-        {/* DIGITAL DOWNLOAD */}
-        {/* ---------------------------------------------------------------- */}
-        {isDigital && isPaid && (
-          <div className="mb-6">
-            {downloadUrl && !downloadExpired ? (
-              <div className="bg-gradient-to-br from-purple-900/60 to-pink-900/60 border border-purple-500/30 rounded-2xl p-6 text-center">
-                <p className="text-purple-200 text-sm mb-4">
-                  Full 4K resolution · No watermark · {downloadsRemaining} download{downloadsRemaining !== 1 ? "s" : ""} remaining
-                  {expiryDate ? ` · Expires ${expiryDate}` : ""}
-                </p>
-                <a
-                  href={downloadUrl}
-                  className="inline-block px-10 py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-xl font-bold text-lg text-white transition-all transform hover:scale-105 shadow-lg"
-                >
-                  ⬇️ Download Your Portrait
-                </a>
-                <p className="text-xs text-gray-500 mt-4">
-                  A download link was also sent to {order.email}
-                </p>
+          {/* Order summary */}
+          <Panel>
+            <h2 className="mb-4 text-lg font-semibold">Order summary</h2>
+            <dl className="flex flex-col gap-3 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-ink-muted">Style</dt>
+                <dd className="capitalize">
+                  {stylePackLabel} — {styleVariantLabel}
+                </dd>
               </div>
-            ) : downloadExpired ? (
-              <div className="bg-red-900/30 border border-red-500/30 rounded-2xl p-6 text-center">
-                <p className="text-red-300 mb-2 font-semibold">Download link expired</p>
-                <p className="text-gray-400 text-sm">
-                  Your download link has expired (72-hour limit). Please{" "}
-                  <Link href="/contact" className="text-purple-400 underline">
-                    contact support
-                  </Link>{" "}
-                  to request a new link.
-                </p>
+              <div className="flex justify-between gap-4">
+                <dt className="text-ink-muted">Type</dt>
+                <dd>
+                  {isDigital
+                    ? "Digital Download"
+                    : `Fine Art Print (${order.printSize || "Custom"})`}
+                </dd>
               </div>
-            ) : (
-              <div className="bg-yellow-900/30 border border-yellow-500/30 rounded-2xl p-6 text-center">
-                <p className="text-yellow-300 mb-2 font-semibold">Download limit reached</p>
-                <p className="text-gray-400 text-sm">
-                  You've downloaded this portrait the maximum number of times.
-                </p>
+              <div className="flex justify-between gap-4">
+                <dt className="text-ink-muted">Amount</dt>
+                <dd className="font-semibold">{amountFormatted}</dd>
               </div>
-            )}
-          </div>
-        )}
+              <div className="flex justify-between gap-4">
+                <dt className="text-ink-muted">Order ref</dt>
+                <dd className="font-mono text-xs">{orderId.slice(0, 8).toUpperCase()}</dd>
+              </div>
+            </dl>
+          </Panel>
 
-        {/* ---------------------------------------------------------------- */}
-        {/* PRINT ORDER STATUS */}
-        {/* ---------------------------------------------------------------- */}
-        {isPrint && isPaid && (
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
-            <h2 className="font-semibold text-white mb-4 text-lg flex items-center gap-2">
-              🖼️ Print Status
-            </h2>
-
-            {order.prodigiStatus ? (
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Fulfillment status</span>
-                  <span className="text-white capitalize">{order.prodigiStatus}</span>
+          {/* Digital download */}
+          {isDigital && isPaid && (
+            <>
+              {downloadUrl && !downloadExpired ? (
+                <div className="rounded-2xl border border-accent-rim bg-surface p-6 text-center">
+                  <p className="mb-5 text-sm text-ink-muted">
+                    Full 4K resolution · No watermark · {downloadsRemaining} download
+                    {downloadsRemaining !== 1 ? "s" : ""} remaining
+                    {expiryDate ? ` · Expires ${expiryDate}` : ""}
+                  </p>
+                  <a
+                    href={downloadUrl}
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-accent to-accent-2 px-10 py-4 text-base font-semibold transition-all hover:brightness-110 [&_svg]:size-5"
+                  >
+                    <Download /> Download Your Portrait
+                  </a>
+                  <p className="mt-4 text-xs text-ink-faint">
+                    A download link was also sent to {order.email}
+                  </p>
                 </div>
-                {order.trackingNumber && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Tracking</span>
-                    {order.trackingUrl ? (
-                      <a href={order.trackingUrl} className="text-purple-400 underline" target="_blank" rel="noopener noreferrer">
-                        {order.trackingNumber}
-                      </a>
-                    ) : (
-                      <span className="text-white font-mono text-xs">{order.trackingNumber}</span>
-                    )}
+              ) : downloadExpired ? (
+                <Panel>
+                  <p className="mb-2 font-semibold text-danger">Download link expired</p>
+                  <p className="text-sm text-ink-muted">
+                    Your download link has expired (72-hour limit). Please{" "}
+                    <Link href="/contact" className="text-accent underline">
+                      contact support
+                    </Link>{" "}
+                    to request a new link.
+                  </p>
+                </Panel>
+              ) : (
+                <Panel>
+                  <p className="mb-2 font-semibold text-warning">Download limit reached</p>
+                  <p className="text-sm text-ink-muted">
+                    You have downloaded this portrait the maximum number of times.
+                  </p>
+                </Panel>
+              )}
+            </>
+          )}
+
+          {/* Print status */}
+          {isPrint && isPaid && (
+            <Panel>
+              <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold [&_svg]:size-5">
+                <Printer className="text-accent" /> Print status
+              </h2>
+
+              {order.prodigiStatus ? (
+                <div className="flex flex-col gap-3 text-sm">
+                  <div className="flex justify-between gap-4">
+                    <span className="text-ink-muted">Fulfillment status</span>
+                    <span className="capitalize">{order.prodigiStatus}</span>
                   </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center gap-3 text-sm text-gray-400">
-                <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
-                <span>In production — you'll receive a shipping email with tracking when it dispatches.</span>
-              </div>
-            )}
+                  {order.trackingNumber && (
+                    <div className="flex justify-between gap-4">
+                      <span className="text-ink-muted">Tracking</span>
+                      {order.trackingUrl ? (
+                        <a
+                          href={order.trackingUrl}
+                          className="text-accent underline"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {order.trackingNumber}
+                        </a>
+                      ) : (
+                        <span className="font-mono text-xs">{order.trackingNumber}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 text-sm text-ink-muted">
+                  <div className="size-2 animate-pulse rounded-full bg-warning" />
+                  <span>
+                    In production — you&apos;ll receive a shipping email with tracking when it
+                    dispatches.
+                  </span>
+                </div>
+              )}
 
-            <p className="text-xs text-gray-500 mt-4">
-              Confirmation sent to {order.email} · Estimated delivery: 5–10 business days
-            </p>
+              <p className="mt-4 text-xs text-ink-faint">
+                Confirmation sent to {order.email} · Estimated delivery: 5–10 business days
+              </p>
+            </Panel>
+          )}
+
+          {/* Credit pack upsell */}
+          {isPaid && (
+            <Panel>
+              <h2 className="mb-1 flex items-center gap-2 text-lg font-semibold [&_svg]:size-5">
+                <Ticket className="text-accent" /> Making more portraits?
+              </h2>
+              <p className="mb-5 text-sm text-ink-muted">
+                Grab a credit pack and redeem future portraits as digital downloads — credits
+                never expire.
+              </p>
+              <CreditPackCards theme="dark" />
+            </Panel>
+          )}
+
+          {/* Next steps */}
+          <div className="mt-2 flex flex-col gap-4 sm:flex-row">
+            <Link
+              href="/portraits/create"
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-rim bg-surface px-6 py-3 font-medium transition-colors hover:border-rim-strong [&_svg]:size-4"
+            >
+              <Camera /> Create another portrait
+            </Link>
+            <Link
+              href="/portraits"
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-rim bg-surface px-6 py-3 font-medium transition-colors hover:border-rim-strong [&_svg]:size-4"
+            >
+              <ArrowLeft /> Back to Portrait Studio
+            </Link>
           </div>
-        )}
-
-        {/* ---------------------------------------------------------------- */}
-        {/* CREDIT PACK UPSELL */}
-        {/* ---------------------------------------------------------------- */}
-        {isPaid && (
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
-            <h2 className="font-semibold text-white mb-1 text-lg">🎟️ Making more portraits?</h2>
-            <p className="text-sm text-gray-400 mb-5">
-              Grab a credit pack and redeem future portraits as digital downloads —
-              credits never expire.
-            </p>
-            <CreditPackCards theme="dark" />
-          </div>
-        )}
-
-        {/* ---------------------------------------------------------------- */}
-        {/* NEXT STEPS */}
-        {/* ---------------------------------------------------------------- */}
-        <div className="flex flex-col sm:flex-row gap-4 mt-8">
-          <Link
-            href="/portraits/create"
-            className="flex-1 text-center py-3 px-6 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl font-medium transition-colors"
-          >
-            🎨 Create another portrait
-          </Link>
-          <Link
-            href="/portraits"
-            className="flex-1 text-center py-3 px-6 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl font-medium transition-colors"
-          >
-            ← Back to Portrait Studio
-          </Link>
         </div>
       </div>
-    </main>
+
+      <SiteFooter />
+    </div>
   );
 }
