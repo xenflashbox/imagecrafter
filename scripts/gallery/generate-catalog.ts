@@ -147,13 +147,25 @@ async function main(): Promise<void> {
       let swapAttempts = 1;
       console.log(`  swap 1: identity=${verdict.identity} style=${verdict.style} ip=${verdict.ip}`);
 
+      // Rank so a retry can only ever replace a weaker attempt. Keeping the LAST
+      // attempt instead of the BEST silently threw away good swaps.
+      const rank = (v: typeof verdict) =>
+        v.ip !== "clean" ? -1 : v.pass ? 3 : v.identity === "same" ? 2 : 1;
+
       for (let attempt = 2; attempt <= MAX_SWAP_ATTEMPTS && !verdict.pass; attempt++) {
         const retry = await swapFaceIntoScene({ photoUrl: photoDataUri, sceneUrl, subjectKind, subjectAge });
         if (!retry.success || !retry.imageUrl) continue;
         swapAttempts = attempt;
-        swap = retry;
-        verdict = await assess(retry.imageUrl);
-        console.log(`  swap ${attempt}: identity=${verdict.identity} style=${verdict.style} ip=${verdict.ip}`);
+        const retryVerdict = await assess(retry.imageUrl);
+        console.log(
+          `  swap ${attempt}: identity=${retryVerdict.identity} style=${retryVerdict.style} ip=${retryVerdict.ip}`
+        );
+        if (rank(retryVerdict) > rank(verdict)) {
+          swap = retry;
+          verdict = retryVerdict;
+        } else {
+          console.log(`  swap ${attempt} not better than swap 1 — keeping the earlier one`);
+        }
       }
 
       const res = await fetch(swap.imageUrl!);
