@@ -627,6 +627,32 @@ Reply with one short sentence giving your reason, then on a new line exactly one
 
 export type StandInFidelity = "match" | "mismatch" | "unknown";
 
+const PET_FIDELITY_PROMPT = `Image 1 is a real photo of an animal. Image 2 is a stylized rendering of a stand-in animal meant to share that animal's physical traits (it is deliberately NOT the same individual, so do not judge identity or expression).
+
+Report each trait for image 1 then image 2, using ONE label from its list each time. Judge colour from the mid-tones and shadows, never from a bright highlight.
+
+SPECIES: cat / dog / other
+COAT COLOUR: black / grey / blue-grey / brown / chocolate / red / orange / cream / fawn / golden / white
+COAT PATTERN: solid / tabby-striped / tabby-marbled / brindle / spotted / bicolour / tricolour / merle / pointed
+WHITE MARKINGS: none / chin or muzzle only / chest bib / face blaze / paws or legs / extensive
+COAT LENGTH: hairless / short / medium / long
+EYE COLOUR: copper / amber / gold / green / hazel / brown / blue
+
+Answer on six lines like "COAT COLOUR: orange -> orange".
+
+Then apply these rules:
+- MISMATCH if SPECIES differs at all.
+- MISMATCH if COAT PATTERN differs at all, except that solid and tabby-marbled read alike under heavy stylisation — treat that one pair as tolerable.
+- MISMATCH if COAT COLOUR differs by more than one neighbouring label (red/orange/golden are neighbours; grey/blue-grey are neighbours; black vs white is a mismatch).
+- MISMATCH if WHITE MARKINGS jump more than one step (none vs chest bib is tolerable; none vs extensive is not).
+- MISMATCH if COAT LENGTH differs by two or more steps.
+
+Eye colour on animals shifts freely with painted lighting — report it, but never veto on it alone.
+
+Ignore differences in pose, head angle, expression, background, costume and any painted or ornamental headwear. Ignore human traits entirely — this subject has no skin tone or hairstyle. A warm golden wash over the whole image is scene lighting, not coat colour.
+
+Finish with a final line containing exactly one word: MATCH or MISMATCH.`;
+
 /**
  * Compare the rendered stand-in against the SUBJECT'S ACTUAL PHOTO before the
  * face swap. The swap can only bridge what the stand-in already resembles, so
@@ -650,10 +676,17 @@ export type StandInFidelity = "match" | "mismatch" | "unknown";
  *
  * FAIL-CLOSED: "unknown" must ABORT the generation at the caller (never burn
  * regeneration spend while the verifier is blind).
+ *
+ * Animals are graded on a different rubric. The human scales below have no
+ * meaning on a cat — "hair length" and "skin tone" force the verifier to invent
+ * a label, and the invented labels disagreed often enough to veto 2/2 tabby
+ * stand-ins that were visually correct. Coat colour, pattern and markings are
+ * the traits that actually carry a pet's recognisability.
  */
 export async function checkStandInFidelity(
   photoUrl: string,
-  standInImageUrl: string
+  standInImageUrl: string,
+  subjectKind: "person" | "pet" = "person"
 ): Promise<StandInFidelity> {
   if (!anthropic) return "unknown";
   try {
@@ -686,7 +719,7 @@ export async function checkStandInFidelity(
             },
             {
               type: "text",
-              text: `Image 1 is a real photo of a subject. Image 2 is a stylized rendering of a stand-in who is meant to share that subject's physical traits (it is deliberately NOT the same individual, so do not judge identity, facial structure or age).
+              text: subjectKind === "pet" ? PET_FIDELITY_PROMPT : `Image 1 is a real photo of a subject. Image 2 is a stylized rendering of a stand-in who is meant to share that subject's physical traits (it is deliberately NOT the same individual, so do not judge identity, facial structure or age).
 
 Place each trait on its scale, for image 1 then image 2. Use ONE label from the scale each time — do not invent labels, and pick by the colour in the mid-tones and shadows, not in a bright highlight.
 

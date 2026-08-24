@@ -117,7 +117,9 @@ export default async function PortraitPreviewPage({ params }: Props) {
           Your portrait is being created…
         </h1>
         <p className="text-ink-muted">
-          This usually takes 15–30 seconds. Refresh this page in a moment.
+          Good portraits take 3–4 minutes. We paint a scene around you, then work
+          your face into it by hand — that&rsquo;s the part that makes it look like
+          you. Refresh this page in a few minutes.
         </p>
       </Standalone>
     );

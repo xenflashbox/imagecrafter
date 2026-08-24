@@ -93,6 +93,7 @@ async function main(): Promise<void> {
   if (!variant) fail(`StyleVariant "${styleSlug}" not found in DB`);
   console.log(`→ Style: ${variant.stylePack.slug}/${variant.slug} ("${variant.name}") from DB`);
 
+  const subjectKind = analysis.subjectType === "pet" ? ("pet" as const) : ("person" as const);
   const descriptor = buildStandInDescriptor(analysis);
   console.log(`→ Descriptor: "${descriptor}"`);
   const scenePrompt = buildStandInScenePrompt(
@@ -116,7 +117,7 @@ async function main(): Promise<void> {
     const scene = await generateStandInScene(scenePrompt, styleSlug);
     if ("error" in scene) fail(`Stand-in scene generation failed: ${scene.error}`);
     console.log(`  scene in ${((Date.now() - t1) / 1000).toFixed(1)}s: ${scene.sceneUrl}`);
-    const fidelity = await checkStandInFidelity(photoDataUri, scene.sceneUrl);
+    const fidelity = await checkStandInFidelity(photoDataUri, scene.sceneUrl, subjectKind);
     console.log(`  fidelity gate: ${fidelity}`);
     if (fidelity === "match") {
       sceneUrl = scene.sceneUrl;
@@ -131,7 +132,6 @@ async function main(): Promise<void> {
 
   // Step 2 + COMBINED ACCEPTANCE GATE — same as generatePortrait (P2.1 + P1):
   // identity=same AND style=styled, both fail-closed, one swap retry.
-  const subjectKind = analysis.subjectType === "pet" ? ("pet" as const) : ("person" as const);
   const styleDescription = `${variant.stylePack.name} — ${variant.name}`;
   const assessSwap = async (imageUrl: string) => {
     const [identity, style] = await Promise.all([

@@ -418,11 +418,15 @@ const ASYNC_POLL_TIMEOUT_MS = Number(process.env.ASYNC_POLL_TIMEOUT_MS) || 480_0
  * attempts. The per-attempt timeout alone is not a safe bound: three attempts
  * each waiting ASYNC_POLL_TIMEOUT_MS can outlast the route's 800s Fluid
  * compute budget, which kills the request with FUNCTION_INVOCATION_TIMEOUT and
- * loses the portrait after real spend. Leaves ~200s for analysis, swap, gates
- * and upscale.
+ * loses the portrait after real spend.
+ *
+ * 450s, not the old 600s: the swap leg moved to openai/gpt-image-2, which takes
+ * ~110s instead of ~12s. Worst case downstream of here is two swaps (220s) plus
+ * the acceptance gates and the upscale — roughly 300s. 600s + 300s overruns the
+ * route and loses a paid portrait at the last step.
  */
 const STANDIN_PHASE_BUDGET_MS =
-  Number(process.env.STANDIN_PHASE_BUDGET_MS) || 600_000;
+  Number(process.env.STANDIN_PHASE_BUDGET_MS) || 450_000;
 
 /** Generate a stand-in scene on a PINNED engine via the async endpoint. */
 async function generatePinnedScene(
@@ -807,6 +811,9 @@ export async function generatePortrait(
   // after real spend.
   const standInPhaseDeadline = Date.now() + STANDIN_PHASE_BUDGET_MS;
 
+  const subjectKind =
+    analysis.subjectType === "pet" ? ("pet" as const) : ("person" as const);
+
   const acquireStandIn = async (): Promise<StandInOutcome> => {
     console.log(
       `[PortraitGen] Step 1: generating ${STANDIN_CANDIDATES} stand-in candidates in parallel`
@@ -836,7 +843,9 @@ export async function generatePortrait(
     // whose colouring has drifted off the subject cannot be rescued by being
     // the best of a bad set.
     const fidelities = await Promise.all(
-      sceneUrls.map((url) => checkStandInFidelity(portrait.sourceImageUrl, url))
+      sceneUrls.map((url) =>
+        checkStandInFidelity(portrait.sourceImageUrl, url, subjectKind)
+      )
     );
     if (fidelities.includes("unknown")) {
       // FAIL-CLOSED: the verifier is blind — abort rather than ship an
@@ -906,8 +915,6 @@ export async function generatePortrait(
   const sceneUrl = firstStandIn.sceneUrl;
 
   // Step 8b: identity swap — the real photo is image 1 (identity anchor).
-  const subjectKind =
-    analysis.subjectType === "pet" ? ("pet" as const) : ("person" as const);
   console.log("[PortraitGen] Step 2: swapping identity onto stand-in scene");
   let swap = await swapFaceIntoScene({
     photoUrl: portrait.sourceImageUrl,

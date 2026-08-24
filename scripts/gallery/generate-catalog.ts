@@ -122,7 +122,7 @@ async function main(): Promise<void> {
       for (let attempt = 1; attempt <= MAX_STANDIN_ATTEMPTS && !sceneUrl; attempt++) {
         const scene = await generateStandInScene(scenePrompt, slug);
         if ("error" in scene) throw new Error(`Stand-in generation failed: ${scene.error}`);
-        const fidelity = await checkStandInFidelity(photoDataUri, scene.sceneUrl);
+        const fidelity = await checkStandInFidelity(photoDataUri, scene.sceneUrl, subjectKind);
         console.log(`  stand-in ${attempt}/${MAX_STANDIN_ATTEMPTS}: fidelity=${fidelity}`);
         if (fidelity === "match") sceneUrl = scene.sceneUrl;
         else if (fidelity === "unknown") {

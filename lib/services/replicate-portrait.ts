@@ -2,11 +2,15 @@
  * Replicate Identity-Swap Service (step 2 of the two-step face-into-scene
  * production flow — PLAN/results/faceswap-two-step.md, 15/15 single-subject).
  *
- * Model: flux-kontext-apps/multi-image-kontext-pro (official two-image
- * Kontext Pro app), $0.08/run, ~15-19s/run. Kontext anchors identity on
- * image 1, so the REAL photo is always image 1 and the generic stand-in
- * scene is image 2 — the reverse order leaves the stand-in's face nearly
- * untouched (measured in testing, not assumed).
+ * Model: openai/gpt-image-2, ~90-110s/run. Chosen over
+ * flux-kontext-apps/multi-image-kontext-pro after the 7-candidate bake-off:
+ * Kontext (and every landmark swapper tested) returns an idealised stranger,
+ * while gpt-image-2 held the real subject's age, smile and bone structure
+ * across all four bake-off styles.
+ *
+ * The REAL photo is always the first reference and the generic stand-in scene
+ * the second — the reverse order leaves the stand-in's face nearly untouched
+ * (measured in testing, not assumed).
  */
 
 import Replicate from "replicate";
@@ -47,7 +51,7 @@ const ENABLE_FACE_PRESERVATION =
   process.env.ENABLE_FACE_PRESERVATION === "true" ||
   process.env.ENABLE_INSTANTID === "true";
 
-const MULTI_KONTEXT_MODEL = "flux-kontext-apps/multi-image-kontext-pro";
+const SWAP_MODEL = "openai/gpt-image-2";
 
 // Initialize Replicate client — fail loud when face preservation is enabled
 // but the token is missing, so prod misconfiguration is obvious instead of
@@ -151,15 +155,14 @@ export async function swapFaceIntoScene(
     const sceneFile = (await replicate.files.create(sceneBlob)) as ReplicateFile;
     uploadedIds.push(sceneFile.id);
 
-    const output = await replicate.run(MULTI_KONTEXT_MODEL, {
+    const output = await replicate.run(SWAP_MODEL, {
       input: {
-        input_image_1: photoFile.urls.get,
-        input_image_2: sceneFile.urls.get,
+        input_images: [photoFile.urls.get, sceneFile.urls.get],
         prompt: faceIntoScenePrompt(params.subjectKind, params.subjectAge),
         // NEVER "match_input_image" — returns the model's internal
         // side-by-side canvas (20/20 reproductions in attempt 1).
         aspect_ratio: "3:4",
-        safety_tolerance: 2,
+        quality: "high",
         output_format: "png",
       },
     });
