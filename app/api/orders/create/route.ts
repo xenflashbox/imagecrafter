@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
       previewImageUrl: true,
       stylePackSlug: true,
       styleVariantSlug: true,
-      order: { select: { id: true } },
+      order: { select: { id: true, status: true } },
     },
   });
 
@@ -122,8 +122,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: "Not authorized" }, { status: 403 });
   }
 
-  // Already purchased — redirect to success page
-  if (portrait.status === "purchased" && portrait.order?.id) {
+  // Already paid for — redirect to success page. Checked against the order's own
+  // status too: the portrait is only flagged "purchased" once the webhook lands,
+  // so a paid order whose webhook is still in flight must not be re-sold.
+  const settledStatuses = new Set(["paid", "fulfilled", "shipped", "delivered"]);
+  if (
+    portrait.order &&
+    (portrait.status === "purchased" || settledStatuses.has(portrait.order.status))
+  ) {
     return NextResponse.redirect(`${BASE_URL}/portraits/${portraitId}/success?orderId=${portrait.order.id}`);
   }
 
@@ -182,23 +188,30 @@ export async function GET(request: NextRequest) {
   // The inline product below is built per order, so it carries its own.
   const taxCode = type === "digital" ? DIGITAL_TAX_CODE : PRINT_TAX_CODE;
 
-  // --- Create Order record (pending) ---
-  const order = await prisma.order.create({
-    data: {
-      portraitId: portrait.id,
-      userId: userId || null,
-      email: userEmail || "pending@checkout",  // updated by webhook from Stripe
-      type,
-      printProductSku: type === "print" ? (catalogProduct?.sku || sku) : null,
-      printSize: catalogProduct?.size || null,
-      printFrame: frameParam,
-      printFormat: catalogProduct?.format || null,
-      amount: amountCents,
-      currency: "usd",
-      status: "pending",
-      maxDownloads: parseInt(process.env.PORTRAIT_MAX_DOWNLOADS || "5"),
-      updatedAt: new Date(),
-    },
+  // --- Create or refresh the pending Order record ---
+  // Order.portraitId is unique, and the row is written before Stripe is called.
+  // A create here would therefore fail forever once any earlier attempt died
+  // between the two — stranding the portrait as unbuyable. Reuse the row and
+  // restate the product the customer is choosing right now.
+  const orderFields = {
+    userId: userId || null,
+    email: userEmail || "pending@checkout", // updated by webhook from Stripe
+    type,
+    printProductSku: type === "print" ? (catalogProduct?.sku || sku) : null,
+    printSize: catalogProduct?.size || null,
+    printFrame: frameParam,
+    printFormat: catalogProduct?.format || null,
+    amount: amountCents,
+    currency: "usd",
+    status: "pending",
+    maxDownloads: parseInt(process.env.PORTRAIT_MAX_DOWNLOADS || "5"),
+    updatedAt: new Date(),
+  };
+
+  const order = await prisma.order.upsert({
+    where: { portraitId: portrait.id },
+    create: { portraitId: portrait.id, ...orderFields },
+    update: orderFields,
   });
 
   // --- Ad attribution context (from the visitor's browser request) ---
