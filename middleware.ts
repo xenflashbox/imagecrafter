@@ -23,6 +23,10 @@ const isPublicRoute = createRouteMatcher([
   "/api/orders/(.*)",
   "/api/print/(.*)",
 
+  // Stripe-sourced amounts for client components. Public: guests see prices
+  // before they ever sign in.
+  "/api/pricing",
+
   // Credit packs — routes enforce their own auth policy (guest balance=0,
   // guest checkout → sign-in redirect). auth.protect() would 404 guests.
   "/api/credits",
