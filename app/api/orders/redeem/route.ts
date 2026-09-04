@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
+import { ensureUser } from "@/lib/ensure-user";
 import { cookies } from "next/headers";
 import { buildDownloadUrl } from "@/lib/services/download-token";
 import { sendDigitalPurchaseEmail } from "@/lib/services/email-notification";
@@ -48,16 +49,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const user = await prisma.user.findUnique({
+  await ensureUser(userId);
+  const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
     select: { email: true, firstName: true, lastName: true },
   });
-  if (!user) {
-    return NextResponse.json(
-      { success: false, error: "Account not found. Please sign in again." },
-      { status: 403 }
-    );
-  }
 
   const portrait = await prisma.portrait.findUnique({
     where: { id: portraitId },

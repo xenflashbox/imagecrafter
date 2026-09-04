@@ -595,6 +595,11 @@ model Portrait {
   enhancedPrompt    String    // final prompt sent to Gemini
   status            String    @default("pending") // pending | analyzing | generating | preview | purchased | failed
   errorMessage      String?   // populated on failure
+  // Acceptance-gate result: { identity, style, ip, pass, swapAttempts }.
+  // RECORDED, not enforced — a failing verdict no longer blocks delivery, so
+  // this is the only trace of what the gate thought. Null on portraits that
+  // never reached the gate.
+  gateVerdict       Json?
   generationTimeMs  Int?      // track performance
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt

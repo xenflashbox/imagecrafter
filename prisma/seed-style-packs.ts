@@ -15,11 +15,24 @@ const prisma = new PrismaClient();
 // PACK + VARIANT DATA (from PRD Section 4.5 + 6.1)
 // =============================================================================
 
-// Real production-pipeline gallery assets, hosted on R2/CDN (Phase 2).
-// Shipping styles reference their real two-step output thumbnail; every other
-// style is deactivated and carries no imagery — no stock/placeholder images ship.
+// Real production-pipeline gallery assets, hosted on R2/CDN. Every style in the
+// catalog is selectable; a style only carries imagery once a real two-step
+// output for it exists on R2 — no stock or placeholder images ship, and the
+// picker renders a name-only tile for the rest.
 const R2_GALLERY_THUMBS = "https://images.imagecrafter.app/gallery/v1/thumbs";
-const SHIPPING_VARIANT_BY_PACK: Record<string, string> = {
+
+// Variants with a verified thumbnail on R2 (probed, not assumed). Every other
+// variant returns "" until its example is generated.
+const VARIANTS_WITH_THUMB = new Set([
+  "renaissance",
+  "starry-night",
+  "egyptian",
+  "elven",
+  "comic-hero",
+]);
+
+// The variant whose thumbnail represents its whole pack in the pack grid.
+const PACK_COVER_VARIANT: Record<string, string> = {
   "royal-gallery": "renaissance",
   masterpiece: "starry-night",
   "time-traveler": "egyptian",
@@ -27,9 +40,8 @@ const SHIPPING_VARIANT_BY_PACK: Record<string, string> = {
   "pop-culture": "comic-hero",
 };
 const galleryAsset = (packSlug: string, variantSlug: string, _size = 400): string => {
-  const shipping = SHIPPING_VARIANT_BY_PACK[packSlug];
-  if (variantSlug === "thumb") return shipping ? `${R2_GALLERY_THUMBS}/${shipping}.jpg` : "";
-  return variantSlug === shipping ? `${R2_GALLERY_THUMBS}/${variantSlug}.jpg` : "";
+  const slug = variantSlug === "thumb" ? PACK_COVER_VARIANT[packSlug] : variantSlug;
+  return slug && VARIANTS_WITH_THUMB.has(slug) ? `${R2_GALLERY_THUMBS}/${slug}.jpg` : "";
 };
 
 const STYLE_PACKS = [
@@ -214,8 +226,8 @@ const STYLE_PACKS = [
       { slug: "samurai", name: "Samurai Warrior", description: "Traditional ukiyo-e inspired Japanese warrior portrait", sortOrder: 4, sampleImageUrl: galleryAsset("time-traveler", "samurai"), promptTemplate: `{{subject}} portrayed as a legendary samurai warrior in the ukiyo-e woodblock print tradition of Utagawa Kuniyoshi and Yoshitoshi. The subject wears ornate samurai armor (yoroi) with a fearsome kabuto helmet, katana at their side, standing before a moonlit Japanese landscape of cherry blossoms and ancient temple. {{style_modifiers}}. Bold, dramatic linework with flat color areas characteristic of Japanese woodblock printing. Dynamic composition with wind-blown elements and dramatic pose. Color palette of deep indigo, crimson, gold, and ink black.`, styleModifiers: { mood: "fierce honor, warrior discipline, poetic intensity", palette: "deep indigo, crimson, gold, ink black, cherry blossom pink", lighting: "moonlight and lantern glow, dramatic ukiyo-e" } },
       { slug: "art-deco", name: "1920s Art Deco", description: "Gatsby-era glamour, geometric patterns, gold accents", sortOrder: 5, sampleImageUrl: galleryAsset("time-traveler", "art-deco"), promptTemplate: `A glamorous 1920s Art Deco portrait of {{subject}}, posed with Jazz Age sophistication in a luxurious speakeasy or grand ballroom setting. The subject wears dazzling period attire — beaded gown with fringe or sharp tuxedo with a boutonniere, marcelled waves or sleek hair, and elegant accessories. {{style_modifiers}}. Bold geometric patterns frame the composition — chevrons, sunbursts, stepped forms in gold and black. The style of Tamara de Lempicka meets Erté: sculptural forms, saturated colors, and unapologetic glamour. Art Deco illustration meets painted portraiture, vintage poster quality.`, styleModifiers: { mood: "glamorous, sophisticated, Jazz Age excess", palette: "black, gold, emerald, ruby, champagne, ivory", lighting: "warm theatrical spotlight, golden highlights" } },
       { slug: "1950s", name: "1950s Americana", description: "Norman Rockwell-esque warmth, Saturday Evening Post cover", sortOrder: 6, sampleImageUrl: galleryAsset("time-traveler", "1950s"), promptTemplate: `A warm, nostalgic portrait of {{subject}} in the style of Norman Rockwell's Saturday Evening Post covers. The subject is captured in a charming everyday moment — at a soda fountain, on a front porch, or at a community gathering. Wearing classic 1950s attire with period-perfect styling. {{style_modifiers}}. Rockwell's signature warmth — photorealistic detail combined with gentle idealization, capturing humor and humanity. Rich, warm color palette of cherry red, sky blue, cream, and warm wood tones. Meticulous detail on fabrics, props, and expressions. Oil on canvas, American illustration golden age, heartwarming and nostalgic.`, styleModifiers: { mood: "warm, nostalgic, wholesome, gently humorous", palette: "cherry red, sky blue, cream, warm wood, grass green", lighting: "warm afternoon light, golden and inviting" } },
-      { slug: "disco", name: "1970s Disco", description: "Glitter, neon, Studio 54 energy", sortOrder: 7, sampleImageUrl: galleryAsset("time-traveler", "disco"), promptTemplate: `A dazzling disco-era portrait of {{subject}} owning the dance floor at Studio 54. The subject wears spectacular 1970s fashion — sequined jumpsuit or flowing halter dress, platform shoes, and statement jewelry. Hair is voluminous and era-perfect. {{style_modifiers}}. Mirrored disco ball reflections scatter light across the scene. Background of a packed nightclub with neon signs and a lit-up dance floor. Saturated, high-contrast color with intense purples, electric blues, gold, and hot pink. Painted in a photorealistic style with a slight film grain and vintage color processing reminiscent of 1970s photography.`, styleModifiers: { mood: "euphoric, glamorous, electric nightlife", palette: "electric purple, hot pink, gold, electric blue, mirror silver", lighting: "disco ball reflections, neon glow, dance floor lights" } },
-      { slug: "synthwave", name: "1980s Synthwave", description: "Neon grids, chrome, retrowave sunset", sortOrder: 8, sampleImageUrl: galleryAsset("time-traveler", "synthwave"), promptTemplate: `A retro-futuristic synthwave portrait of {{subject}} set against an iconic 1980s retrofuture landscape. Neon grid extending to the horizon, chrome palm trees, a massive setting sun in gradient pink-to-purple, and a DeLorean or sports car in the background. The subject has rad 80s styling — aviator sunglasses, leather jacket, neon accents. {{style_modifiers}}. Hyper-saturated neon color palette of hot pink, electric cyan, chrome silver, and deep purple. Digital airbrush quality with smooth gradients and sharp neon glow effects. Retro VHS aesthetic with subtle scan lines. Synthwave album cover quality, ultra vibrant.`, styleModifiers: { mood: "cool, retro-futuristic, neon-drenched", palette: "hot pink, electric cyan, chrome silver, deep purple, sunset orange", lighting: "neon glow, sunset gradient, chrome reflections" } },
+      { slug: "disco", name: "1970s Disco", description: "Glitter, neon, 70s nightclub energy", sortOrder: 7, sampleImageUrl: galleryAsset("time-traveler", "disco"), promptTemplate: `A dazzling disco-era portrait of {{subject}} owning the dance floor at a legendary 1970s discotheque. The subject wears spectacular 1970s fashion — sequined jumpsuit or flowing halter dress, platform shoes, and statement jewelry. Hair is voluminous and era-perfect. {{style_modifiers}}. Mirrored disco ball reflections scatter light across the scene. Background of a packed nightclub with abstract neon light shapes and a lit-up dance floor. No lettering, signage, logos or brand names anywhere in the image. Saturated, high-contrast color with intense purples, electric blues, gold, and hot pink. Painted in a photorealistic style with a slight film grain and vintage color processing reminiscent of 1970s photography.`, styleModifiers: { mood: "euphoric, glamorous, electric nightlife", palette: "electric purple, hot pink, gold, electric blue, mirror silver", lighting: "disco ball reflections, neon glow, dance floor lights" } },
+      { slug: "synthwave", name: "1980s Synthwave", description: "Neon grids, chrome, retrowave sunset", sortOrder: 8, sampleImageUrl: galleryAsset("time-traveler", "synthwave"), promptTemplate: `A retro-futuristic synthwave portrait of {{subject}} set against an iconic 1980s retrofuture landscape. Neon grid extending to the horizon, chrome palm trees, a massive setting sun in gradient pink-to-purple, and a sleek wedge-shaped sports car in the background. The subject has rad 80s styling — aviator sunglasses, leather jacket, neon accents. {{style_modifiers}}. Hyper-saturated neon color palette of hot pink, electric cyan, chrome silver, and deep purple. Digital airbrush quality with smooth gradients and sharp neon glow effects. Retro VHS aesthetic with subtle scan lines. Synthwave album cover quality, ultra vibrant.`, styleModifiers: { mood: "cool, retro-futuristic, neon-drenched", palette: "hot pink, electric cyan, chrome silver, deep purple, sunset orange", lighting: "neon glow, sunset gradient, chrome reflections" } },
     ],
   },
   // ─────────────────────────────────────────────────────────────────────────
@@ -280,7 +292,7 @@ const STYLE_PACKS = [
     category: "fine-art",
     sortOrder: 6,
     thumbnailUrl: galleryAsset("fine-art", "thumb", 300),
-    isActive: false, // not shipping in v1 — no verified production gallery output
+    isActive: true,
     isPremium: false,
     variants: [
       { slug: "oil-painting", name: "Oil on Canvas", description: "Classical oil portrait with visible brushwork", sortOrder: 1, sampleImageUrl: galleryAsset("fine-art", "oil-painting"), promptTemplate: `A masterful oil portrait of {{subject}} painted in the classical academic tradition. Rich, layered paint application with visible brushwork — thick impasto in highlights, thin transparent glazes in shadows. The subject is posed naturally with a warm, genuine expression. {{style_modifiers}}. Neutral background that keeps focus on the subject. Warm, natural color palette with accurate skin tones and subtle color temperature shifts between light and shadow sides. Masterful edge control — sharp focus on eyes and features, softer edges on hair and clothing. Classical oil portrait on stretched canvas, gallery quality, timeless and elegant.`, styleModifiers: { mood: "timeless, honest, classically beautiful", palette: "natural warm tones, accurate skin, rich earth palette", lighting: "classic portrait studio, 45-degree key light from upper left" } },
@@ -305,7 +317,7 @@ const STYLE_PACKS = [
     category: "custom",
     sortOrder: 7,
     thumbnailUrl: galleryAsset("custom-scene", "thumb", 300),
-    isActive: false, // not shipping in v1 — no verified production gallery output
+    isActive: true,
     isPremium: true,
     variants: [
       {
@@ -345,9 +357,11 @@ async function seedStylePacks() {
     console.log(`✓ Pack: ${pack.name} (${pack.slug})`);
     packCount++;
 
-    // Upsert each variant — only the verified shipping variant per pack is active
+    // Every variant in the catalog is active. Holding styles back on gate
+    // statistics kept the one person who can judge a likeness from ever seeing
+    // them; quality calls are made on the output, not before it exists.
     for (const variantData of variants) {
-      const isActive = variantData.slug === SHIPPING_VARIANT_BY_PACK[packFields.slug];
+      const isActive = true;
       await prisma.styleVariant.upsert({
         where: {
           stylePackId_slug: {

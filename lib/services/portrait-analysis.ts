@@ -627,6 +627,32 @@ Reply with one short sentence giving your reason, then on a new line exactly one
 
 export type StandInFidelity = "match" | "mismatch" | "unknown";
 
+const PET_FIDELITY_PROMPT = `Image 1 is a real photo of an animal. Image 2 is a stylized rendering of a stand-in animal meant to share that animal's physical traits (it is deliberately NOT the same individual, so do not judge identity or expression).
+
+Report each trait for image 1 then image 2, using ONE label from its list each time. Judge colour from the mid-tones and shadows, never from a bright highlight.
+
+SPECIES: cat / dog / other
+COAT COLOUR: black / grey / blue-grey / brown / chocolate / red / orange / cream / fawn / golden / white
+COAT PATTERN: solid / tabby-striped / tabby-marbled / brindle / spotted / bicolour / tricolour / merle / pointed
+WHITE MARKINGS: none / chin or muzzle only / chest bib / face blaze / paws or legs / extensive
+COAT LENGTH: hairless / short / medium / long
+EYE COLOUR: copper / amber / gold / green / hazel / brown / blue
+
+Answer on six lines like "COAT COLOUR: orange -> orange".
+
+Then apply these rules:
+- MISMATCH if SPECIES differs at all.
+- MISMATCH if COAT PATTERN differs at all, except that solid and tabby-marbled read alike under heavy stylisation — treat that one pair as tolerable.
+- MISMATCH if COAT COLOUR differs by more than one neighbouring label (red/orange/golden are neighbours; grey/blue-grey are neighbours; black vs white is a mismatch).
+- MISMATCH if WHITE MARKINGS jump more than one step (none vs chest bib is tolerable; none vs extensive is not).
+- MISMATCH if COAT LENGTH differs by two or more steps.
+
+Eye colour on animals shifts freely with painted lighting — report it, but never veto on it alone.
+
+Ignore differences in pose, head angle, expression, background, costume and any painted or ornamental headwear. Ignore human traits entirely — this subject has no skin tone or hairstyle. A warm golden wash over the whole image is scene lighting, not coat colour.
+
+Finish with a final line containing exactly one word: MATCH or MISMATCH.`;
+
 /**
  * Compare the rendered stand-in against the SUBJECT'S ACTUAL PHOTO before the
  * face swap. The swap can only bridge what the stand-in already resembles, so
@@ -650,10 +676,17 @@ export type StandInFidelity = "match" | "mismatch" | "unknown";
  *
  * FAIL-CLOSED: "unknown" must ABORT the generation at the caller (never burn
  * regeneration spend while the verifier is blind).
+ *
+ * Animals are graded on a different rubric. The human scales below have no
+ * meaning on a cat — "hair length" and "skin tone" force the verifier to invent
+ * a label, and the invented labels disagreed often enough to veto 2/2 tabby
+ * stand-ins that were visually correct. Coat colour, pattern and markings are
+ * the traits that actually carry a pet's recognisability.
  */
 export async function checkStandInFidelity(
   photoUrl: string,
-  standInImageUrl: string
+  standInImageUrl: string,
+  subjectKind: "person" | "pet" = "person"
 ): Promise<StandInFidelity> {
   if (!anthropic) return "unknown";
   try {
@@ -686,7 +719,7 @@ export async function checkStandInFidelity(
             },
             {
               type: "text",
-              text: `Image 1 is a real photo of a subject. Image 2 is a stylized rendering of a stand-in who is meant to share that subject's physical traits (it is deliberately NOT the same individual, so do not judge identity, facial structure or age).
+              text: subjectKind === "pet" ? PET_FIDELITY_PROMPT : `Image 1 is a real photo of a subject. Image 2 is a stylized rendering of a stand-in who is meant to share that subject's physical traits (it is deliberately NOT the same individual, so do not judge identity, facial structure or age).
 
 Place each trait on its scale, for image 1 then image 2. Use ONE label from the scale each time — do not invent labels, and pick by the colour in the mid-tones and shadows, not in a bright highlight.
 
@@ -735,6 +768,112 @@ Finish with a final line containing exactly one word: MATCH or MISMATCH.`,
   } catch (error) {
     console.error("[StandInFidelity] Check failed:", error);
     return "unknown";
+  }
+}
+
+// =============================================================================
+// STAND-IN CANDIDATE RANKING (best-of-N selection)
+// =============================================================================
+
+/**
+ * Pick the strongest stand-in out of several candidates for the same prompt.
+ *
+ * checkStandInFidelity above is a VETO — it answers "is this candidate
+ * disqualifying". It cannot answer "which of these three is best", so a
+ * first-acceptable loop shipped whichever candidate happened to clear the veto
+ * first. These engines are high-variance (rule #49): across three renders of
+ * one prompt, one is usually a real portrait and the others are a half-figure
+ * lost in scenery, a face turned away, or a comic page of panels. Taking the
+ * first is a coin flip on the thing the customer actually receives.
+ *
+ * The criteria are ordered by what the downstream swap CAN and CANNOT repair.
+ * The swap redraws the face and nothing else, so framing, pose, anatomy,
+ * composition and style are permanent by the time the candidate is chosen and
+ * are ranked first; traits come last because the swap corrects the face and the
+ * fidelity veto has already excluded the disqualifying drifts.
+ *
+ * Comparative on purpose: one call ranking all candidates side by side is both
+ * cheaper than N absolute scores and steadier, since an absolute 1-10 aesthetic
+ * score from a vision model drifts run to run while a relative ordering holds.
+ *
+ * Returns the index into `candidateUrls`, or null when the ranking is
+ * unavailable. Null is NOT fatal at the caller: every candidate handed here has
+ * already passed the fidelity veto and the acceptance gate still runs
+ * downstream, so ranking is a quality lever, not a safety gate. The caller must
+ * log loudly and fall back to the first candidate.
+ */
+export async function rankStandInCandidates(
+  photoUrl: string,
+  candidateUrls: string[]
+): Promise<number | null> {
+  if (candidateUrls.length === 0) return null;
+  if (candidateUrls.length === 1) return 0;
+  if (!anthropic) return null;
+  try {
+    const [photo, ...candidates] = await Promise.all([
+      fetchImageAsBase64(photoUrl),
+      ...candidateUrls.map((url) => fetchImageAsBase64(url)),
+    ]);
+    const asImage = (img: { base64: string; mediaType: string }) =>
+      ({
+        type: "image" as const,
+        source: {
+          type: "base64" as const,
+          media_type: img.mediaType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+          data: img.base64,
+        },
+      });
+    const response = await anthropic.messages.create({
+      model: VISION_MODEL,
+      max_tokens: 900,
+      messages: [
+        {
+          role: "user",
+          content: [
+            asImage(photo),
+            ...candidates.map(asImage),
+            {
+              type: "text",
+              text: `Image 1 is a reference photo of a real subject. Images 2 to ${candidates.length + 1} are ${candidates.length} candidate stylized scenes rendered from the same prompt. A later step will repaint the face in the chosen candidate to match the reference; everything else about the chosen candidate is final and cannot be changed.
+
+Judge each candidate on these criteria, IN THIS ORDER OF IMPORTANCE:
+
+1. PORTRAIT, NOT A PAGE. It must be a single figure presented as a portrait. Disqualifying: comic panels or gutters, speech balloons, captions, borders, collages, posters, split screens, or any lettering or signature.
+2. FACE USABLE. Exactly one face, unobstructed, roughly front-facing or three-quarter, and large enough in the frame to carry a portrait. Penalise a face that is tiny, cropped, in deep shadow, turned away, or covered by a hand, mask, veil or headwear brim.
+3. ANATOMY SOUND. One head, two eyes, correctly formed hands and limbs, no duplicated or merged figures, no extra people.
+4. STYLE COMMITTED. The scene is fully rendered in the intended artistic style — not the reference photo with a colour wash over it, and not a flat filter.
+5. TRAIT PROXIMITY. Of the candidates that satisfy the above, prefer the one whose build, hair and skin tone sit closest to the reference. This ranks LAST — the repaint fixes the face, so never rescue a candidate that fails 1 to 4 because it resembles the reference.
+
+Write one line per candidate, as "Candidate N: " followed by at most fifteen words naming its single worst defect, or "no defect".
+
+Then finish with a final line containing exactly "BEST: N", where N is the candidate number between 2 and ${candidates.length + 1} that best satisfies the criteria in the order given. You must choose one even if all are flawed.`,
+            },
+          ],
+        },
+      ],
+    });
+    const textContent = response.content.find((block) => block.type === "text");
+    const raw = (textContent && "text" in textContent ? textContent.text : "").trim();
+    if (response.stop_reason === "max_tokens") {
+      console.error("[StandInRank] Response truncated before the verdict line");
+      return null;
+    }
+    // The per-candidate defect lines are what make a choice auditable — without
+    // them there is no way to tell a considered pick from a coin flip.
+    console.log(`[StandInRank] ${candidates.length} candidates judged:\n${raw}`);
+    // Last match wins: the defect lines above also start with "Candidate N".
+    const matches = [...raw.matchAll(/BEST:\s*\**\s*(\d+)/gi)];
+    const picked = matches.length ? Number(matches[matches.length - 1][1]) : NaN;
+    // The prompt numbers candidates from 2 because image 1 is the reference.
+    const index = picked - 2;
+    if (!Number.isInteger(index) || index < 0 || index >= candidates.length) {
+      console.error(`[StandInRank] Unparseable or out-of-range pick: ${raw.slice(-120)}`);
+      return null;
+    }
+    return index;
+  } catch (error) {
+    console.error("[StandInRank] Ranking failed:", error);
+    return null;
   }
 }
 

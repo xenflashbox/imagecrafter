@@ -36,7 +36,7 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
 export const metadata: Metadata = {
   title: "ImageCrafter — AI Portrait Studio & Image Generator",
   description:
-    "Transform your photo into stunning AI art in seconds. Royal portraits, fantasy scenes, fine art masterpieces — no account needed. Pay only if you love it.",
+    "Turn your photo — or your pet's — into a portrait that actually looks like them. Royal portraits, fine art, 70s disco. No account needed. Pay only if you love it.",
   openGraph: {
     title: "ImageCrafter — AI Portrait Studio",
     description:

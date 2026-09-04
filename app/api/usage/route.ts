@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
+import { ensureUser } from "@/lib/ensure-user";
 import { PLANS } from "@/lib/plans";
 
 /**
@@ -17,15 +18,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user with subscription
-    const user = await prisma.user.findUnique({
+    await ensureUser(userId);
+    const user = await prisma.user.findUniqueOrThrow({
       where: { id: userId },
       include: { subscription: true },
     });
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
 
     // Get or create subscription with defaults
     let subscription = user.subscription;
