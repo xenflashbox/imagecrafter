@@ -430,7 +430,7 @@ export default async function BlogPostPage({
             </div>
 
             <Link
-              href="/portraits"
+              href="/"
               className="px-6 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 font-medium transition-all text-sm whitespace-nowrap"
             >
               Try Portrait Studio Free →

@@ -24,6 +24,14 @@ import { getCreditBalance } from "@/lib/services/credits";
 import { RedeemButton } from "@/components/redeem-button";
 import { CreditPackCards } from "@/components/credit-pack-cards";
 import { SiteHeader, SiteFooter } from "@/components/site-chrome";
+import {
+  getPackCatalog,
+  getPrices,
+  getPrice,
+  formatUsd,
+  DIGITAL_SKU,
+} from "@/lib/services/pricing";
+import { resolveSku } from "@/lib/services/print-fulfillment";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -33,12 +41,9 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: "Your Portrait Preview | ImageCrafter" };
 }
 
-const PRINT_OPTIONS = [
-  { size: '8×10"', price: 49.95, sku: "GICLÉE_8x10" },
-  { size: '12×16"', price: 69.95, sku: "GICLÉE_12x16" },
-  { size: '16×20"', price: 89.95, sku: "GICLÉE_16x20" },
-  { size: '24×36"', price: 149.95, sku: "GICLÉE_24x36" },
-];
+// The four art-print sizes teased here; sizes come from the catalog, amounts
+// from Stripe (keyed on these SKUs).
+const PRINT_TEASER_SKUS = ["ART-8x10", "ART-12x16", "ART-16x20", "ART-24x36"];
 
 /** Full-page states (not found / working / failed) wear the same chrome. */
 function Standalone({ children }: { children: React.ReactNode }) {
@@ -146,6 +151,12 @@ export default async function PortraitPreviewPage({ params }: Props) {
 
   // Pack credits (signed-in users only — packs require an account)
   const creditBalance = userId ? await getCreditBalance(userId) : 0;
+
+  const [packs, digital, printPrices] = await Promise.all([
+    getPackCatalog(),
+    getPrice(DIGITAL_SKU),
+    getPrices(PRINT_TEASER_SKUS),
+  ]);
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas text-ink">
@@ -264,7 +275,9 @@ export default async function PortraitPreviewPage({ params }: Props) {
                   <div className="flex-1">
                     <div className="mb-1 flex items-center justify-between">
                       <h3 className="font-semibold">Digital Download</h3>
-                      <span className="text-xl font-semibold">$29.95</span>
+                      <span className="text-xl font-semibold">
+                        {formatUsd(digital.unitAmount)}
+                      </span>
                     </div>
                     <ul className="mb-4 flex flex-col gap-1 text-sm text-ink-muted">
                       {[
@@ -294,7 +307,11 @@ export default async function PortraitPreviewPage({ params }: Props) {
                   <h3 className="mb-3 flex items-center gap-2 font-semibold">
                     <Ticket className="size-4 text-accent" /> Making more than one?
                   </h3>
-                  <CreditPackCards theme="dark" />
+                  <CreditPackCards
+                    packs={packs}
+                    singlePriceCents={digital.unitAmount}
+                    theme="dark"
+                  />
                   <p className="mt-2 text-center text-xs text-ink-faint">
                     Credits never expire · Redeem any portrait as a digital download ·
                     Requires a free account
@@ -308,13 +325,17 @@ export default async function PortraitPreviewPage({ params }: Props) {
                   <Printer className="size-4 text-accent" /> Museum-Quality Print
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
-                  {PRINT_OPTIONS.map((opt) => (
+                  {printPrices.map((opt) => (
                     <div
                       key={opt.sku}
                       className="rounded-xl border border-rim bg-surface p-3 text-center transition-colors hover:border-accent-rim"
                     >
-                      <div className="text-sm text-ink-muted">{opt.size}</div>
-                      <div className="text-lg font-semibold">${opt.price}</div>
+                      <div className="text-sm text-ink-muted">
+                        {resolveSku(opt.sku)?.size}
+                      </div>
+                      <div className="text-lg font-semibold">
+                        {formatUsd(opt.unitAmount)}
+                      </div>
                       <Link
                         href={`/api/orders/create?portraitId=${portrait.id}&type=print&sku=${opt.sku}`}
                         className="mt-2 block w-full rounded-lg border border-rim py-1.5 text-center text-xs text-ink-muted transition-colors hover:border-rim-strong hover:text-ink"

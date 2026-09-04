@@ -29,6 +29,7 @@ import { cookies } from "next/headers";
 import { auth } from "@clerk/nextjs/server";
 import { buildDownloadUrl } from "@/lib/services/download-token";
 import { CreditPackCards } from "@/components/credit-pack-cards";
+import { getPackCatalog, getPrice, DIGITAL_SKU } from "@/lib/services/pricing";
 import { SiteHeader, SiteFooter } from "@/components/site-chrome";
 
 export const metadata: Metadata = {
@@ -109,6 +110,8 @@ export default async function PortraitSuccessPage({ params, searchParams }: Prop
   if (!isOwner) {
     notFound();
   }
+
+  const [packs, digital] = await Promise.all([getPackCatalog(), getPrice(DIGITAL_SKU)]);
 
   const isPaid = order.status === "paid" || order.status === "fulfilled";
   const isDigital = order.type === "digital";
@@ -320,7 +323,11 @@ export default async function PortraitSuccessPage({ params, searchParams }: Prop
                 Grab a credit pack and redeem future portraits as digital downloads — credits
                 never expire.
               </p>
-              <CreditPackCards theme="dark" />
+              <CreditPackCards
+                packs={packs}
+                singlePriceCents={digital.unitAmount}
+                theme="dark"
+              />
             </Panel>
           )}
 
@@ -333,7 +340,7 @@ export default async function PortraitSuccessPage({ params, searchParams }: Prop
               <Camera /> Create another portrait
             </Link>
             <Link
-              href="/portraits"
+              href="/"
               className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-rim bg-surface px-6 py-3 font-medium transition-colors hover:border-rim-strong [&_svg]:size-4"
             >
               <ArrowLeft /> Back to Portrait Studio

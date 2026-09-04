@@ -26,13 +26,12 @@ import { PRINT_CATALOG, resolveSku } from "@/lib/services/print-fulfillment";
 import { trackTikTokEvent } from "@/lib/services/tiktok-events";
 import { trackMetaEvent, fbcFromFbclid } from "@/lib/services/meta-events";
 import { requireEnv } from "@/lib/env";
+import { getPrice, DIGITAL_SKU, PriceUnavailableError } from "@/lib/services/pricing";
 
 // Built per request, not at module scope: Next.js collects page data during the
 // build, so a module-scope client makes every build require a live payment key.
 const getStripe = () => new Stripe(requireEnv("STRIPE_SECRET_KEY"));
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
-
-const DIGITAL_PRICE_CENTS = 2995;
 
 // All valid print SKUs (Phase 3 legacy + Phase 4 expanded catalog)
 const ALL_SKUS = new Set(PRINT_CATALOG.map((p) => p.sku).concat([
@@ -144,7 +143,20 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-  const amountCents = type === "digital" ? DIGITAL_PRICE_CENTS : catalogProduct!.priceUsd;
+  const priceSku = type === "digital" ? DIGITAL_SKU : catalogProduct!.sku;
+  let amountCents: number;
+  try {
+    amountCents = (await getPrice(priceSku)).unitAmount;
+  } catch (err) {
+    if (err instanceof PriceUnavailableError) {
+      console.error(`[orders/create] ${err.message}`);
+      return NextResponse.json(
+        { success: false, error: "This product isn't available right now." },
+        { status: 503 }
+      );
+    }
+    throw err;
+  }
 
   const packLabel = portrait.stylePackSlug?.replace(/-/g, " ") || "Portrait";
   const variantLabel = portrait.styleVariantSlug?.replace(/-/g, " ") || "";
@@ -196,6 +208,9 @@ export async function GET(request: NextRequest) {
   // --- Build Stripe Checkout Session ---
   const sessionConfig: Stripe.Checkout.SessionCreateParams = {
     mode: "payment",
+    // price_data rather than the bare Stripe price id: only an inline product
+    // can carry this customer's own portrait as the checkout image. The amount
+    // is still Stripe's — read above, never a literal.
     line_items: [
       {
         price_data: {

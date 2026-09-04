@@ -148,45 +148,10 @@ const structuredData = {
     name: "Xenco Labs",
     url: "https://xencolabs.com",
   },
-  // Real catalog only (founder-approved 2026-08 ladder). No aggregateRating:
-  // a fabricated rating is a Google structured-data policy violation.
-  offers: {
-    "@type": "AggregateOffer",
-    lowPrice: "29.95",
-    highPrice: "149.95",
-    priceCurrency: "USD",
-    offerCount: "4",
-    offers: [
-      {
-        "@type": "Offer",
-        name: "Single Portrait",
-        price: "29.95",
-        priceCurrency: "USD",
-        description: "One portrait — full 4K digital download, no watermark",
-      },
-      {
-        "@type": "Offer",
-        name: "3-Portrait Pack",
-        price: "39.95",
-        priceCurrency: "USD",
-        description: "3 portrait credits — never expire",
-      },
-      {
-        "@type": "Offer",
-        name: "10-Portrait Pack",
-        price: "74.95",
-        priceCurrency: "USD",
-        description: "10 portrait credits — never expire",
-      },
-      {
-        "@type": "Offer",
-        name: "25-Portrait Pack",
-        price: "149.95",
-        priceCurrency: "USD",
-        description: "25 portrait credits — never expire",
-      },
-    ],
-  },
+  // No offers here and no aggregateRating. The layout renders for statically
+  // built routes, so it cannot read Stripe; the priced AggregateOffer is
+  // emitted by the (force-dynamic) landing page instead. A fabricated rating
+  // would also be a Google structured-data policy violation.
 };
 
 // =============================================================================

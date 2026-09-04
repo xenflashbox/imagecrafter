@@ -7,27 +7,13 @@
  *
  * Pack credits never expire and are separate from Subscription's
  * monthly-reset creditsLimit/creditsUsed (founder decision 2026-08-14).
+ *
+ * What a pack costs and how many credits it carries live in Stripe — see
+ * lib/services/pricing.ts.
  */
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-
-export interface PackProduct {
-  sku: string;
-  name: string;
-  credits: number;
-  priceUsd: number; // cents
-}
-
-export const PACK_CATALOG: PackProduct[] = [
-  { sku: "PACK_3", name: "3-Portrait Pack", credits: 3, priceUsd: 3995 },
-  { sku: "PACK_10", name: "10-Portrait Pack", credits: 10, priceUsd: 7495 },
-  { sku: "PACK_25", name: "25-Portrait Pack", credits: 25, priceUsd: 14995 },
-];
-
-export function resolvePack(sku: string): PackProduct | null {
-  return PACK_CATALOG.find((p) => p.sku === sku) || null;
-}
 
 export async function getCreditBalance(userId: string): Promise<number> {
   const result = await prisma.creditLedger.aggregate({

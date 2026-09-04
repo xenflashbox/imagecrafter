@@ -20,6 +20,12 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // `/` is the canonical landing page. /portraits was a second, divergent
+  // landing page — permanently folded into it. Sub-paths (/portraits/create,
+  // /portraits/[id]/…) are untouched: `source` matches this path exactly.
+  async redirects() {
+    return [{ source: "/portraits", destination: "/", permanent: true }];
+  },
   // Increase body size limit for image uploads
   experimental: {
     serverActions: {

@@ -70,6 +70,35 @@ export default function PrintOptionsPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
 
+  // Amounts live in Stripe, so this client page reads them from the catalog API
+  // rather than holding literals. Until they land, sizes render without a price.
+  const [priceBySku, setPriceBySku] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res = await fetch("/api/print/products");
+      const data = await res.json();
+      if (cancelled || !res.ok || !data.success) return;
+      setPriceBySku(
+        Object.fromEntries(
+          (data.products as Array<{ sku: string; priceCents: number }>).map((p) => [
+            p.sku,
+            p.priceCents,
+          ])
+        )
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const usd = (sku: string) => {
+    const cents = priceBySku[sku];
+    return cents === undefined ? "" : `$${(cents / 100).toFixed(2)}`;
+  };
+
   useEffect(() => {
     if (!portraitId) return;
     let cancelled = false;
@@ -129,9 +158,7 @@ export default function PrintOptionsPage() {
     return `/api/orders/create?${params.toString()}`;
   };
 
-  const priceFormatted = selectedProduct
-    ? `$${(selectedProduct.priceUsd / 100).toFixed(2)}`
-    : "";
+  const priceFormatted = selectedProduct ? usd(selectedProduct.sku) : "";
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas text-ink">
@@ -245,7 +272,7 @@ export default function PrintOptionsPage() {
                     >
                       <div className="text-sm font-semibold">{product.size}</div>
                       <div className="mt-0.5 text-xs text-ink-muted">
-                        ${(product.priceUsd / 100).toFixed(2)}
+                        {usd(product.sku)}
                       </div>
                     </button>
                   );

@@ -1,5 +1,5 @@
 /**
- * GET /api/packs/checkout?sku=PACK_10
+ * GET /api/packs/checkout?sku=PACK-10
  *
  * Creates a Stripe Checkout Session for a portrait credit pack and
  * redirects the browser to Stripe's hosted checkout.
@@ -16,7 +16,7 @@ import { prisma } from "@/lib/prisma";
 import { ensureUser } from "@/lib/ensure-user";
 import Stripe from "stripe";
 import { cookies } from "next/headers";
-import { resolvePack, PACK_CATALOG } from "@/lib/services/credits";
+import { resolvePackPrice, PACK_SKUS } from "@/lib/services/pricing";
 import { trackTikTokEvent } from "@/lib/services/tiktok-events";
 import { trackMetaEvent, fbcFromFbclid } from "@/lib/services/meta-events";
 import { requireEnv } from "@/lib/env";
@@ -30,13 +30,10 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const sku = searchParams.get("sku");
 
-  const pack = sku ? resolvePack(sku) : null;
+  const pack = sku ? await resolvePackPrice(sku) : null;
   if (!pack) {
     return NextResponse.json(
-      {
-        success: false,
-        error: `Invalid pack SKU. Valid: ${PACK_CATALOG.map((p) => p.sku).join(", ")}`,
-      },
+      { success: false, error: `Invalid pack SKU. Valid: ${PACK_SKUS.join(", ")}` },
       { status: 400 }
     );
   }
@@ -73,19 +70,7 @@ export async function GET(request: NextRequest) {
 
   const sessionConfig: Stripe.Checkout.SessionCreateParams = {
     mode: "payment",
-    line_items: [
-      {
-        price_data: {
-          currency: "usd",
-          product_data: {
-            name: pack.name,
-            description: `${pack.credits} portrait credits — redeem any portrait as a full-resolution digital download. Never expire.`,
-          },
-          unit_amount: pack.priceUsd,
-        },
-        quantity: 1,
-      },
-    ],
+    line_items: [{ price: pack.priceId, quantity: 1 }],
     metadata: {
       packSku: pack.sku,
       packUserId: userId,
@@ -95,8 +80,8 @@ export async function GET(request: NextRequest) {
       ...(fbc ? { fbc } : {}),
       ...(fbp ? { fbp } : {}),
     },
-    success_url: `${BASE_URL}/portraits?pack_purchased=${pack.sku}`,
-    cancel_url: `${BASE_URL}/portraits?pack_cancelled=true`,
+    success_url: `${BASE_URL}/dashboard?pack_purchased=${pack.sku}`,
+    cancel_url: `${BASE_URL}/?pack_cancelled=true`,
   };
 
   if (user.stripeCustomerId) {
@@ -117,7 +102,7 @@ export async function GET(request: NextRequest) {
     userAgent: visitorUa,
     ttclid,
     ttp,
-    value: pack.priceUsd / 100,
+    value: pack.unitAmount / 100,
     currency: "USD",
     contentId: pack.sku,
     contentName: pack.name,
@@ -132,7 +117,7 @@ export async function GET(request: NextRequest) {
     userAgent: visitorUa,
     fbc,
     fbp,
-    value: pack.priceUsd / 100,
+    value: pack.unitAmount / 100,
     currency: "USD",
     contentId: pack.sku,
     contentName: pack.name,

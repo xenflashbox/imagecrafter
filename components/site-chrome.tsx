@@ -38,7 +38,7 @@ export function SiteHeader({
 
         {links && (
           <div className="hidden md:flex items-center gap-6 text-sm text-ink-muted">
-            <Link href="/portraits" className="hover:text-ink transition-colors">
+            <Link href="/" className="hover:text-ink transition-colors">
               Styles
             </Link>
             <Link href="/#results" className="hover:text-ink transition-colors">
@@ -68,7 +68,7 @@ export function SiteFooter() {
           <span>© {new Date().getFullYear()} · Powered by Xenco Labs</span>
         </div>
         <div className="flex items-center gap-5">
-          <Link href="/portraits" className="hover:text-ink-muted transition-colors">
+          <Link href="/" className="hover:text-ink-muted transition-colors">
             Styles
           </Link>
           <Link href="/#pricing" className="hover:text-ink-muted transition-colors">
