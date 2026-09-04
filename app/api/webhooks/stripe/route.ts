@@ -417,7 +417,8 @@ async function handlePortraitCheckoutCompleted(
     console.log(`[stripe-webhook] Digital order ${orderId} paid — download email sent to ${customerEmail}`);
   } else {
     // --- PRINT ORDER ---
-    const shippingAddress = session.shipping_details?.address;
+    const shippingDetails = session.collected_information?.shipping_details;
+    const shippingAddress = shippingDetails?.address;
 
     const updateData: Parameters<typeof prisma.order.update>[0]["data"] = {
       status: "paid",
@@ -429,7 +430,7 @@ async function handlePortraitCheckoutCompleted(
     // Persist shipping address from Stripe
     if (shippingAddress) {
       Object.assign(updateData, {
-        shippingName: session.shipping_details?.name || null,
+        shippingName: shippingDetails?.name || null,
         shippingLine1: shippingAddress.line1 || null,
         shippingLine2: shippingAddress.line2 || null,
         shippingCity: shippingAddress.city || null,
@@ -468,7 +469,7 @@ async function handlePortraitCheckoutCompleted(
       printSize: order.printSize || "Custom",
       amount: order.amount,
       currency: order.currency,
-      shippingName: session.shipping_details?.name || customerName || "",
+      shippingName: shippingDetails?.name || customerName || "",
       shippingAddress: shippingDisplayAddress,
       previewImageUrl: order.portrait?.previewImageUrl || undefined,
     });
@@ -496,7 +497,7 @@ async function handlePortraitCheckoutCompleted(
           sku: order.printProductSku || "ART-8x10",
           frame: order.printFrame || undefined,
           recipient: {
-            name: session.shipping_details?.name || customerName || "Customer",
+            name: shippingDetails?.name || customerName || "Customer",
             email: customerEmail,
             line1: shippingAddress.line1,
             line2: shippingAddress.line2 || undefined,
@@ -559,13 +560,15 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   }
 
   // Determine plan from price ID
-  const priceId = subscription.items.data[0]?.price.id;
-  if (!priceId) {
+  const item = subscription.items.data[0];
+  if (!item) {
     console.error(
       `[stripe-webhook] Subscription ${subscription.id} has no price ID — cannot resolve a plan, skipping (fail-closed)`
     );
     return;
   }
+  const priceId = item.price.id;
+  const currentPeriodEnd = new Date(item.current_period_end * 1000);
   const plan = PRICE_TO_PLAN[priceId] || "FREE";
   const config = PLAN_CONFIG[plan];
 
@@ -589,7 +592,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     update: {
       stripeSubscriptionId: subscription.id,
       stripePriceId: priceId,
-      stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000),
+      stripeCurrentPeriodEnd: currentPeriodEnd,
       stripeStatus,
       plan,
       ...config,
@@ -598,7 +601,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
       userId: user.id,
       stripeSubscriptionId: subscription.id,
       stripePriceId: priceId,
-      stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000),
+      stripeCurrentPeriodEnd: currentPeriodEnd,
       stripeStatus,
       plan,
       ...config,
@@ -628,7 +631,9 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
 }
 
 async function handleInvoicePaid(invoice: Stripe.Invoice) {
-  const subscriptionId = invoice.subscription as string;
+  const subscriptionRef = invoice.parent?.subscription_details?.subscription;
+  const subscriptionId =
+    typeof subscriptionRef === "string" ? subscriptionRef : subscriptionRef?.id;
 
   if (!subscriptionId) return;
 
