@@ -33,6 +33,10 @@ import { getPrice, DIGITAL_SKU, PriceUnavailableError } from "@/lib/services/pri
 const getStripe = () => new Stripe(requireEnv("STRIPE_SECRET_KEY"));
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
 
+// Must match the tax codes set on the Stripe catalog products.
+const DIGITAL_TAX_CODE = "txcd_10505001"; // Digital finished artwork, permanent rights
+const PRINT_TAX_CODE = "txcd_99999999"; // General tangible goods
+
 // All valid print SKUs (Phase 3 legacy + Phase 4 expanded catalog)
 const ALL_SKUS = new Set(PRINT_CATALOG.map((p) => p.sku).concat([
   "GICLÉE_8x10", "GICLÉE_12x16", "GICLÉE_16x20", "GICLÉE_24x36", // legacy
@@ -174,6 +178,10 @@ export async function GET(request: NextRequest) {
       ? `${packLabel} / ${variantLabel} — Full 4K resolution, no watermark`
       : `${packLabel} / ${variantLabel} — ${catalogProduct?.size || ""} museum-quality print`;
 
+  // Stripe Managed Payments rejects any line item whose product has no tax code.
+  // The inline product below is built per order, so it carries its own.
+  const taxCode = type === "digital" ? DIGITAL_TAX_CODE : PRINT_TAX_CODE;
+
   // --- Create Order record (pending) ---
   const order = await prisma.order.create({
     data: {
@@ -219,6 +227,7 @@ export async function GET(request: NextRequest) {
             name: productName,
             description: productDescription,
             images: [portrait.previewImageUrl],
+            tax_code: taxCode,
           },
           unit_amount: amountCents,
         },
