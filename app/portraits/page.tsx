@@ -24,7 +24,6 @@ async function getStylePacks() {
       variants: {
         where: { isActive: true },
         orderBy: { sortOrder: "asc" },
-        take: 4,
         select: { id: true, name: true, sampleImageUrl: true },
       },
     },
@@ -154,27 +153,27 @@ export default async function PortraitsPage() {
           {/* Flex-wrap, not a fixed grid: a partial row stays centred no matter
               how many packs are live. */}
           <div className="flex flex-wrap justify-center gap-6">
-            {stylePacks.map((pack) => (
+            {stylePacks.map((pack) => {
+              const hero = pack.variants.find((v) => v.sampleImageUrl?.trim());
+              return (
               <Link
                 key={pack.id}
                 href={`/portraits/create?pack=${pack.slug}`}
-                className="group w-full overflow-hidden rounded-2xl border border-rim bg-surface transition-all hover:border-accent-rim sm:w-72"
+                className="group w-full overflow-hidden rounded-2xl border border-rim bg-surface transition-all hover:border-accent-rim sm:w-80"
               >
-                <div className="relative aspect-[4/3] overflow-hidden bg-surface-raised">
-                  {pack.variants.length > 0 ? (
-                    <div className="grid h-full grid-cols-2">
-                      {pack.variants.slice(0, 4).map((variant) => (
-                        <div key={variant.id} className="relative overflow-hidden">
-                          <Image
-                            src={variant.sampleImageUrl}
-                            alt={variant.name}
-                            fill
-                            className="object-cover transition-transform duration-500 group-hover:scale-105"
-                            unoptimized
-                          />
-                        </div>
-                      ))}
-                    </div>
+                <div className="relative aspect-[4/5] overflow-hidden bg-surface-raised">
+                  {/* One large example, never a mosaic of four unrelated crops.
+                      A variant with no sample renders the mark, never an
+                      <Image> with an empty src — that is what produced the
+                      broken-image icons. */}
+                  {hero ? (
+                    <Image
+                      src={hero.sampleImageUrl}
+                      alt={hero.name}
+                      fill
+                      className="object-cover transition-transform duration-500 group-hover:scale-105"
+                      unoptimized
+                    />
                   ) : (
                     <div className="flex h-full items-center justify-center text-ink-faint">
                       <Palette className="size-8" />
@@ -193,7 +192,8 @@ export default async function PortraitsPage() {
                   <p className="line-clamp-2 text-sm text-ink-subtle">{pack.description}</p>
                 </div>
               </Link>
-            ))}
+              );
+            })}
           </div>
 
           <div className="mt-14 text-center">

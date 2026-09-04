@@ -1,0 +1,178 @@
+{
+  "american-gothic": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/american-gothic.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/american-gothic.jpg"
+  },
+  "anime": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/anime.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/anime.jpg"
+  },
+  "baroque": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/baroque.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/baroque.jpg"
+  },
+  "celestial": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/celestial.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/celestial.jpg"
+  },
+  "charcoal": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/charcoal.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/charcoal.jpg"
+  },
+  "comic-hero": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/comic-hero.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/comic-hero.jpg"
+  },
+  "cyberpunk": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/cyberpunk.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/cyberpunk.jpg"
+  },
+  "dark-sorcerer": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/dark-sorcerer.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/dark-sorcerer.jpg"
+  },
+  "disco": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/disco.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/disco.jpg"
+  },
+  "dragon-rider": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/dragon-rider.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/dragon-rider.jpg"
+  },
+  "egyptian": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/egyptian.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/egyptian.jpg"
+  },
+  "elven": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/elven.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/elven.jpg"
+  },
+  "fairy-tale": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/fairy-tale.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/fairy-tale.jpg"
+  },
+  "ghibli-style": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/ghibli-style.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/ghibli-style.jpg"
+  },
+  "great-wave": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/great-wave.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/great-wave.jpg"
+  },
+  "imperial": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/imperial.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/imperial.jpg"
+  },
+  "impressionist": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/impressionist.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/impressionist.jpg"
+  },
+  "ink-wash": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/ink-wash.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/ink-wash.jpg"
+  },
+  "medieval": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/medieval.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/medieval.jpg"
+  },
+  "mona-lisa": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/mona-lisa.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/mona-lisa.jpg"
+  },
+  "mosaic": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/mosaic.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/mosaic.jpg"
+  },
+  "oil-painting": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/oil-painting.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/oil-painting.jpg"
+  },
+  "pearl-earring": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/pearl-earring.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/pearl-earring.jpg"
+  },
+  "pencil": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/pencil.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/pencil.jpg"
+  },
+  "persistence": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/persistence.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/persistence.jpg"
+  },
+  "pixar-3d": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/pixar-3d.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/pixar-3d.jpg"
+  },
+  "pixel-art": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/pixel-art.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/pixel-art.jpg"
+  },
+  "psychedelic": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/psychedelic.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/psychedelic.jpg"
+  },
+  "renaissance": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/renaissance.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/renaissance.jpg"
+  },
+  "rococo": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/rococo.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/rococo.jpg"
+  },
+  "roman": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/roman.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/roman.jpg"
+  },
+  "samurai": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/samurai.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/samurai.jpg"
+  },
+  "stained-glass": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/stained-glass.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/stained-glass.jpg"
+  },
+  "starry-night": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/starry-night.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/starry-night.jpg"
+  },
+  "steampunk": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/steampunk.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/steampunk.jpg"
+  },
+  "street-art": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/street-art.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/street-art.jpg"
+  },
+  "synthwave": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/synthwave.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/synthwave.jpg"
+  },
+  "the-kiss": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/the-kiss.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/the-kiss.jpg"
+  },
+  "tudor": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/tudor.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/tudor.jpg"
+  },
+  "underwater": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/underwater.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/underwater.jpg"
+  },
+  "vaporwave": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/vaporwave.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/vaporwave.jpg"
+  },
+  "victorian": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/victorian.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/victorian.jpg"
+  },
+  "water-lilies": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/water-lilies.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/water-lilies.jpg"
+  },
+  "watercolor": {
+    "full": "https://images.imagecrafter.app/catalog/v1/full/watercolor.png",
+    "thumb": "https://images.imagecrafter.app/catalog/v1/thumb/watercolor.jpg"
+  }
+}
