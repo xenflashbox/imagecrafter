@@ -363,22 +363,32 @@ export default async function LandingPage() {
             </div>
 
             <div className="flex flex-wrap justify-center gap-5">
-              {stylePacks.map((pack) => (
+              {stylePacks.map((pack) => {
+                // An empty src renders a broken-image icon, so fall through to
+                // the mark instead.
+                const hero =
+                  pack.variants.find((v) => v.sampleImageUrl?.trim())?.sampleImageUrl ||
+                  pack.thumbnailUrl?.trim();
+                return (
                 <Link
                   key={pack.id}
                   href={`/portraits/create?pack=${pack.slug}`}
                   className="group w-full sm:w-64 rounded-2xl border border-rim bg-surface overflow-hidden hover:border-accent-rim transition-all"
                 >
                   {/* Thumbnail */}
-                  <div className="aspect-[3/4] relative overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={
-                        pack.variants[0]?.sampleImageUrl || pack.thumbnailUrl
-                      }
-                      alt={pack.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
+                  <div className="aspect-[3/4] relative overflow-hidden bg-surface-raised">
+                    {hero ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={hero}
+                        alt={pack.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-ink-faint">
+                        <Palette className="size-8" />
+                      </div>
+                    )}
                   </div>
 
                   {/* Info */}
@@ -397,7 +407,8 @@ export default async function LandingPage() {
                     </div>
                   </div>
                 </Link>
-              ))}
+                );
+              })}
             </div>
 
             <div className="text-center mt-10">
