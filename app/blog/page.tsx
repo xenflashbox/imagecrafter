@@ -272,7 +272,7 @@ export default async function BlogPage({
             Transform any photo into stunning art — no account required.
           </p>
           <Link
-            href="/portraits"
+            href="/"
             className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 font-medium hover:from-violet-500 hover:to-fuchsia-500 transition-all"
           >
             Start Portrait Studio <ChevronRight className="w-4 h-4" />

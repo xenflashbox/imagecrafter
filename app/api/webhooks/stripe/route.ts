@@ -16,7 +16,8 @@ import {
   sendPrintPurchaseEmail,
 } from "@/lib/services/email-notification";
 import { createProdigiOrder } from "@/lib/services/print-fulfillment";
-import { grantPackCredits, resolvePack } from "@/lib/services/credits";
+import { grantPackCredits } from "@/lib/services/credits";
+import { resolvePackPrice } from "@/lib/services/pricing";
 import { trackTikTokEvent } from "@/lib/services/tiktok-events";
 import { trackMetaEvent } from "@/lib/services/meta-events";
 import { requireEnv } from "@/lib/env";
@@ -222,7 +223,7 @@ async function handlePackCheckoutCompleted(
     );
   }
 
-  const pack = resolvePack(packSku);
+  const pack = await resolvePackPrice(packSku);
   const credits = pack?.credits ?? parseInt(session.metadata?.credits || "0");
   if (!credits || credits <= 0) {
     throw new Error(
@@ -243,7 +244,7 @@ async function handlePackCheckoutCompleted(
     );
   }
 
-  const amountCents = session.amount_total ?? pack?.priceUsd ?? 0;
+  const amountCents = session.amount_total ?? pack?.unitAmount ?? 0;
   const email = session.customer_details?.email || null;
 
   // Sent on the replay path too. The only way we reach this with the grant

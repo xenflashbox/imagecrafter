@@ -381,6 +381,23 @@ function PreviewSection({
   isSaving?: boolean;
   saveError?: string | null;
 }) {
+  // Amounts live in Stripe; this is a client component, so it reads them from
+  // the catalog API rather than holding a literal.
+  const [digitalCents, setDigitalCents] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res = await fetch("/api/pricing");
+      const data = await res.json();
+      if (cancelled || !res.ok || !data.success) return;
+      setDigitalCents(data.digital.unitAmount as number);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   if (isGenerating) {
     return (
       <div className="flex min-h-[400px] flex-col items-center justify-center gap-6">
@@ -507,7 +524,9 @@ function PreviewSection({
               href={`/portraits/${portraitId}/preview`}
               className="flex-1 rounded-xl bg-gradient-to-r from-accent to-accent-2 px-4 py-3 text-center text-sm font-semibold text-white transition-all hover:brightness-110"
             >
-              Purchase Digital — $29.95
+              {digitalCents === null
+                ? "Purchase Digital"
+                : `Purchase Digital — $${(digitalCents / 100).toFixed(2)}`}
             </Link>
             <Link
               href={`/portraits/${portraitId}/preview`}
@@ -893,7 +912,7 @@ function CreatePortraitContent() {
       >
         <div className="mx-auto flex max-w-2xl items-center gap-4 px-6 py-3">
           <Link
-            href="/portraits"
+            href="/"
             className="flex items-center gap-1.5 text-xs text-ink-subtle transition-colors hover:text-ink"
           >
             <ArrowLeft className="size-3.5" />

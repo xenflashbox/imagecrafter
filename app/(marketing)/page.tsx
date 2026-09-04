@@ -17,6 +17,8 @@ import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { CreditPackCards } from "@/components/credit-pack-cards";
+import { getPackCatalog, getPrice, formatUsd, DIGITAL_SKU } from "@/lib/services/pricing";
+import type { CatalogPrice, PackPrice } from "@/lib/services/pricing";
 import {
   Camera,
   Check,
@@ -77,6 +79,29 @@ const websiteSchema = {
     "query-input": "required name=search_term_string",
   },
 };
+
+/** AggregateOffer for the real, Stripe-sourced catalog. */
+function offersSchema(digital: CatalogPrice, packs: PackPrice[]) {
+  const all = [digital, ...packs];
+  const amounts = all.map((p) => p.unitAmount);
+  return {
+    "@context": "https://schema.org",
+    "@type": "AggregateOffer",
+    priceCurrency: "USD",
+    lowPrice: (Math.min(...amounts) / 100).toFixed(2),
+    highPrice: (Math.max(...amounts) / 100).toFixed(2),
+    offerCount: String(all.length),
+    offers: all.map((p) => ({
+      "@type": "Offer",
+      name: p.name,
+      price: (p.unitAmount / 100).toFixed(2),
+      priceCurrency: "USD",
+      description: p.credits
+        ? `${p.credits} portrait credits — never expire`
+        : "One portrait — full 4K digital download, no watermark",
+    })),
+  };
+}
 
 // Real before/after pairs — actual production two-step pipeline outputs,
 // hosted on R2 CDN (gallery v2: gate-passing P4 regeneration). Not stock, not
@@ -148,12 +173,21 @@ export default async function LandingPage() {
   // surface as an error, never as a homepage with a silently missing
   // gallery (fail-open audit, fix directive P1#3).
   const stylePacks = await getStylePacks();
+  const [packs, digital] = await Promise.all([getPackCatalog(), getPrice(DIGITAL_SKU)]);
+
+  // Priced structured data lives here, not in the layout: this page is
+  // force-dynamic, so it can read Stripe. Amounts must never be literals.
+  const offerSchema = offersSchema(digital, packs);
 
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(offerSchema) }}
       />
 
       <div className="min-h-screen bg-canvas text-ink">
@@ -235,7 +269,7 @@ export default async function LandingPage() {
                   className="flex items-center gap-2 px-8 py-4 rounded-2xl bg-white/8 hover:bg-white/12 border border-white/10 transition-all text-base"
                 >
                   <Palette className="w-5 h-5 text-white/50" />
-                  See All Styles
+                  See All {stylePacks.length} Styles
                 </Link>
               </div>
 
@@ -296,7 +330,7 @@ export default async function LandingPage() {
             <div className="text-center mb-14">
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-green-500/15 border border-green-500/25 text-green-300 text-sm mb-4">
                 <Camera className="w-3.5 h-3.5" />
-                Real results — one photo, {AFTER_GALLERY.length} styles
+                Real results — one photo, {stylePacks.length} styles to choose from
               </div>
               <h2 className="text-4xl md:text-5xl font-light mb-4">
                 From One Photo to Any Style
@@ -448,7 +482,7 @@ export default async function LandingPage() {
             {/* Single portrait */}
             <div className="mb-12 max-w-2xl mx-auto rounded-2xl border border-violet-500/50 bg-gradient-to-b from-violet-900/20 to-transparent p-8 text-center">
               <div className="flex items-baseline justify-center gap-2 mb-1">
-                <span className="text-4xl font-light">$29.95</span>
+                <span className="text-4xl font-light">{formatUsd(digital.unitAmount)}</span>
                 <span className="text-white/40 text-sm">one-time</span>
               </div>
               <h3 className="text-lg font-medium mb-4">Single Portrait</h3>
@@ -479,7 +513,11 @@ export default async function LandingPage() {
               <h3 className="text-sm font-medium text-white/60 mb-5 uppercase tracking-wider text-center">
                 Creating more than one? Save with credit packs
               </h3>
-              <CreditPackCards theme="dark" />
+              <CreditPackCards
+                packs={packs}
+                singlePriceCents={digital.unitAmount}
+                theme="dark"
+              />
               <p className="text-center text-white/30 text-sm mt-6">
                 Credits never expire · Each credit unlocks one full 4K portrait download
               </p>

@@ -1,26 +1,37 @@
 /**
  * Credit pack cards — links to /api/packs/checkout (Clerk sign-in enforced
- * there). Server-safe; themable for the light preview page and dark
- * success/marketing pages.
+ * there). Themable for the light preview page and dark success/marketing
+ * pages.
+ *
+ * Presentational only: prices arrive as props so this can be rendered from a
+ * client page too. Callers read them from Stripe via lib/services/pricing.ts.
  */
 
-import { PACK_CATALOG } from "@/lib/services/credits";
+// Type-only: importing a value from pricing.ts would drag the Stripe SDK into
+// any client bundle that renders these cards.
+import type { PackPrice } from "@/lib/services/pricing";
 
-const SINGLE_PRICE_CENTS = 2995;
+const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 const PACK_BADGES: Record<string, string | undefined> = {
-  PACK_10: "Most Popular",
+  "PACK-10": "Most Popular",
 };
 
-export function CreditPackCards({ theme = "light" }: { theme?: "light" | "dark" }) {
+export function CreditPackCards({
+  packs,
+  singlePriceCents,
+  theme = "light",
+}: {
+  packs: PackPrice[];
+  singlePriceCents: number;
+  theme?: "light" | "dark";
+}) {
   const dark = theme === "dark";
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      {PACK_CATALOG.map((pack) => {
-        const perPortrait = pack.priceUsd / pack.credits;
-        const savingsPct = Math.round(
-          (1 - perPortrait / SINGLE_PRICE_CENTS) * 100
-        );
+      {packs.map((pack) => {
+        const perPortrait = pack.unitAmount / pack.credits;
+        const savingsPct = Math.round((1 - perPortrait / singlePriceCents) * 100);
         const badge = PACK_BADGES[pack.sku];
         return (
           <a
@@ -41,10 +52,10 @@ export function CreditPackCards({ theme = "light" }: { theme?: "light" | "dark" 
               {pack.credits} Portraits
             </div>
             <div className={`text-xl font-bold ${dark ? "text-white" : "text-slate-900"}`}>
-              ${(pack.priceUsd / 100).toFixed(2)}
+              {usd(pack.unitAmount)}
             </div>
             <div className={`text-xs ${dark ? "text-purple-300" : "text-purple-600"}`}>
-              ${(perPortrait / 100).toFixed(2)} each · Save {savingsPct}%
+              {usd(perPortrait)} each · Save {savingsPct}%
             </div>
           </a>
         );
