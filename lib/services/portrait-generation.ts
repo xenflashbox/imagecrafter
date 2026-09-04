@@ -145,10 +145,16 @@ export function buildStandInDescriptor(
   };
   if (analysis.subjectType === "pet") {
     const kind = [p.breed, p.species || "pet"].filter(Boolean).join(" ");
-    const features =
-      p.keyFeatures && p.keyFeatures.length > 0
-        ? `, with ${p.keyFeatures.join(", ")}`
-        : "";
+    // The feature list is the only unbounded field on a pet and the analysis
+    // returns it in salience order, so it gives way before the coat colour —
+    // coat is a pet's identity the way hair and eye colour are a person's.
+    // Left untrimmed it ignored both compaction levels and hard-failed the
+    // 2400-char ceiling on long-coated breeds.
+    const kept = (p.keyFeatures ?? []).slice(
+      0,
+      level >= 2 ? 3 : level >= 1 ? 5 : undefined
+    );
+    const features = kept.length > 0 ? `, with ${kept.join(", ")}` : "";
     return `a ${kind} with ${clamp(p.coloring, 300)}${features}`;
   }
   const who = p.genderPresentation || "person";

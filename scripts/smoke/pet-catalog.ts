@@ -133,7 +133,11 @@ async function main(): Promise<void> {
       );
       const sceneUrls = results.flatMap((r) => ("error" in r ? [] : [r.sceneUrl]));
       if (sceneUrls.length === 0) {
-        record("failed", "no stand-in candidates rendered");
+        const why = results
+          .map((r) => ("error" in r ? r.error : ""))
+          .filter(Boolean)
+          .join(" | ");
+        record("failed", `no stand-in candidates rendered: ${why || "no error reported"}`);
         continue;
       }
 

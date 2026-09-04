@@ -62,3 +62,6 @@ scripts/faceswap-timebox/input/
 scripts/faceswap-timebox/output/
 # Smoke outputs — real generated faces; never commit
 scripts/smoke/output/
+# Founder sample set — REAL family photos (incl. children); never commit
+docs/imagecrafter-sample/
+.review/
