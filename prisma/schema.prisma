@@ -687,27 +687,60 @@ model CreditLedger {
   @@map("ic_CreditLedger")
 }
 
-// Buyer captures pushed to Mautic after a completed checkout. Its own table
-// rather than a flag on Order because pack purchases never create an Order row,
-// and a failed push has to stay queryable so it can be retried.
+// Contacts pushed to Mautic, including the failures. Its own table rather than
+// a flag on Order because pack purchases never create an Order row, and a
+// previewer has no order at all — both still have to stay queryable for retry.
+//
+// dedupeKey is the natural key per stage: "stripe:<session>" for a buyer (guards
+// webhook replays), "preview:<email>" for a previewer (one capture per address).
 model MauticCapture {
-  id              String   @id @default(cuid())
-  stripeSessionId String   @unique // idempotency key against webhook replays
-  email           String
-  name            String?  // kept so a retry can replay the original push
-  status          String   // "captured" | "failed"
-  contactId       Int?     // Mautic contact id once the push lands
-  attempts        Int      @default(0)
-  lastError       String?
-  purchaseType    String   // "digital" | "print" | "pack"
-  subjectType     String?  // "pet" | "person" | "couple" | "family" | "group"
-  style           String?
-  orderId         String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id String @id @default(cuid())
+
+  // Expand phase: dedupeKey is what this code reads and writes, stripeSessionId
+  // is still written so the currently-deployed webhook keeps working across the
+  // deploy. The contract migration drops it once this code is live and verified.
+  dedupeKey       String  @unique
+  stripeSessionId String? @unique
+
+  stage        String   @default("buyer") // "previewer" | "buyer"
+  email        String
+  name         String?  // kept so a retry can replay the original push
+  status       String   // "captured" | "failed"
+  contactId    Int?     // Mautic contact id once the push lands
+  attempts     Int      @default(0)
+  lastError    String?
+  purchaseType String?  // "digital" | "print" | "pack" — null for previewers
+  subjectType  String?  // "pet" | "person" | "couple" | "family" | "group"
+  style        String?
+  previewUrl   String?  // win-back drip beat 1 re-shows the preview
+  orderId      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([status])
   @@map("ic_MauticCapture")
+}
+
+// One row per preview generation attempt. This is the server-side anchor for
+// the preview gate: cookies clear, so the free-preview count is keyed on the
+// session AND the IP, and the daily spend cap is counted from here rather than
+// trusted from the client.
+//
+// "blocked" rows are refusals — they do not consume the caller's quota, but
+// they do count toward the velocity signal that trips the captcha.
+model PreviewUsage {
+  id         String   @id @default(cuid())
+  sessionId  String
+  ip         String
+  email      String?  // captured at preview #2; null on the free first preview
+  portraitId String
+  status     String   @default("allowed") // "allowed" | "blocked"
+  createdAt  DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([ip, createdAt])
+  @@index([email, createdAt])
+  @@map("ic_PreviewUsage")
 }
 
 model StylePack {
