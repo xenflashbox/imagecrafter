@@ -35,10 +35,10 @@ async function createMauticContact(params: {
     email,
     ...(firstname ? { firstname } : {}),
     tags: ["newsletter", "imagecrafter", source],
-    custom_fields: {
-      signup_source: source,
-      signup_date: new Date().toISOString(),
-    },
+    // Field aliases go at the top level. Mautic accepts a nested
+    // "custom_fields" object without complaining and then discards it.
+    signup_source: source,
+    signup_date: new Date().toISOString(),
   };
 
   const response = await fetch(mauticApiUrl, {

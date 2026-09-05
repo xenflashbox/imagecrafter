@@ -20,6 +20,7 @@ import { grantPackCredits } from "@/lib/services/credits";
 import { resolvePackPrice } from "@/lib/services/pricing";
 import { trackTikTokEvent } from "@/lib/services/tiktok-events";
 import { trackMetaEvent } from "@/lib/services/meta-events";
+import { captureBuyer } from "@/lib/services/mautic";
 import { requireEnv } from "@/lib/env";
 
 // Built per request, not at module scope: Next.js collects page data during the
@@ -268,6 +269,16 @@ async function handlePackCheckoutCompleted(
     );
   }
 
+  if (email) {
+    await captureBuyer({
+      stripeSessionId: session.id,
+      email,
+      name: session.customer_details?.name,
+      purchaseType: "pack",
+      style: pack?.name || packSku,
+    });
+  }
+
   if (result.alreadyGranted) {
     return; // webhook replay — do not re-fire the Purchase pixels
   }
@@ -328,6 +339,7 @@ async function handlePortraitCheckoutCompleted(
           hiResImageUrl: true,
           stylePackSlug: true,
           styleVariantSlug: true,
+          subjectType: true,
         },
       },
     },
@@ -373,6 +385,16 @@ async function handlePortraitCheckoutCompleted(
     contentId: order.portraitId,
     contentName: `${stylePackLabel} ${styleVariantLabel}`.trim(),
     url: `${BASE_URL}/portraits/${order.portraitId}/success`,
+  });
+
+  await captureBuyer({
+    stripeSessionId: session.id,
+    email: customerEmail,
+    name: customerName,
+    purchaseType: order.type === "print" ? "print" : "digital",
+    subjectType: order.portrait?.subjectType,
+    style: `${stylePackLabel} ${styleVariantLabel}`.trim(),
+    orderId: order.id,
   });
 
   if (order.type === "digital") {
