@@ -17,6 +17,10 @@ const isPublicRoute = createRouteMatcher([
   // Webhooks (must remain public)
   "/api/webhooks/(.*)",
 
+  // Cron jobs — no Clerk session exists, so auth.protect() would 404 the
+  // scheduler. Each route enforces its own Bearer CRON_SECRET check.
+  "/api/cron/(.*)",
+
   // Portrait Studio — guest purchase flow (no auth required)
   "/portraits(.*)",
   "/api/portraits/(.*)",

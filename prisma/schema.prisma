@@ -687,6 +687,29 @@ model CreditLedger {
   @@map("ic_CreditLedger")
 }
 
+// Buyer captures pushed to Mautic after a completed checkout. Its own table
+// rather than a flag on Order because pack purchases never create an Order row,
+// and a failed push has to stay queryable so it can be retried.
+model MauticCapture {
+  id              String   @id @default(cuid())
+  stripeSessionId String   @unique // idempotency key against webhook replays
+  email           String
+  name            String?  // kept so a retry can replay the original push
+  status          String   // "captured" | "failed"
+  contactId       Int?     // Mautic contact id once the push lands
+  attempts        Int      @default(0)
+  lastError       String?
+  purchaseType    String   // "digital" | "print" | "pack"
+  subjectType     String?  // "pet" | "person" | "couple" | "family" | "group"
+  style           String?
+  orderId         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+  @@map("ic_MauticCapture")
+}
+
 model StylePack {
   id              String    @id @default(cuid())
   slug            String    @unique
