@@ -52,6 +52,26 @@ UPDATE public."ic_MauticCapture"
    SET "dedupeKey" = 'stripe:' || "stripeSessionId"
  WHERE "dedupeKey" IS NULL;
 
+-- The deploy that is live RIGHT NOW inserts without a dedupeKey, so a plain
+-- NOT NULL would 500 every checkout capture between this migration and the new
+-- deploy — the outage expand/contract exists to prevent. The trigger derives
+-- the key for those writes; the contract step drops it with the column.
+CREATE OR REPLACE FUNCTION public.ic_mautic_capture_fill_dedupekey()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW."dedupeKey" IS NULL AND NEW."stripeSessionId" IS NOT NULL THEN
+    NEW."dedupeKey" := 'stripe:' || NEW."stripeSessionId";
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS ic_mautic_capture_fill_dedupekey
+  ON public."ic_MauticCapture";
+CREATE TRIGGER ic_mautic_capture_fill_dedupekey
+  BEFORE INSERT OR UPDATE ON public."ic_MauticCapture"
+  FOR EACH ROW EXECUTE FUNCTION public.ic_mautic_capture_fill_dedupekey();
+
 ALTER TABLE public."ic_MauticCapture"
   ALTER COLUMN "dedupeKey" SET NOT NULL;
 

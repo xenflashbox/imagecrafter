@@ -17,7 +17,12 @@ UPDATE public."ic_MauticCapture"
  WHERE "dedupeKey" IS NULL
    AND "stripeSessionId" IS NOT NULL;
 
--- Takes the unique constraint and its index with it.
+-- Takes the unique constraint and its index with it, and the trigger loses the
+-- column it derived from, so both go now.
+DROP TRIGGER IF EXISTS ic_mautic_capture_fill_dedupekey
+  ON public."ic_MauticCapture";
+DROP FUNCTION IF EXISTS public.ic_mautic_capture_fill_dedupekey();
+
 ALTER TABLE public."ic_MauticCapture"
   DROP COLUMN IF EXISTS "stripeSessionId";
 
