@@ -7,8 +7,10 @@
  * sits between generation and viewing protects the image, not the wallet.
  *
  *   Layer 1  first preview free, every one after it needs an email.
- *   Layer 2  hard per-IP and per-email daily ceiling that always applies.
- *   Layer 3  captcha once the velocity signal says this is not a human.
+ *   Layer 2  a loose per-IP and per-email daily backstop — a runaway-abuse net,
+ *            deliberately far above any real session so exploring never walls.
+ *   Layer 3  captcha once the velocity signal says this is not a human. This is
+ *            the actual lock: rapid-fire is what separates a bot from a buyer.
  *
  * The counts come from ic_PreviewUsage, never from the client — a cookie-based
  * count resets when the cookie clears, which is the whole abuse case.
@@ -28,15 +30,17 @@ function envInt(name: string, fallback: number): number {
 export const FREE_PREVIEWS = envInt("PREVIEW_FREE_LIMIT", 1);
 
 /**
- * Rolling-24h ceiling per IP and per email. A generation takes ~80s, so 20 is
- * roughly half an hour of continuous exploring — past anything a real person
- * does, and instantly fatal to a script.
+ * Rolling-24h backstop per IP and per email. This is NOT the lock — the
+ * velocity trigger below is. Repeat previewing is a buying signal, so a person
+ * switching styles, poses and pets must never hit a wall; 200 is ~4.5 hours of
+ * continuous serial generation at ~80s each, which is a script, not a shopper.
  */
-export const DAILY_CAP = envInt("PREVIEW_DAILY_CAP", 20);
+export const DAILY_CAP = envInt("PREVIEW_DAILY_CAP", 200);
 
 /**
- * Velocity trip. 8 generations inside 10 minutes is not reachable serially
- * (8 x ~80s > 600s), so this only fires on parallel requests.
+ * The primary lock. 8 generations inside 10 minutes is not reachable serially
+ * (8 x ~80s > 600s), so this only fires on parallel requests — the thing that
+ * separates a bot from an enthusiast rather than a raw count that punishes both.
  */
 export const VELOCITY_COUNT = envInt("PREVIEW_VELOCITY_COUNT", 8);
 export const VELOCITY_WINDOW_MIN = envInt("PREVIEW_VELOCITY_WINDOW_MIN", 10);
