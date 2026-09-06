@@ -28,6 +28,28 @@ import { requireEnv } from "@/lib/env";
 const getStripe = () => new Stripe(requireEnv("STRIPE_SECRET_KEY"));
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
+/**
+ * Run a confirmation send that happens AFTER money has moved.
+ *
+ * Everything before this point — the credit grant, the paid/purchased status
+ * writes, the buyer capture — is the part Stripe may safely retry. A throw from
+ * the notification unwinds a fulfilment that already succeeded and puts Stripe
+ * into a retry loop that re-runs it, so the send is contained here and reported
+ * instead. Same reasoning `captureBuyer` already documents for a Mautic outage.
+ */
+async function sendPostPaymentEmail(what: string, send: () => Promise<unknown>) {
+  try {
+    await send();
+    return true;
+  } catch (error) {
+    console.error(
+      `[stripe-webhook] ${what} — PAYMENT SUCCEEDED BUT CONFIRMATION EMAIL FAILED:`,
+      error
+    );
+    return false;
+  }
+}
+
 // Map Stripe price IDs to plan tiers.
 // 2026-07-05 tier collapse (Amendment A3): only FREE/PRO exist. Legacy
 // STARTER/TEAM Stripe prices map to PRO so grandfathered subscribers renewing
@@ -253,14 +275,16 @@ async function handlePackCheckoutCompleted(
   // ledger row — most likely here. A duplicate confirmation is a far smaller
   // problem than a customer who paid and heard nothing.
   if (email) {
-    await sendPackPurchaseEmail({
-      to: email,
-      name: session.customer_details?.name || undefined,
-      packName: pack?.name || packSku,
-      credits,
-      amount: amountCents,
-      currency: (session.currency || "usd").toUpperCase(),
-    });
+    await sendPostPaymentEmail(`Pack checkout ${session.id} (${packSku})`, () =>
+      sendPackPurchaseEmail({
+        to: email,
+        name: session.customer_details?.name || undefined,
+        packName: pack?.name || packSku,
+        credits,
+        amount: amountCents,
+        currency: (session.currency || "usd").toUpperCase(),
+      })
+    );
   } else {
     // The credits ARE granted, so this must not throw and unwind the webhook —
     // but a paid customer with no confirmation has to be visible in the logs.
@@ -422,21 +446,25 @@ async function handlePortraitCheckoutCompleted(
 
     // Generate download token and send email
     const downloadUrl = buildDownloadUrl(orderId, BASE_URL);
-    await sendDigitalPurchaseEmail({
-      to: customerEmail,
-      name: customerName,
-      orderRef: orderId.slice(0, 8).toUpperCase(),
-      downloadUrl,
-      downloadExpiresHours: EXPIRY_HOURS,
-      maxDownloads: MAX_DOWNLOADS,
-      stylePackName: stylePackLabel,
-      styleVariantName: styleVariantLabel,
-      previewImageUrl: order.portrait?.previewImageUrl || undefined,
-      amount: order.amount,
-      currency: order.currency,
-    });
+    const sent = await sendPostPaymentEmail(`Digital order ${orderId}`, () =>
+      sendDigitalPurchaseEmail({
+        to: customerEmail,
+        name: customerName,
+        orderRef: orderId.slice(0, 8).toUpperCase(),
+        downloadUrl,
+        downloadExpiresHours: EXPIRY_HOURS,
+        maxDownloads: MAX_DOWNLOADS,
+        stylePackName: stylePackLabel,
+        styleVariantName: styleVariantLabel,
+        previewImageUrl: order.portrait?.previewImageUrl || undefined,
+        amount: order.amount,
+        currency: order.currency,
+      })
+    );
 
-    console.log(`[stripe-webhook] Digital order ${orderId} paid — download email sent to ${customerEmail}`);
+    if (sent) {
+      console.log(`[stripe-webhook] Digital order ${orderId} paid — download email sent to ${customerEmail}`);
+    }
   } else {
     // --- PRINT ORDER ---
     const shippingDetails = session.collected_information?.shipping_details;
@@ -482,21 +510,25 @@ async function handlePortraitCheckoutCompleted(
           .join("\n")
       : "Shipping address pending";
 
-    await sendPrintPurchaseEmail({
-      to: customerEmail,
-      name: customerName,
-      orderRef: orderId.slice(0, 8).toUpperCase(),
-      stylePackName: stylePackLabel,
-      styleVariantName: styleVariantLabel,
-      printSize: order.printSize || "Custom",
-      amount: order.amount,
-      currency: order.currency,
-      shippingName: shippingDetails?.name || customerName || "",
-      shippingAddress: shippingDisplayAddress,
-      previewImageUrl: order.portrait?.previewImageUrl || undefined,
-    });
+    const sent = await sendPostPaymentEmail(`Print order ${orderId}`, () =>
+      sendPrintPurchaseEmail({
+        to: customerEmail,
+        name: customerName,
+        orderRef: orderId.slice(0, 8).toUpperCase(),
+        stylePackName: stylePackLabel,
+        styleVariantName: styleVariantLabel,
+        printSize: order.printSize || "Custom",
+        amount: order.amount,
+        currency: order.currency,
+        shippingName: shippingDetails?.name || customerName || "",
+        shippingAddress: shippingDisplayAddress,
+        previewImageUrl: order.portrait?.previewImageUrl || undefined,
+      })
+    );
 
-    console.log(`[stripe-webhook] Print order ${orderId} paid — confirmation email sent to ${customerEmail}`);
+    if (sent) {
+      console.log(`[stripe-webhook] Print order ${orderId} paid — confirmation email sent to ${customerEmail}`);
+    }
 
     // --- PRODIGI FULFILLMENT (Phase 4) ---
     // Submit to Prodigi immediately after payment confirmed.
