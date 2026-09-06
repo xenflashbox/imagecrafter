@@ -45,6 +45,11 @@ function getTransport(): nodemailer.Transporter {
     port: parseInt(process.env.SMTP_PORT || "587"),
     secure: false, // STARTTLS
     auth: { user, pass },
+    // nodemailer's defaults are minutes long, which on a serverless function
+    // means the platform kills the invocation before the send ever reports.
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
   });
   return cachedTransport;
 }
