@@ -158,9 +158,6 @@ export async function captureBuyer(capture: BuyerCapture): Promise<void> {
   });
 
   const record = {
-    // Written during the expand phase so the currently-deployed code, which
-    // still keys on stripeSessionId, keeps working until that column is dropped.
-    stripeSessionId,
     stage: "buyer",
     email,
     name: capture.name || null,

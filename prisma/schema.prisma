@@ -696,11 +696,7 @@ model CreditLedger {
 model MauticCapture {
   id String @id @default(cuid())
 
-  // Expand phase: dedupeKey is what this code reads and writes, stripeSessionId
-  // is still written so the currently-deployed webhook keeps working across the
-  // deploy. The contract migration drops it once this code is live and verified.
-  dedupeKey       String  @unique
-  stripeSessionId String? @unique
+  dedupeKey String @unique
 
   stage        String   @default("buyer") // "previewer" | "buyer"
   email        String
