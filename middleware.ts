@@ -11,8 +11,9 @@ const isPublicRoute = createRouteMatcher([
   "/sitemap.xml",
   "/site.webmanifest",
 
-  // Health check (public — used by guardrails verify.sh)
-  "/api/health",
+  // Health checks (public — used by guardrails verify.sh). Sub-routes carry
+  // their own Bearer CRON_SECRET check; auth.protect() would 404 them.
+  "/api/health(.*)",
 
   // Webhooks (must remain public)
   "/api/webhooks/(.*)",
