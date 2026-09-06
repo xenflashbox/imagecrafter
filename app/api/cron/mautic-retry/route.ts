@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { pushContact, splitName } from "@/lib/services/mautic";
+import {
+  mauticPurchaseType,
+  mauticSubject,
+  pushContact,
+  splitName,
+} from "@/lib/services/mautic";
 
 /**
  * Drains MauticCapture rows the webhook could not push.
@@ -37,21 +42,31 @@ export async function GET(request: NextRequest) {
   let stillFailing = 0;
 
   for (const row of pending) {
+    const isPreviewer = row.stage === "previewer";
+    const subject = mauticSubject(row.subjectType);
+
+    // Rebuild the original push from the row. Stage decides the shape: a
+    // previewer has no purchase type and belongs in the win-back drip, not the
+    // buyer segment.
     const result = await pushContact({
       email: row.email,
       ...splitName(row.name),
       tags: [
         "imagecrafter",
-        "imagecrafter-buyer",
-        `ic-${row.purchaseType}`,
+        isPreviewer ? "imagecrafter-previewer" : "imagecrafter-buyer",
+        ...(!isPreviewer && row.purchaseType ? [`ic-${row.purchaseType}`] : []),
         ...(row.subjectType ? [`ic-${row.subjectType}`] : []),
       ],
       customFields: {
-        ic_source: "purchase",
-        ic_purchase_type: row.purchaseType,
-        ...(row.subjectType ? { ic_subject_type: row.subjectType } : {}),
+        ic_stage: isPreviewer ? "previewer" : "buyer",
+        ic_source: isPreviewer ? "preview" : "purchase",
+        ...(!isPreviewer && row.purchaseType
+          ? { ic_purchase_type: mauticPurchaseType(row.purchaseType) }
+          : {}),
+        ...(subject ? { ic_subject: subject } : {}),
         ...(row.style ? { ic_style: row.style } : {}),
-        ic_purchased_at: row.createdAt.toISOString(),
+        ...(isPreviewer && row.previewUrl ? { ic_preview_url: row.previewUrl } : {}),
+        ...(isPreviewer ? {} : { ic_purchased_at: row.createdAt.toISOString() }),
       },
     });
 
@@ -68,7 +83,7 @@ export async function GET(request: NextRequest) {
     if (result.success) {
       captured++;
       console.log(
-        `[mautic-retry] Recovered ${row.email} (session ${row.stripeSessionId}) as contact ${result.contactId}`
+        `[mautic-retry] Recovered ${row.stage} ${row.email} (${row.dedupeKey}) as contact ${result.contactId}`
       );
     } else {
       stillFailing++;

@@ -21,13 +21,16 @@ import {
   Loader2,
   Lock,
   LogIn,
+  Mail,
   Palette,
   RefreshCw,
+  ShieldCheck,
   Sparkles,
   Upload,
   UserRound,
 } from "lucide-react";
 import { SiteHeader, SiteFooter } from "@/components/site-chrome";
+import { Turnstile } from "@/components/turnstile";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -352,6 +355,114 @@ function StylePackSelector({
 
 // ─── Preview Section ──────────────────────────────────────────────────────────
 
+/**
+ * What the visitor sees when the preview gate refuses.
+ *
+ * The refusal arrives BEFORE any generation has run, so nothing has been spent
+ * and nothing is being withheld — the ask is for the next portrait, not for the
+ * one they already have. The copy is written that way on purpose.
+ */
+function PreviewGatePanel({
+  code,
+  message,
+  email,
+  onEmailChange,
+  onSubmitEmail,
+  onCaptchaToken,
+  captchaReady,
+  onChangeStyle,
+}: {
+  code: string;
+  message: string | null;
+  email: string;
+  onEmailChange: (v: string) => void;
+  onSubmitEmail: () => void;
+  onCaptchaToken: (token: string | null) => void;
+  captchaReady: boolean;
+  onChangeStyle?: () => void;
+}) {
+  const isEmail = code === "email_required";
+  const isCaptcha = code === "captcha_required" || code === "captcha_failed";
+
+  return (
+    <div className="flex min-h-[400px] flex-col items-center justify-center gap-5">
+      <div className="flex size-12 items-center justify-center rounded-full border border-rim">
+        {isEmail ? (
+          <Mail className="size-5 text-accent" />
+        ) : (
+          <ShieldCheck className="size-5 text-accent" />
+        )}
+      </div>
+
+      <div className="max-w-sm text-center">
+        <p className="mb-2 font-display text-xl text-ink">
+          {isEmail
+            ? "One more? Just your email."
+            : isCaptcha
+            ? "Quick check"
+            : "That's the limit for today"}
+        </p>
+        <p className="text-sm text-ink-muted">
+          {isEmail
+            ? "Your first portrait was on us. Drop your email and keep going — we'll send this one to you too."
+            : message}
+        </p>
+      </div>
+
+      {isEmail && (
+        <form
+          className="flex w-full max-w-sm flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSubmitEmail();
+          }}
+        >
+          <input
+            type="email"
+            required
+            autoFocus
+            value={email}
+            onChange={(e) => onEmailChange(e.target.value)}
+            placeholder="you@example.com"
+            className="w-full rounded-lg border border-rim bg-surface-raised px-4 py-3 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+          />
+          <PrimaryButton type="submit" className="py-2 text-sm">
+            <Sparkles /> Keep Creating
+          </PrimaryButton>
+        </form>
+      )}
+
+      {isCaptcha && (
+        <div className="flex flex-col items-center gap-3">
+          <Turnstile onToken={onCaptchaToken} />
+          <PrimaryButton
+            onClick={onSubmitEmail}
+            disabled={!captchaReady}
+            className="py-2 text-sm"
+          >
+            <RefreshCw /> Continue
+          </PrimaryButton>
+        </div>
+      )}
+
+      {!isEmail && !isCaptcha && (
+        <div className="flex flex-wrap justify-center gap-2">
+          <Link href="/portraits">
+            <QuietButton className="py-2 text-sm">
+              <Palette /> Browse Styles
+            </QuietButton>
+          </Link>
+          {onChangeStyle && (
+            <QuietButton onClick={onChangeStyle} className="py-2 text-sm">
+              <ArrowLeft /> Back
+            </QuietButton>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PreviewSection({
   portraitId,
   previewUrl,
@@ -608,6 +719,13 @@ function CreatePortraitContent() {
   const [generationStep, setGenerationStep] = useState("Analyzing your photo…");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  // Preview gate. gateCode decides which prompt to show; previewEmail is the
+  // address the visitor has already given, replayed on every later generation
+  // so they are asked exactly once.
+  const [gateCode, setGateCode] = useState<string | null>(null);
+  const [gateEmail, setGateEmail] = useState("");
+  const [previewEmail, setPreviewEmail] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -656,6 +774,8 @@ function CreatePortraitContent() {
     const savedPreviewUrl = sessionStorage.getItem("ic_previewUrl");
     const savedSourceUrl = sessionStorage.getItem("ic_sourceUrl");
 
+    setPreviewEmail(sessionStorage.getItem("ic_previewEmail"));
+
     if (savedPortraitId && savedPreviewUrl) {
       setPortraitId(savedPortraitId);
       setSessionId(savedSessionId);
@@ -685,6 +805,7 @@ function CreatePortraitContent() {
   // Clears preview URL so regeneration creates a fresh version
   const handleRetry = () => {
     setGenerationError(null);
+    setGateCode(null);
     setPreviewUrl(null);
     setIsSaved(false);
     sessionStorage.removeItem("ic_previewUrl");
@@ -705,6 +826,7 @@ function CreatePortraitContent() {
     sessionStorage.removeItem("ic_sessionId");
     sessionStorage.removeItem("ic_previewUrl");
     sessionStorage.removeItem("ic_sourceUrl");
+    sessionStorage.removeItem("ic_previewEmail");
 
     // Replace URL immediately (before state changes trigger re-renders)
     // Using window.location for a clean navigation that won't restore state
@@ -807,13 +929,20 @@ function CreatePortraitContent() {
     }
   };
 
-  // Generate portrait
-  const handleGenerate = async () => {
+  // Generate portrait.
+  //
+  // The gate credentials are passed explicitly rather than read from state:
+  // the email form calls this in the same tick it accepts the address, and a
+  // setState is not visible synchronously.
+  const handleGenerate = async (gate?: { email?: string | null; captchaToken?: string | null }) => {
     if (!portraitId || !selectedPack || !selectedVariant) return;
     const scene = userScene.trim();
     if (selectedPack.slug === "custom-scene" && !scene) return;
+    const email = gate?.email ?? previewEmail;
+    const token = gate?.captchaToken ?? captchaToken;
     setIsGenerating(true);
     setGenerationError(null);
+    setGateCode(null);
     setStep("generate");
 
     const steps = [
@@ -836,11 +965,18 @@ function CreatePortraitContent() {
           styleVariantSlug: selectedVariant.slug,
           sessionId,
           ...(scene ? { userScene: scene } : {}),
+          ...(email ? { email } : {}),
+          ...(token ? { captchaToken: token } : {}),
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
         setGenerationError(data.error || "Generation failed. Please try with a different photo or style.");
+        if (data.code) setGateCode(data.code);
+        // A Turnstile token is single-use — a rejected one must not be replayed.
+        if (data.code === "captcha_failed" || data.code === "captcha_required") {
+          setCaptchaToken(null);
+        }
         return;
       }
       setPreviewUrl(data.previewImageUrl);
@@ -850,6 +986,19 @@ function CreatePortraitContent() {
       clearInterval(interval);
       setIsGenerating(false);
     }
+  };
+
+  // Retry the refused generation with whatever the gate asked for.
+  const handleGateSubmit = async () => {
+    const email = gateEmail.trim().toLowerCase();
+    if (gateCode === "email_required") {
+      if (!email) return;
+      setPreviewEmail(email);
+      sessionStorage.setItem("ic_previewEmail", email);
+      await handleGenerate({ email });
+      return;
+    }
+    await handleGenerate({ captchaToken });
   };
 
   // Regenerate - same style, new generation
@@ -1023,7 +1172,7 @@ function CreatePortraitContent() {
                 <ArrowLeft /> Change Photo
               </QuietButton>
               <PrimaryButton
-                onClick={handleGenerate}
+                onClick={() => handleGenerate()}
                 disabled={
                   !selectedPack ||
                   !selectedVariant ||
@@ -1053,6 +1202,18 @@ function CreatePortraitContent() {
                 </p>
               </div>
             )}
+            {!isGenerating && gateCode ? (
+              <PreviewGatePanel
+                code={gateCode}
+                message={generationError}
+                email={gateEmail}
+                onEmailChange={setGateEmail}
+                onSubmitEmail={handleGateSubmit}
+                onCaptchaToken={setCaptchaToken}
+                captchaReady={Boolean(captchaToken)}
+                onChangeStyle={handleRetry}
+              />
+            ) : (
             <PreviewSection
               portraitId={portraitId}
               previewUrl={previewUrl}
@@ -1068,6 +1229,7 @@ function CreatePortraitContent() {
               isSaving={isSaving}
               saveError={saveError}
             />
+            )}
           </div>
         )}
       </div>

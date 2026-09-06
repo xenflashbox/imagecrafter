@@ -18,6 +18,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { generatePortrait } from "@/lib/services/portrait-generation";
+import { checkPreviewGate, clientIp, isNewPreviewer } from "@/lib/services/preview-gate";
+import { capturePreviewer } from "@/lib/services/mautic";
 
 // The synchronous pipeline (analysis → stand-in + fidelity gate → swap →
 // acceptance gate, each leg with retries) routinely exceeds the project's
@@ -43,6 +45,8 @@ export async function POST(request: NextRequest) {
       styleVariantSlug?: string;
       sessionId?: string;
       userScene?: string;
+      email?: string;
+      captchaToken?: string;
     };
 
     try {
@@ -55,6 +59,8 @@ export async function POST(request: NextRequest) {
     }
 
     const { portraitId, stylePackSlug, styleVariantSlug, sessionId, userScene } = body;
+    const submittedEmail = body.email;
+    const captchaToken = body.captchaToken;
 
     if (!portraitId || !stylePackSlug || !styleVariantSlug) {
       return NextResponse.json(
@@ -116,6 +122,58 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // --- Preview gate ---
+    //
+    // Everything past this point costs money (Claude Vision, the stand-in
+    // provider, the swap, the upscale), so the gate sits HERE rather than
+    // between generation and viewing. A refusal below has spent nothing.
+    //
+    // It runs after the 403/409 checks so a request that was never going to
+    // generate anything does not consume the caller's quota.
+    const accountEmail = userId
+      ? (
+          await prisma.user.findUnique({
+            where: { id: userId },
+            select: { email: true },
+          })
+        )?.email
+      : null;
+
+    const gate = await checkPreviewGate({
+      sessionId: portrait.sessionId,
+      ip: clientIp(request.headers),
+      portraitId,
+      accountEmail,
+      submittedEmail,
+      captchaToken,
+    });
+
+    if (!gate.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: gate.error,
+          code: gate.code,
+          previewsUsed: gate.previewsUsed,
+        },
+        {
+          status:
+            gate.code === "rate_limited" || gate.code === "daily_limit" ? 429 : 403,
+        }
+      );
+    }
+
+    // Capture the address before generating: an ~80s pipeline that dies must not
+    // also lose the email the visitor just handed over. The post-generation push
+    // below upserts on the same key to enrich it with the preview URL.
+    if (gate.email && (await isNewPreviewer(gate.email))) {
+      await capturePreviewer({
+        email: gate.email,
+        subjectType: portrait.subjectType,
+        style: portrait.stylePackSlug,
+      });
+    }
+
     // --- Run generation pipeline ---
     const result = await generatePortrait({
       portraitId,
@@ -141,6 +199,17 @@ export async function POST(request: NextRequest) {
         },
         { status }
       );
+    }
+
+    // Re-push with the finished preview so the win-back drip can re-show it.
+    // Upserts on preview:<email>, so this enriches the pre-generation row.
+    if (gate.email) {
+      await capturePreviewer({
+        email: gate.email,
+        subjectType: result.subjectType ?? portrait.subjectType,
+        style: portrait.stylePackSlug,
+        previewUrl: result.previewImageUrl,
+      });
     }
 
     return NextResponse.json({

@@ -12,16 +12,45 @@ import { prisma } from "@/lib/prisma";
 
 const MAUTIC_USER = process.env.MAUTIC_USER || "admin";
 
-/** Contact-field aliases provisioned on the shared Mautic instance for ImageCrafter. */
+/**
+ * Contact-field aliases provisioned on the shared Mautic instance, read off the
+ * instance itself (ids 85-89, 95-97) rather than transcribed.
+ *
+ * ic_subject_type (87) is deliberately absent. It is labelled LEGACY on the
+ * instance and no segment reads it — ic_subject (96) replaced it. A name that
+ * does not match a provisioned alias is discarded by Mautic on a 201, so an
+ * emit-side typo looks exactly like success.
+ */
 export type MauticCustomFields = {
+  ic_stage?: string;
   ic_source?: string;
   ic_purchase_type?: string;
-  ic_subject_type?: string;
+  ic_subject?: string;
   ic_style?: string;
+  ic_preview_url?: string;
   ic_purchased_at?: string;
   signup_source?: string;
   signup_date?: string;
 };
+
+/**
+ * Our domain calls a one-off portrait "digital"; the segments (43/44) key on
+ * "single". Mautic's vocabulary is the contract, so translate at the boundary
+ * and keep the domain word in our own tables.
+ */
+export function mauticPurchaseType(type: string): string {
+  return type === "digital" ? "single" : type;
+}
+
+/**
+ * Segments 41-44 split on pet vs person only. A couple, a family or a group is
+ * a person subject for drip purposes — without this they would match no segment
+ * at all and silently receive nothing.
+ */
+export function mauticSubject(subjectType?: string | null): string | undefined {
+  if (!subjectType) return undefined;
+  return subjectType === "pet" ? "pet" : "person";
+}
 
 export type MauticPushResult =
   | { success: true; contactId?: number }
@@ -104,25 +133,35 @@ export type BuyerCapture = {
 export async function captureBuyer(capture: BuyerCapture): Promise<void> {
   const { stripeSessionId, email, purchaseType, subjectType, style, orderId } = capture;
   const purchasedAt = capture.purchasedAt ?? new Date();
+  const dedupeKey = `stripe:${stripeSessionId}`;
 
-  const existing = await prisma.mauticCapture.findUnique({ where: { stripeSessionId } });
+  const existing = await prisma.mauticCapture.findUnique({ where: { dedupeKey } });
   if (existing?.status === "captured") return; // webhook replay
 
+  // Mautic upserts on email, so a previewer who buys is the same contact with
+  // ic_stage rewritten to "buyer" — the win-back segment drops them, the buyer
+  // segment picks them up. No second contact is created.
+  const subject = mauticSubject(subjectType);
   const result = await pushContact({
     email,
     ...splitName(capture.name),
     tags: ["imagecrafter", "imagecrafter-buyer", `ic-${purchaseType}`,
       ...(subjectType ? [`ic-${subjectType}`] : [])],
     customFields: {
+      ic_stage: "buyer",
       ic_source: "purchase",
-      ic_purchase_type: purchaseType,
-      ...(subjectType ? { ic_subject_type: subjectType } : {}),
+      ic_purchase_type: mauticPurchaseType(purchaseType),
+      ...(subject ? { ic_subject: subject } : {}),
       ...(style ? { ic_style: style } : {}),
       ic_purchased_at: purchasedAt.toISOString(),
     },
   });
 
   const record = {
+    // Written during the expand phase so the currently-deployed code, which
+    // still keys on stripeSessionId, keeps working until that column is dropped.
+    stripeSessionId,
+    stage: "buyer",
     email,
     name: capture.name || null,
     purchaseType,
@@ -136,8 +175,8 @@ export async function captureBuyer(capture: BuyerCapture): Promise<void> {
   };
 
   await prisma.mauticCapture.upsert({
-    where: { stripeSessionId },
-    create: { stripeSessionId, ...record },
+    where: { dedupeKey },
+    create: { dedupeKey, ...record },
     update: record,
   });
 
@@ -148,6 +187,74 @@ export async function captureBuyer(capture: BuyerCapture): Promise<void> {
   } else {
     console.error(
       `[mautic] Buyer capture FAILED for ${email} (session ${stripeSessionId}) — recorded for retry: ${result.error}`
+    );
+  }
+}
+
+export type PreviewerCapture = {
+  email: string;
+  subjectType?: string | null;
+  style?: string | null;
+  previewUrl?: string | null;
+};
+
+/**
+ * Push a previewer — the email captured at preview #2 — into the win-back drip.
+ *
+ * Same contract as the buyer capture: never throws, because a Mautic outage must
+ * not cost the visitor the preview they just asked for. Failures are written as
+ * status="failed" for /api/cron/mautic-retry to drain.
+ *
+ * Keyed on the address, so repeat previews from the same person re-push (style
+ * and preview URL move forward) without ever creating a second capture row.
+ */
+export async function capturePreviewer(capture: PreviewerCapture): Promise<void> {
+  const { email, subjectType, style, previewUrl } = capture;
+  const dedupeKey = `preview:${email}`;
+
+  const existing = await prisma.mauticCapture.findUnique({ where: { dedupeKey } });
+
+  // Once they have bought, do not demote them back to previewer.
+  if (existing?.stage === "buyer") return;
+
+  const subject = mauticSubject(subjectType);
+  const result = await pushContact({
+    email,
+    tags: ["imagecrafter", "imagecrafter-previewer",
+      ...(subjectType ? [`ic-${subjectType}`] : [])],
+    customFields: {
+      ic_stage: "previewer",
+      ic_source: "preview",
+      ...(subject ? { ic_subject: subject } : {}),
+      ...(style ? { ic_style: style } : {}),
+      ...(previewUrl ? { ic_preview_url: previewUrl } : {}),
+    },
+  });
+
+  const record = {
+    stage: "previewer",
+    email,
+    purchaseType: null,
+    subjectType: subjectType || null,
+    style: style || null,
+    previewUrl: previewUrl || null,
+    attempts: (existing?.attempts ?? 0) + 1,
+    status: result.success ? "captured" : "failed",
+    contactId: result.success ? result.contactId ?? null : null,
+    lastError: result.success ? null : result.error.slice(0, 1000),
+  };
+
+  await prisma.mauticCapture.upsert({
+    where: { dedupeKey },
+    create: { dedupeKey, ...record },
+    update: record,
+  });
+
+  if (result.success) {
+    console.log(`[mautic] Captured previewer ${email} as contact ${result.contactId}`);
+  } else {
+    console.error(
+      `[mautic] Previewer capture FAILED for ${email} — recorded for retry: ${result.error}`
     );
   }
 }
