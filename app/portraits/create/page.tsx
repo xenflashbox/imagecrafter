@@ -469,7 +469,7 @@ function PreviewSection({
   previewUrl,
   isGenerating,
   error,
-  generationStep,
+  generationElapsedMs,
   onRegenerate,
   onChangeStyle,
   onNewPhoto,
@@ -483,7 +483,7 @@ function PreviewSection({
   previewUrl: string | null;
   isGenerating: boolean;
   error: string | null;
-  generationStep: string;
+  generationElapsedMs: number;
   onRegenerate?: () => void;
   onChangeStyle?: () => void;
   onNewPhoto?: () => void;
@@ -511,6 +511,10 @@ function PreviewSection({
   }, []);
 
   if (isGenerating) {
+    // Elapsed wall-clock only. The pipeline reports no intermediate progress,
+    // so anything shaped like a percentage or a stage list would be invented.
+    const secs = Math.floor(generationElapsedMs / 1000);
+    const clock = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
     return (
       <div className="flex min-h-[400px] flex-col items-center justify-center gap-6">
         <div className="relative size-24">
@@ -519,14 +523,21 @@ function PreviewSection({
             <Sparkles className="size-6 text-accent" />
           </span>
         </div>
-        <div className="text-center">
+        <div className="max-w-sm text-center">
           <p className="mb-1 font-display text-xl text-ink">Creating your portrait…</p>
-          <p className="text-sm text-ink-subtle">{generationStep}</p>
+          <p className="text-sm leading-relaxed text-ink-muted">
+            Good portraits take 3–5 minutes. We paint a scene around your subject,
+            then work the face into it — that&rsquo;s the part that makes it look
+            like them. Please keep this tab open.
+          </p>
         </div>
-        <div className="h-1.5 w-64 overflow-hidden rounded-full bg-surface-raised">
-          <div className="h-full w-3/4 animate-pulse rounded-full bg-gradient-to-r from-accent to-accent-2" />
-        </div>
-        <p className="text-xs text-ink-faint">This usually takes 15–30 seconds</p>
+        <p className="font-display text-2xl tabular-nums text-ink-subtle">{clock}</p>
+        {secs >= 360 && (
+          <p className="max-w-sm text-center text-xs text-ink-faint">
+            This one is taking longer than usual. It is still running — we will
+            show it or tell you it failed.
+          </p>
+        )}
       </div>
     );
   }
@@ -717,7 +728,7 @@ function CreatePortraitContent() {
   const [selectedVariant, setSelectedVariant] = useState<StyleVariant | null>(null);
   const [userScene, setUserScene] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generationStep, setGenerationStep] = useState("Analyzing your photo…");
+  const [generationElapsedMs, setGenerationElapsedMs] = useState(0);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   // Preview gate. gateCode decides which prompt to show; previewEmail is the
@@ -946,15 +957,9 @@ function CreatePortraitContent() {
     setGateCode(null);
     setStep("generate");
 
-    const steps = [
-      "Analyzing your photo…",
-      "Identifying subject features…",
-      "Crafting your portrait prompt…",
-      "Generating your artwork…",
-      "Applying finishing touches…",
-    ];
-    let si = 0;
-    const interval = setInterval(() => { si = (si + 1) % steps.length; setGenerationStep(steps[si]); }, 4000);
+    const startedAt = Date.now();
+    setGenerationElapsedMs(0);
+    const interval = setInterval(() => setGenerationElapsedMs(Date.now() - startedAt), 1000);
 
     try {
       const res = await fetch("/api/portraits/generate", {
@@ -1225,7 +1230,7 @@ function CreatePortraitContent() {
               previewUrl={previewUrl}
               isGenerating={isGenerating}
               error={generationError}
-              generationStep={generationStep}
+              generationElapsedMs={generationElapsedMs}
               onRegenerate={handleRegenerate}
               onChangeStyle={handleRetry}
               onNewPhoto={handleStartOver}
