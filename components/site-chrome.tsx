@@ -15,9 +15,9 @@ export function Wordmark({ size = "md" }: { size?: "sm" | "md" }) {
   return (
     <Link href="/" className="flex items-center gap-2.5">
       <div
-        className={`${box} rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center`}
+        className={`${box} rounded-sm bg-accent flex items-center justify-center`}
       >
-        <Sparkles className="size-4 text-white" />
+        <Sparkles className="size-4 text-canvas" />
       </div>
       <span className={`font-semibold ${text} tracking-tight`}>ImageCrafter</span>
     </Link>
@@ -43,6 +43,9 @@ export function SiteHeader({
             </Link>
             <Link href="/#results" className="hover:text-ink transition-colors">
               Results
+            </Link>
+            <Link href="/memorial" className="hover:text-ink transition-colors">
+              Memorial
             </Link>
             <Link href="/#pricing" className="hover:text-ink transition-colors">
               Pricing
@@ -70,6 +73,9 @@ export function SiteFooter() {
         <div className="flex items-center gap-5">
           <Link href="/" className="hover:text-ink-muted transition-colors">
             Styles
+          </Link>
+          <Link href="/memorial" className="hover:text-ink-muted transition-colors">
+            Memorial
           </Link>
           <Link href="/#pricing" className="hover:text-ink-muted transition-colors">
             Pricing

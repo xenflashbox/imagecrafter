@@ -2,7 +2,7 @@
  * RSS Feed — /blog/rss.xml
  *
  * Returns an RSS 2.0 feed of the 20 most recent published blog posts.
- * Data sourced from Payload CMS (cms.xencolabs.com), site ID 7.
+ * Data sourced from Payload CMS (cms.imagecrafter.app), site ID 7.
  * Public endpoint, no authentication required.
  */
 

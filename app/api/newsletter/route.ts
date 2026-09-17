@@ -1,10 +1,10 @@
 /**
  * POST /api/newsletter — Newsletter Subscription
  *
- * Accepts an email (and optional first name) and creates a contact in Mautic
- * tagged as a newsletter subscriber for ImageCrafter.
+ * Subscribes the address to the listmonk newsletter list (the list that will
+ * actually broadcast to it) and creates a matching Mautic contact tagged as a
+ * newsletter subscriber (the behavioural funnel).
  *
- * Integration: Mautic REST API via internal cluster URL.
  * Public endpoint — no authentication required.
  *
  * Mautic docs: MAUTIC_BLOGCRAFT_INTEGRATION_API.md
@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getMauticApiUrl, requireEnv } from "@/lib/env";
+import { subscribeToNewsletter } from "@/lib/services/listmonk";
 
 const MAUTIC_USER = process.env.MAUTIC_USER || "admin";
 
@@ -37,8 +38,10 @@ async function createMauticContact(params: {
     tags: ["newsletter", "imagecrafter", source],
     // Field aliases go at the top level. Mautic accepts a nested
     // "custom_fields" object without complaining and then discards it.
-    signup_source: source,
-    signup_date: new Date().toISOString(),
+    //
+    // ic_source, not signup_source: the latter is a select owned by another
+    // property on this shared instance and rejects our values outright.
+    ic_source: source,
   };
 
   const response = await fetch(mauticApiUrl, {
@@ -87,6 +90,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // Listmonk first: it owns the send. A signup that only reached Mautic
+    // would never receive the newsletter it just asked for.
+    await subscribeToNewsletter({ email, name: firstname });
+
     const result = await createMauticContact({ email, firstname, source });
 
     if (!result.success) {

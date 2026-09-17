@@ -23,7 +23,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   if (!ADMIN_USER_IDS.includes(userId)) {
     return (
-      <div className="min-h-screen bg-[#08080c] flex items-center justify-center">
+      <div className="noir min-h-screen bg-[#08080c] flex items-center justify-center">
         <div className="text-center max-w-sm px-6">
           <div className="text-6xl mb-4">🔒</div>
           <h1 className="text-2xl font-light text-white mb-2">Access Denied</h1>
@@ -42,7 +42,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   return (
-    <div className="min-h-screen bg-[#08080c] text-white">
+    <div className="noir min-h-screen bg-[#08080c] text-white">
       {/* Admin nav bar */}
       <div className="border-b border-white/10 bg-[#0d0d14]">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">

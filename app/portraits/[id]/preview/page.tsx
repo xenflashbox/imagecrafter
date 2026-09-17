@@ -189,7 +189,7 @@ export default async function PortraitPreviewPage({ params }: Props) {
                   />
                   {!isPurchased && (
                     <div className="absolute bottom-4 left-0 right-0 z-10 text-center">
-                      <div className="inline-flex items-center gap-2 rounded-full bg-black/70 px-4 py-2 text-sm backdrop-blur-sm">
+                      <div className="inline-flex items-center gap-2 rounded-full bg-black/70 px-4 py-2 text-sm text-white backdrop-blur-sm">
                         <Lock className="size-3.5" />
                         Watermarked preview — purchase to unlock
                       </div>
@@ -310,7 +310,7 @@ export default async function PortraitPreviewPage({ params }: Props) {
                   <CreditPackCards
                     packs={packs}
                     singlePriceCents={digital.unitAmount}
-                    theme="dark"
+                   
                   />
                   <p className="mt-2 text-center text-xs text-ink-faint">
                     Credits never expire · Redeem any portrait as a digital download ·

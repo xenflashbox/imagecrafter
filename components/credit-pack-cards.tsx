@@ -1,7 +1,6 @@
 /**
  * Credit pack cards — links to /api/packs/checkout (Clerk sign-in enforced
- * there). Themable for the light preview page and dark success/marketing
- * pages.
+ * there).
  *
  * Presentational only: prices arrive as props so this can be rendered from a
  * client page too. Callers read them from Stripe via lib/services/pricing.ts.
@@ -20,13 +19,10 @@ const PACK_BADGES: Record<string, string | undefined> = {
 export function CreditPackCards({
   packs,
   singlePriceCents,
-  theme = "light",
 }: {
   packs: PackPrice[];
   singlePriceCents: number;
-  theme?: "light" | "dark";
 }) {
-  const dark = theme === "dark";
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
       {packs.map((pack) => {
@@ -37,24 +33,16 @@ export function CreditPackCards({
           <a
             key={pack.sku}
             href={`/api/packs/checkout?sku=${pack.sku}`}
-            className={`relative rounded-xl border p-4 text-center transition-colors ${
-              dark
-                ? "border-white/15 bg-white/5 hover:border-purple-400/60"
-                : "border-slate-200 bg-white hover:border-purple-400"
-            }`}
+            className="relative rounded-xl border border-rim bg-surface-raised p-4 text-center transition-colors hover:border-accent-rim"
           >
             {badge && (
-              <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-purple-600 px-3 py-0.5 text-[11px] font-semibold text-white whitespace-nowrap">
+              <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-accent px-3 py-0.5 text-[11px] font-semibold text-canvas whitespace-nowrap">
                 {badge}
               </span>
             )}
-            <div className={`text-sm font-semibold ${dark ? "text-white" : "text-slate-900"}`}>
-              {pack.credits} Portraits
-            </div>
-            <div className={`text-xl font-bold ${dark ? "text-white" : "text-slate-900"}`}>
-              {usd(pack.unitAmount)}
-            </div>
-            <div className={`text-xs ${dark ? "text-purple-300" : "text-purple-600"}`}>
+            <div className="text-sm font-semibold">{pack.credits} Portraits</div>
+            <div className="text-xl font-bold">{usd(pack.unitAmount)}</div>
+            <div className="text-xs text-accent">
               {usd(perPortrait)} each · Save {savingsPct}%
             </div>
           </a>

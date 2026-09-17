@@ -1,7 +1,7 @@
 /**
  * /blog — Blog Index (Public)
  *
- * Server-rendered. Fetches content from Payload CMS (cms.xencolabs.com)
+ * Server-rendered. Fetches content from Payload CMS (cms.imagecrafter.app)
  * filtered to ImageCrafter site (ID 7). Supports category filtering and
  * pagination via URL search params.
  *
@@ -83,23 +83,23 @@ export default async function BlogPage({
   const { docs: posts, totalPages, hasPrevPage, hasNextPage } = postsData;
 
   return (
-    <div className="min-h-screen bg-[#06060a] text-white">
+    <div className="min-h-screen bg-canvas text-ink">
       {/* Header */}
-      <div className="border-b border-white/5 bg-gradient-to-b from-violet-600/10 to-transparent">
+      <div className="border-b border-rim bg-surface">
         <div className="max-w-5xl mx-auto px-6 py-16 text-center">
-          <div className="inline-flex items-center gap-2 text-xs text-violet-400 bg-violet-500/10 rounded-full px-3 py-1 mb-4">
+          <div className="inline-flex items-center gap-2 text-xs text-accent bg-accent-soft rounded-full px-3 py-1 mb-4">
             <Tag className="w-3 h-3" />
             AI Art &amp; Portrait Studio
           </div>
           <h1 className="text-4xl md:text-5xl font-light mb-4">Blog</h1>
-          <p className="text-lg text-white/60 max-w-xl mx-auto">
+          <p className="text-lg text-ink-muted max-w-xl mx-auto">
             Tips, tutorials, and inspiration for AI portraits and image
             generation
           </p>
           <div className="mt-4">
             <a
               href="/blog/rss.xml"
-              className="inline-flex items-center gap-1.5 text-xs text-white/40 hover:text-orange-400 transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs text-ink-subtle hover:text-orange-400 transition-colors"
             >
               <Rss className="w-3 h-3" /> RSS Feed
             </a>
@@ -109,15 +109,15 @@ export default async function BlogPage({
 
       {/* Category Filter */}
       {categories.length > 0 && (
-        <div className="border-b border-white/5">
+        <div className="border-b border-rim">
           <div className="max-w-5xl mx-auto px-6 py-4">
             <div className="flex items-center gap-2 overflow-x-auto">
               <Link
                 href="/blog"
                 className={`px-4 py-2 rounded-full text-sm whitespace-nowrap transition-colors ${
                   !category
-                    ? "bg-violet-500 text-white"
-                    : "bg-white/5 text-white/60 hover:text-white"
+                    ? "bg-accent text-canvas"
+                    : "bg-surface text-ink-muted hover:text-ink"
                 }`}
               >
                 All Posts
@@ -128,8 +128,8 @@ export default async function BlogPage({
                   href={`/blog?category=${getCategorySlug(cat)}`}
                   className={`px-4 py-2 rounded-full text-sm whitespace-nowrap transition-colors ${
                     category === getCategorySlug(cat)
-                      ? "bg-violet-500 text-white"
-                      : "bg-white/5 text-white/60 hover:text-white"
+                      ? "bg-accent text-canvas"
+                      : "bg-surface text-ink-muted hover:text-ink"
                   }`}
                 >
                   {getCategoryTitle(cat)}
@@ -145,8 +145,8 @@ export default async function BlogPage({
         {posts.length === 0 ? (
           <div className="text-center py-20">
             <div className="text-5xl mb-4">✍️</div>
-            <p className="text-white/50 mb-2">No posts yet.</p>
-            <p className="text-white/30 text-sm">
+            <p className="text-ink-subtle mb-2">No posts yet.</p>
+            <p className="text-ink-faint text-sm">
               Check back soon for AI image generation tips and tutorials.
             </p>
           </div>
@@ -165,7 +165,7 @@ export default async function BlogPage({
                   <Link
                     key={post.id}
                     href={`/blog/${post.slug}`}
-                    className="group bg-white/5 rounded-xl border border-white/10 overflow-hidden hover:border-violet-500/50 transition-all"
+                    className="group bg-surface rounded-xl border border-rim overflow-hidden hover:border-accent-rim transition-all"
                   >
                     {/* Cover image */}
                     {hasImage ? (
@@ -183,7 +183,7 @@ export default async function BlogPage({
                         />
                       </div>
                     ) : (
-                      <div className="aspect-video bg-gradient-to-br from-violet-900/40 to-pink-900/40 flex items-center justify-center">
+                      <div className="aspect-video bg-surface flex items-center justify-center">
                         <span className="text-4xl">🎨</span>
                       </div>
                     )}
@@ -191,19 +191,19 @@ export default async function BlogPage({
                     {/* Content */}
                     <div className="p-5">
                       {firstCategory && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 mb-3 inline-block">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-accent-soft text-accent mb-3 inline-block">
                           {getCategoryTitle(firstCategory)}
                         </span>
                       )}
-                      <h2 className="text-base font-medium mb-2 group-hover:text-violet-300 transition-colors line-clamp-2 leading-snug">
+                      <h2 className="text-base font-medium mb-2 group-hover:text-accent transition-colors line-clamp-2 leading-snug">
                         {post.title}
                       </h2>
                       {post.excerpt && (
-                        <p className="text-sm text-white/50 line-clamp-2 mb-4">
+                        <p className="text-sm text-ink-subtle line-clamp-2 mb-4">
                           {post.excerpt}
                         </p>
                       )}
-                      <div className="flex items-center gap-3 text-xs text-white/40">
+                      <div className="flex items-center gap-3 text-xs text-ink-subtle">
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
                           {formatDate(pubDate)}
@@ -220,7 +220,7 @@ export default async function BlogPage({
                             return label ? (
                               <span
                                 key={i}
-                                className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-white/30 border border-white/5"
+                                className="text-xs px-2 py-0.5 rounded-full bg-surface text-ink-faint border border-rim"
                               >
                                 #{label}
                               </span>
@@ -240,18 +240,18 @@ export default async function BlogPage({
                 {hasPrevPage && (
                   <Link
                     href={`/blog?page=${page - 1}${category ? `&category=${category}` : ""}`}
-                    className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-sm"
+                    className="px-4 py-2 rounded-lg bg-surface hover:bg-surface transition-colors text-sm"
                   >
                     ← Previous
                   </Link>
                 )}
-                <span className="px-4 py-2 text-white/40 text-sm">
+                <span className="px-4 py-2 text-ink-subtle text-sm">
                   Page {page} of {totalPages}
                 </span>
                 {hasNextPage && (
                   <Link
                     href={`/blog?page=${page + 1}${category ? `&category=${category}` : ""}`}
-                    className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-sm"
+                    className="px-4 py-2 rounded-lg bg-surface hover:bg-surface transition-colors text-sm"
                   >
                     Next →
                   </Link>
@@ -263,17 +263,17 @@ export default async function BlogPage({
       </div>
 
       {/* CTA */}
-      <div className="border-t border-white/5 bg-gradient-to-t from-violet-600/5 to-transparent">
+      <div className="border-t border-rim bg-surface">
         <div className="max-w-5xl mx-auto px-6 py-16 text-center">
           <h2 className="text-2xl font-light mb-3">
             Ready to create your own AI portrait?
           </h2>
-          <p className="text-white/50 mb-6">
+          <p className="text-ink-subtle mb-6">
             Transform any photo into stunning art — no account required.
           </p>
           <Link
             href="/"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 font-medium hover:from-violet-500 hover:to-fuchsia-500 transition-all"
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-accent text-canvas font-medium hover:opacity-90 transition-all"
           >
             Start Portrait Studio <ChevronRight className="w-4 h-4" />
           </Link>

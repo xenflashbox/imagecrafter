@@ -3,8 +3,14 @@
  *
  * Fetches blog content from the shared Xenco Labs Payload CMS instance.
  * Site: ImageCrafter (site ID = 7, slug = "imagecrafter")
- * API Base: https://cms.xencolabs.com/api
- * Admin: https://cms.xencolabs.com/admin
+ * API Base: https://cms.imagecrafter.app/api
+ * Admin: https://cms.imagecrafter.app/admin
+ *
+ * The CMS is HOST-SCOPED: each tenant's domain serves only that tenant's
+ * documents. https://cms.xencolabs.com returns site 9 and will report zero
+ * ImageCrafter authors/articles no matter what `where[site]` filter or API key
+ * you send. Point this at an imagecrafter.app host or every query comes back
+ * empty.
  *
  * Articles are filtered by site ID so this app only sees its own content.
  * Lexical rich-text is rendered server-side to HTML (never sent raw JSON to client).
@@ -13,7 +19,7 @@
 const PAYLOAD_PUBLIC =
   process.env.NEXT_PUBLIC_PAYLOAD_URL ||
   process.env.PAYLOAD_CMS_URL ||
-  "https://cms.xencolabs.com";
+  "https://cms.imagecrafter.app";
 
 const PAYLOAD_API = `${PAYLOAD_PUBLIC}/api`;
 const PAYLOAD_API_KEY = process.env.PAYLOAD_API_KEY;
@@ -27,19 +33,32 @@ export const DEFAULT_BLOG_PLACEHOLDER = "/placeholder-blog.jpg";
 // TYPES
 // =============================================================================
 
+export interface PayloadMediaSize {
+  url?: string;
+  width?: number;
+  height?: number;
+}
+
 export interface PayloadMedia {
   id?: string | number;
   url?: string;
   alt?: string;
   width?: number;
   height?: number;
+  /** Percent coordinates of the subject. Payload defaults both to 50. */
+  focalX?: number;
+  focalY?: number;
+  sizes?: Record<string, PayloadMediaSize | undefined>;
 }
 
 export interface PayloadAuthor {
   id: string;
   name: string;
+  slug?: string;
+  role?: string;
   bio?: string;
   avatar?: PayloadMedia;
+  avatarUrl?: string;
 }
 
 export interface PayloadCategory {
@@ -157,6 +176,37 @@ export function getMediaUrlOrNull(
   if (!media) return null;
   const url = getMediaUrl(media);
   return url === DEFAULT_BLOG_PLACEHOLDER ? null : url;
+}
+
+export interface AuthorAvatarSource {
+  url: string;
+  alt: string;
+  focalX: number;
+  focalY: number;
+}
+
+/**
+ * Avatar source for an author, preferring the square thumbnail derivative —
+ * the originals are multi-megabyte PNGs and these render at 32–64px.
+ */
+export function getAuthorAvatar(
+  author?: PayloadAuthor | string | null
+): AuthorAvatarSource | null {
+  if (!author || typeof author === "string") return null;
+
+  const avatar = author.avatar;
+  const url =
+    getMediaUrlOrNull(avatar?.sizes?.thumbnail?.url) ??
+    getMediaUrlOrNull(avatar) ??
+    getMediaUrlOrNull(author.avatarUrl);
+  if (!url) return null;
+
+  return {
+    url,
+    alt: avatar?.alt || `${author.name} avatar`,
+    focalX: avatar?.focalX ?? 50,
+    focalY: avatar?.focalY ?? 50,
+  };
 }
 
 // =============================================================================
@@ -446,6 +496,51 @@ export async function getBlogPost(
     `/articles?${params.toString()}`
   );
   return data.docs[0] || null;
+}
+
+/**
+ * Fetch a single author by slug.
+ */
+export async function getAuthorBySlug(
+  slug: string
+): Promise<PayloadAuthor | null> {
+  const params = new URLSearchParams({
+    "where[slug][equals]": slug,
+    depth: "1",
+    limit: "1",
+  });
+
+  if (SITE_ID > 0) params.set("where[site][equals]", String(SITE_ID));
+
+  const data = await payloadFetch<PayloadPaginatedResponse<PayloadAuthor>>(
+    `/authors?${params.toString()}`
+  );
+  return data.docs[0] || null;
+}
+
+/**
+ * Fetch published posts written by an author.
+ */
+export async function getPostsByAuthor(
+  authorId: string,
+  options: { page?: number; limit?: number } = {}
+): Promise<PayloadPaginatedResponse<PayloadPost>> {
+  const { page = 1, limit = 12 } = options;
+
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+    sort: "-publishedAt",
+    "where[status][equals]": "published",
+    "where[author][equals]": String(authorId),
+    depth: "2",
+  });
+
+  if (SITE_ID > 0) params.set("where[site][equals]", String(SITE_ID));
+
+  return payloadFetch<PayloadPaginatedResponse<PayloadPost>>(
+    `/articles?${params.toString()}`
+  );
 }
 
 /**

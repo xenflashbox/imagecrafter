@@ -104,16 +104,40 @@ function offersSchema(digital: CatalogPrice, packs: PackPrice[]) {
 }
 
 // Real before/after pairs — actual production two-step pipeline outputs,
-// hosted on R2 CDN (gallery v2: gate-passing P4 regeneration). Not stock, not
-// mock. Egyptian and comic-hero are held back (identity acceptance below the
-// bar) and are intentionally absent — never ship a stranger.
-const GALLERY_CDN = "https://images.imagecrafter.app/gallery/v3";
-const BEFORE_PHOTO = `${GALLERY_CDN}/before/adult-face-thumb.jpg`;
-const AFTER_GALLERY = [
-  { slug: "renaissance", name: "Renaissance", pack: "Royal Gallery" },
-  { slug: "starry-night", name: "Starry Night", pack: "Masterpiece" },
-  { slug: "elven", name: "Elven Royalty", pack: "Fantasy Realm" },
-].map((s) => ({ ...s, url: `${GALLERY_CDN}/thumbs/${s.slug}.jpg` }));
+// hosted on R2 CDN (gallery v4, uploaded by scripts/gallery/upload-pets.ts).
+// Not stock, not mock. Pets lead: they are the strongest renders we have and
+// the biggest winnable search terms (dog painting 5.9k, cat portrait 2.9k).
+const GALLERY_CDN = "https://images.imagecrafter.app/gallery/v4";
+const STYLE_LABELS = [
+  { slug: "oil-painting", name: "Oil Painting", pack: "Fine Art" },
+  { slug: "baroque", name: "Baroque", pack: "Royal Gallery" },
+  { slug: "disco", name: "Disco", pack: "Time Traveler" },
+];
+
+function showcase(subject: string, label: string) {
+  return {
+    subject,
+    label,
+    before: `${GALLERY_CDN}/before/${subject}.jpg`,
+    afters: STYLE_LABELS.map((s) => ({
+      ...s,
+      url: `${GALLERY_CDN}/after/${subject}--${s.slug}.jpg`,
+    })),
+  };
+}
+
+const SHOWCASE = [
+  showcase("d-dog-corgi", "Corgi"),
+  showcase("d-cat-orange", "Orange tabby"),
+  showcase("d-dog-terrier-scruffy", "Terrier"),
+  showcase("d-woman-20s-braids", "Portrait"),
+  showcase("d-man-50s-beard", "Portrait"),
+  showcase("d-woman-60s-silver", "Portrait"),
+];
+
+// The hero pair. Corgi → Baroque is the single strongest render in the set.
+const HERO = SHOWCASE[0];
+const HERO_AFTER = HERO.afters[1];
 
 // =============================================================================
 // DATA FETCHING
@@ -155,7 +179,7 @@ function CategoryBadge({ category }: { category: string }) {
     custom: "Custom Scene",
   };
   return (
-    <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-white/50 border border-white/10">
+    <span className="text-xs px-2 py-0.5 rounded-full bg-surface text-ink-subtle border border-rim">
       {labels[category] || category}
     </span>
   );
@@ -196,7 +220,7 @@ export default async function LandingPage() {
             isSignedIn ? (
               <Link
                 href="/dashboard"
-                className="flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-sm font-medium transition-all hover:bg-white/15"
+                className="flex items-center gap-2 rounded-xl bg-surface px-4 py-2 text-sm font-medium transition-all hover:bg-surface"
               >
                 Dashboard <ArrowRight className="size-3.5" />
               </Link>
@@ -228,37 +252,35 @@ export default async function LandingPage() {
         >
           {/* Background glow */}
           <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-violet-600/10 rounded-full blur-3xl" />
-            <div className="absolute top-20 left-1/4 w-[400px] h-[400px] bg-fuchsia-600/8 rounded-full blur-3xl" />
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-accent-soft rounded-full blur-3xl" />
+            <div className="absolute top-20 left-1/4 w-[400px] h-[400px] bg-accent-soft rounded-full blur-3xl" />
           </div>
 
           <div className="relative max-w-6xl mx-auto">
             <div className="text-center mb-16">
               {/* Badge */}
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-violet-500/15 border border-violet-500/25 text-violet-300 text-sm mb-6">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-accent-soft border border-accent-rim text-accent text-sm mb-6">
                 <Camera className="w-3.5 h-3.5" />
                 No account needed · Instant preview
               </div>
 
-              <h1 className="text-5xl md:text-7xl font-light leading-[1.08] tracking-tight mb-6">
-                Transform Your Photo
+              <h1 className="font-display text-5xl md:text-7xl font-light leading-[1.08] tracking-tight mb-6">
+                Your Pet, Painted
                 <br />
-                <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-pink-400 bg-clip-text text-transparent font-normal">
-                  Into Stunning Art
-                </span>
+                <span className="italic text-accent">Like a Masterpiece</span>
               </h1>
 
-              <p className="text-xl text-white/60 max-w-2xl mx-auto mb-10 leading-relaxed">
-                Upload any photo. Choose an artistic style. Get a museum-quality portrait
-                delivered to your door — or download instantly.
-                <strong className="text-white/80"> No account required.</strong>
+              <p className="text-xl text-ink-muted max-w-2xl mx-auto mb-10 leading-relaxed">
+                Upload one photo of your dog, cat — or anyone you love. Choose a style.
+                Get a museum-quality portrait delivered to your door, or download instantly.
+                <strong className="text-ink-muted"> No account required.</strong>
               </p>
 
               {/* Primary CTA */}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <Link
                   href="/portraits/create"
-                  className="group flex items-center gap-3 px-8 py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all text-lg font-semibold shadow-lg shadow-violet-900/30"
+                  className="group flex items-center gap-3 px-8 py-4 rounded-2xl bg-accent text-canvas hover:opacity-90 transition-all text-lg font-semibold shadow-lg shadow-rim-strong"
                 >
                   <Camera className="w-5 h-5" />
                   Create Your Portrait
@@ -266,110 +288,133 @@ export default async function LandingPage() {
                 </Link>
                 <Link
                   href="#styles"
-                  className="flex items-center gap-2 px-8 py-4 rounded-2xl bg-white/8 hover:bg-white/12 border border-white/10 transition-all text-base"
+                  className="flex items-center gap-2 px-8 py-4 rounded-2xl bg-surface hover:bg-surface border border-rim transition-all text-base"
                 >
-                  <Palette className="w-5 h-5 text-white/50" />
+                  <Palette className="w-5 h-5 text-ink-subtle" />
                   See All {stylePacks.length} Styles
                 </Link>
               </div>
 
               {/* Trust signals */}
-              <div className="flex flex-wrap items-center justify-center gap-6 mt-8 text-sm text-white/40">
+              <div className="flex flex-wrap items-center justify-center gap-6 mt-8 text-sm text-ink-subtle">
                 <span className="flex items-center gap-1.5">
-                  <Check className="w-3.5 h-3.5 text-green-400" />
+                  <Check className="w-3.5 h-3.5 text-positive" />
                   No sign-up needed
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <Check className="w-3.5 h-3.5 text-green-400" />
+                  <Check className="w-3.5 h-3.5 text-positive" />
                   Preview before you buy
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <Check className="w-3.5 h-3.5 text-green-400" />
+                  <Check className="w-3.5 h-3.5 text-positive" />
                   Prints delivered worldwide
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <ShoppingBag className="w-3.5 h-3.5 text-green-400" />
+                  <ShoppingBag className="w-3.5 h-3.5 text-positive" />
                   Museum-quality prints
                 </span>
               </div>
             </div>
 
-            {/* Flex-wrap, not a fixed grid: a partial row stays centred no
-                matter how many packs are live. A grid leaves the hole. */}
-            {stylePacks.length > 0 && (
-              <div className="flex flex-wrap justify-center gap-3 max-w-4xl mx-auto">
-                {stylePacks.slice(0, 4).map((pack) => (
-                  <Link
-                    key={pack.id}
-                    href={`/portraits/create?pack=${pack.slug}`}
-                    className="artframe group relative w-[calc(50%-0.375rem)] sm:w-44 md:w-52 aspect-[3/4] bg-surface hover:border-accent-rim transition-all"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={pack.thumbnailUrl}
-                      alt={pack.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                    <div className="absolute bottom-0 left-0 right-0 p-4 z-10">
-                      <p className="font-medium text-sm">{pack.name}</p>
-                      <p className="text-xs text-ink-subtle mt-0.5 line-clamp-1">{pack.tagline}</p>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
+            {/* The art is the product — show it big, once, above the fold.
+                The full pack grid lives at #styles; four thumbnails here only
+                shrank the one thing worth looking at. */}
+            <div className="flex flex-col lg:flex-row items-center lg:items-end justify-center gap-6 lg:gap-10 max-w-5xl mx-auto">
+              <figure className="w-52 sm:w-60 lg:w-72 shrink-0">
+                <div className="artframe relative overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={HERO.before}
+                    alt="Original snapshot of a corgi, taken on a phone"
+                    className="w-full aspect-[3/4] object-cover"
+                  />
+                </div>
+                <figcaption className="mt-3 text-center text-sm text-ink-subtle">
+                  Their photo
+                </figcaption>
+              </figure>
+
+              <ArrowRight className="hidden lg:block w-8 h-8 mb-24 text-accent shrink-0" />
+
+              {/* The finished piece is deliberately the largest thing on the
+                  page, and the only one that gets the mat. */}
+              <figure className="w-72 sm:w-[26rem] lg:w-[32rem] shrink-0">
+                <div className="artframe artframe-matted">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={HERO_AFTER.url}
+                    alt={`The same corgi rendered as a ${HERO_AFTER.name} portrait`}
+                    className="w-full aspect-[3/4] object-cover"
+                  />
+                </div>
+                <figcaption className="mt-4 text-center text-sm">
+                  <span className="font-display text-base italic text-accent">
+                    {HERO_AFTER.name}
+                  </span>
+                  <span className="text-ink-subtle"> · about a minute later</span>
+                </figcaption>
+              </figure>
+            </div>
           </div>
         </section>
 
         {/* ================================================================
             BEFORE / AFTER — real production pipeline outputs
         ================================================================ */}
-        <section id="results" className="py-24 px-6 border-t border-white/5">
-          <div className="max-w-6xl mx-auto">
+        <section id="results" className="py-24 px-6 border-t border-rim">
+          <div className="max-w-7xl mx-auto">
             <div className="text-center mb-14">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-green-500/15 border border-green-500/25 text-green-300 text-sm mb-4">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-surface border border-rim text-positive text-sm mb-4">
                 <Camera className="w-3.5 h-3.5" />
                 Real results — one photo, {stylePacks.length} styles to choose from
               </div>
-              <h2 className="text-4xl md:text-5xl font-light mb-4">
+              <h2 className="font-display text-4xl md:text-5xl font-light mb-4">
                 From One Photo to Any Style
               </h2>
-              <p className="text-white/50 max-w-xl mx-auto">
-                Every image below was generated from the single photo on the left —
+              <p className="text-ink-subtle max-w-xl mx-auto">
+                Every portrait below came from the single snapshot beside it —
                 the same pipeline your photo goes through.
               </p>
             </div>
 
-            <div className="flex flex-wrap justify-center gap-4">
-              {/* Before */}
-              <div className="artframe relative w-[calc(50%-0.5rem)] sm:w-40 lg:w-44 border-accent-rim">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={BEFORE_PHOTO}
-                  alt="Original photo before transformation"
-                  className="w-full aspect-[3/4] object-cover"
-                />
-                <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/90 to-transparent p-3">
-                  <p className="text-xs font-medium text-accent">Original photo</p>
-                </div>
-              </div>
+            <div className="flex flex-col gap-14">
+              {SHOWCASE.map((row, rowIndex) => (
+                <div key={row.subject}>
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6">
+                    {/* Before */}
+                    <figure>
+                      <div className="artframe relative overflow-hidden border-accent-rim">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={row.before}
+                          alt={`${row.label} — the original photo`}
+                          loading={rowIndex === 0 ? undefined : "lazy"}
+                          className="w-full aspect-[3/4] object-cover"
+                        />
+                      </div>
+                      <figcaption className="mt-2 text-xs text-accent font-medium">
+                        {row.label} — their photo
+                      </figcaption>
+                    </figure>
 
-              {/* Afters */}
-              {AFTER_GALLERY.map((item) => (
-                <div
-                  key={item.slug}
-                  className="artframe group relative w-[calc(50%-0.5rem)] sm:w-40 lg:w-44"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={item.url}
-                    alt={`${item.name} style portrait generated from the original photo`}
-                    className="w-full aspect-[3/4] object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                  <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/90 to-transparent p-3">
-                    <p className="text-xs font-medium">{item.name}</p>
-                    <p className="text-[10px] text-ink-subtle">{item.pack}</p>
+                    {/* Afters */}
+                    {row.afters.map((item) => (
+                      <figure key={item.slug} className="group">
+                        <div className="artframe relative overflow-hidden">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={item.url}
+                            alt={`${row.label} rendered as a ${item.name} portrait`}
+                            loading="lazy"
+                            className="w-full aspect-[3/4] object-cover group-hover:scale-105 transition-transform duration-500"
+                          />
+                        </div>
+                        <figcaption className="mt-2 text-xs">
+                          <span className="font-medium">{item.name}</span>
+                          <span className="text-ink-subtle"> · {item.pack}</span>
+                        </figcaption>
+                      </figure>
+                    ))}
                   </div>
                 </div>
               ))}
@@ -380,17 +425,17 @@ export default async function LandingPage() {
         {/* ================================================================
             PATH C — STYLE PACK GALLERY (active packs)
         ================================================================ */}
-        <section id="styles" className="py-24 px-6 border-t border-white/5">
+        <section id="styles" className="py-24 px-6 border-t border-rim">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-14">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-fuchsia-500/15 border border-fuchsia-500/25 text-fuchsia-300 text-sm mb-4">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-accent-soft border border-accent-rim text-accent text-sm mb-4">
                 <Palette className="w-3.5 h-3.5" />
                 {stylePacks.length} Style Packs
               </div>
-              <h2 className="text-4xl md:text-5xl font-light mb-4">
+              <h2 className="font-display text-4xl md:text-5xl font-light mb-4">
                 Every Style Imaginable
               </h2>
-              <p className="text-white/50 max-w-xl mx-auto">
+              <p className="text-ink-subtle max-w-xl mx-auto">
                 From oil painting masters to fantasy realms — upload your photo and see yourself
                 transformed in any artistic style.
               </p>
@@ -448,12 +493,12 @@ export default async function LandingPage() {
             <div className="text-center mt-10">
               <Link
                 href="/portraits/create"
-                className="inline-flex items-center gap-2 px-8 py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all font-semibold"
+                className="inline-flex items-center gap-2 px-8 py-4 rounded-2xl bg-accent text-canvas hover:opacity-90 transition-all font-semibold"
               >
                 <Camera className="w-5 h-5" />
                 Start Your Portrait — Free Preview
               </Link>
-              <p className="text-white/30 text-sm mt-3">
+              <p className="text-ink-faint text-sm mt-3">
                 No account required · Pay only if you love it
               </p>
             </div>
@@ -463,27 +508,27 @@ export default async function LandingPage() {
         {/* ================================================================
             PATH B — PRICING (real catalog: single portrait + credit packs)
         ================================================================ */}
-        <section id="pricing" className="py-24 px-6 border-t border-white/5">
+        <section id="pricing" className="py-24 px-6 border-t border-rim">
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-14">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-violet-500/15 border border-violet-500/25 text-violet-300 text-sm mb-4">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-accent-soft border border-accent-rim text-accent text-sm mb-4">
                 <Zap className="w-3.5 h-3.5" />
                 Simple One-Time Pricing
               </div>
-              <h2 className="text-4xl md:text-5xl font-light mb-4">
+              <h2 className="font-display text-4xl md:text-5xl font-light mb-4">
                 Pay Per Portrait
               </h2>
-              <p className="text-white/50 max-w-xl mx-auto">
+              <p className="text-ink-subtle max-w-xl mx-auto">
                 No subscription. Create your portrait free, preview it, and pay only if
                 you love it — full 4K digital download, no watermark.
               </p>
             </div>
 
             {/* Single portrait */}
-            <div className="mb-12 max-w-2xl mx-auto rounded-2xl border border-violet-500/50 bg-gradient-to-b from-violet-900/20 to-transparent p-8 text-center">
+            <div className="mb-12 max-w-2xl mx-auto rounded-2xl border border-accent-rim bg-surface p-8 text-center">
               <div className="flex items-baseline justify-center gap-2 mb-1">
                 <span className="text-4xl font-light">{formatUsd(digital.unitAmount)}</span>
-                <span className="text-white/40 text-sm">one-time</span>
+                <span className="text-ink-subtle text-sm">one-time</span>
               </div>
               <h3 className="text-lg font-medium mb-4">Single Portrait</h3>
               <ul className="space-y-2.5 mb-8 max-w-xs mx-auto text-left">
@@ -493,15 +538,15 @@ export default async function LandingPage() {
                   "Museum-quality prints & canvases available",
                   "Preview before you pay",
                 ].map((f) => (
-                  <li key={f} className="flex items-start gap-2 text-sm text-white/70">
-                    <Check className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
+                  <li key={f} className="flex items-start gap-2 text-sm text-ink-muted">
+                    <Check className="w-4 h-4 text-accent shrink-0 mt-0.5" />
                     {f}
                   </li>
                 ))}
               </ul>
               <Link
                 href="/portraits/create"
-                className="inline-flex items-center justify-center gap-2 px-8 py-3 rounded-xl font-medium text-sm bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all"
+                className="inline-flex items-center justify-center gap-2 px-8 py-3 rounded-xl font-medium text-sm bg-accent text-canvas hover:opacity-90 transition-all"
               >
                 Create Your Portrait
                 <ArrowRight className="w-4 h-4" />
@@ -510,15 +555,15 @@ export default async function LandingPage() {
 
             {/* Credit packs */}
             <div className="max-w-2xl mx-auto">
-              <h3 className="text-sm font-medium text-white/60 mb-5 uppercase tracking-wider text-center">
+              <h3 className="text-sm font-medium text-ink-muted mb-5 uppercase tracking-wider text-center">
                 Creating more than one? Save with credit packs
               </h3>
               <CreditPackCards
                 packs={packs}
                 singlePriceCents={digital.unitAmount}
-                theme="dark"
+               
               />
-              <p className="text-center text-white/30 text-sm mt-6">
+              <p className="text-center text-ink-faint text-sm mt-6">
                 Credits never expire · Each credit unlocks one full 4K portrait download
               </p>
             </div>
@@ -528,7 +573,7 @@ export default async function LandingPage() {
         {/* ================================================================
             FOOTER
         ================================================================ */}
-        <footer className="border-t border-white/5 py-16 px-6">
+        <footer className="border-t border-rim py-16 px-6">
           <div className="max-w-6xl mx-auto">
             <div className="grid md:grid-cols-4 gap-10 mb-12">
               {/* Brand */}
@@ -543,17 +588,17 @@ export default async function LandingPage() {
 
                 {/* Newsletter signup */}
                 <div className="mt-6">
-                  <p className="text-sm text-white/60 mb-3">Get AI art tips &amp; tutorials:</p>
+                  <p className="text-sm text-ink-muted mb-3">Get AI art tips &amp; tutorials:</p>
                   <NewsletterSignup />
                 </div>
               </div>
 
               {/* Portrait Studio */}
               <div>
-                <h4 className="text-sm font-semibold mb-4 text-white/80">Portrait Studio</h4>
-                <ul className="space-y-2.5 text-sm text-white/50">
+                <h4 className="text-sm font-semibold mb-4 text-ink-muted">Portrait Studio</h4>
+                <ul className="space-y-2.5 text-sm text-ink-subtle">
                   <li>
-                    <Link href="/portraits/create" className="hover:text-white transition-colors">
+                    <Link href="/portraits/create" className="hover:text-ink transition-colors">
                       Create a Portrait
                     </Link>
                   </li>
@@ -561,7 +606,7 @@ export default async function LandingPage() {
                     <li key={pack.slug}>
                       <Link
                         href={`/portraits/create?pack=${pack.slug}`}
-                        className="hover:text-white transition-colors"
+                        className="hover:text-ink transition-colors"
                       >
                         {pack.name}
                       </Link>
@@ -572,25 +617,25 @@ export default async function LandingPage() {
 
               {/* Platform */}
               <div>
-                <h4 className="text-sm font-semibold mb-4 text-white/80">Platform</h4>
-                <ul className="space-y-2.5 text-sm text-white/50">
+                <h4 className="text-sm font-semibold mb-4 text-ink-muted">Platform</h4>
+                <ul className="space-y-2.5 text-sm text-ink-subtle">
                   <li>
-                    <Link href="/sign-up" className="hover:text-white transition-colors">
+                    <Link href="/sign-up" className="hover:text-ink transition-colors">
                       Sign Up Free
                     </Link>
                   </li>
                   <li>
-                    <Link href="#pricing" className="hover:text-white transition-colors">
+                    <Link href="#pricing" className="hover:text-ink transition-colors">
                       Pricing
                     </Link>
                   </li>
                   <li>
-                    <Link href="/blog" className="hover:text-white transition-colors flex items-center gap-1.5">
+                    <Link href="/blog" className="hover:text-ink transition-colors flex items-center gap-1.5">
                       <Rss className="w-3 h-3" /> Blog
                     </Link>
                   </li>
                   <li>
-                    <Link href="/sign-in" className="hover:text-white transition-colors">
+                    <Link href="/sign-in" className="hover:text-ink transition-colors">
                       Sign In
                     </Link>
                   </li>
@@ -598,10 +643,10 @@ export default async function LandingPage() {
               </div>
             </div>
 
-            <div className="border-t border-white/5 pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-white/30">
+            <div className="border-t border-rim pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-ink-faint">
               <p>© {new Date().getFullYear()} ImageCrafter · Powered by Xenco Labs</p>
               <div className="flex items-center gap-4">
-                <Link href="/blog/rss.xml" className="hover:text-white/60 flex items-center gap-1 transition-colors">
+                <Link href="/blog/rss.xml" className="hover:text-ink flex items-center gap-1 transition-colors">
                   <Rss className="w-3 h-3" /> RSS
                 </Link>
               </div>

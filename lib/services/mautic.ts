@@ -29,8 +29,6 @@ export type MauticCustomFields = {
   ic_style?: string;
   ic_preview_url?: string;
   ic_purchased_at?: string;
-  signup_source?: string;
-  signup_date?: string;
 };
 
 /**

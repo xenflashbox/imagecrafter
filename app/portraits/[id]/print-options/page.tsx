@@ -190,7 +190,7 @@ export default function PrintOptionsPage() {
                     priority
                   />
                   <div className="absolute right-0 bottom-4 left-0 z-10 text-center">
-                    <div className="inline-flex items-center gap-2 rounded-full bg-black/70 px-4 py-2 text-xs backdrop-blur-sm">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-black/70 px-4 py-2 text-xs text-white backdrop-blur-sm">
                       <Lock className="size-3" />
                       Watermarked preview — the print is full resolution
                     </div>

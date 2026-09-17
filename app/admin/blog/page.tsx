@@ -1,7 +1,7 @@
 /**
  * Admin Blog Management
  *
- * Blog content is managed in Payload CMS at cms.xencolabs.com (site ID 7 = ImageCrafter).
+ * Blog content is managed in Payload CMS at cms.imagecrafter.app (site ID 7 = ImageCrafter).
  * This page provides a quick link to the CMS admin plus a live preview of recent posts.
  */
 
@@ -14,7 +14,7 @@ import { ExternalLink, PenSquare, Eye } from "lucide-react";
 const CMS_ADMIN_URL =
   process.env.NEXT_PUBLIC_PAYLOAD_URL
     ? `${process.env.NEXT_PUBLIC_PAYLOAD_URL}/admin`
-    : "https://cms.xencolabs.com/admin";
+    : "https://cms.imagecrafter.app/admin";
 
 const ADMIN_USER_IDS = (process.env.ADMIN_USER_IDS || "").split(",").filter(Boolean);
 

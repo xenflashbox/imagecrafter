@@ -1,0 +1,50 @@
+{
+  "d-dog-corgi": {
+    "before": "https://images.imagecrafter.app/gallery/v4/before/d-dog-corgi.jpg",
+    "after": {
+      "baroque": "https://images.imagecrafter.app/gallery/v4/after/d-dog-corgi--baroque.jpg",
+      "oil-painting": "https://images.imagecrafter.app/gallery/v4/after/d-dog-corgi--oil-painting.jpg",
+      "disco": "https://images.imagecrafter.app/gallery/v4/after/d-dog-corgi--disco.jpg"
+    }
+  },
+  "d-cat-orange": {
+    "before": "https://images.imagecrafter.app/gallery/v4/before/d-cat-orange.jpg",
+    "after": {
+      "baroque": "https://images.imagecrafter.app/gallery/v4/after/d-cat-orange--baroque.jpg",
+      "oil-painting": "https://images.imagecrafter.app/gallery/v4/after/d-cat-orange--oil-painting.jpg",
+      "disco": "https://images.imagecrafter.app/gallery/v4/after/d-cat-orange--disco.jpg"
+    }
+  },
+  "d-dog-terrier-scruffy": {
+    "before": "https://images.imagecrafter.app/gallery/v4/before/d-dog-terrier-scruffy.jpg",
+    "after": {
+      "baroque": "https://images.imagecrafter.app/gallery/v4/after/d-dog-terrier-scruffy--baroque.jpg",
+      "oil-painting": "https://images.imagecrafter.app/gallery/v4/after/d-dog-terrier-scruffy--oil-painting.jpg",
+      "disco": "https://images.imagecrafter.app/gallery/v4/after/d-dog-terrier-scruffy--disco.jpg"
+    }
+  },
+  "d-man-50s-beard": {
+    "before": "https://images.imagecrafter.app/gallery/v4/before/d-man-50s-beard.jpg",
+    "after": {
+      "baroque": "https://images.imagecrafter.app/gallery/v4/after/d-man-50s-beard--baroque.jpg",
+      "oil-painting": "https://images.imagecrafter.app/gallery/v4/after/d-man-50s-beard--oil-painting.jpg",
+      "disco": "https://images.imagecrafter.app/gallery/v4/after/d-man-50s-beard--disco.jpg"
+    }
+  },
+  "d-woman-20s-braids": {
+    "before": "https://images.imagecrafter.app/gallery/v4/before/d-woman-20s-braids.jpg",
+    "after": {
+      "baroque": "https://images.imagecrafter.app/gallery/v4/after/d-woman-20s-braids--baroque.jpg",
+      "oil-painting": "https://images.imagecrafter.app/gallery/v4/after/d-woman-20s-braids--oil-painting.jpg",
+      "disco": "https://images.imagecrafter.app/gallery/v4/after/d-woman-20s-braids--disco.jpg"
+    }
+  },
+  "d-woman-60s-silver": {
+    "before": "https://images.imagecrafter.app/gallery/v4/before/d-woman-60s-silver.jpg",
+    "after": {
+      "baroque": "https://images.imagecrafter.app/gallery/v4/after/d-woman-60s-silver--baroque.jpg",
+      "oil-painting": "https://images.imagecrafter.app/gallery/v4/after/d-woman-60s-silver--oil-painting.jpg",
+      "disco": "https://images.imagecrafter.app/gallery/v4/after/d-woman-60s-silver--disco.jpg"
+    }
+  }
+}

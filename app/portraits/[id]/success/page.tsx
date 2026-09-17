@@ -326,7 +326,7 @@ export default async function PortraitSuccessPage({ params, searchParams }: Prop
               <CreditPackCards
                 packs={packs}
                 singlePriceCents={digital.unitAmount}
-                theme="dark"
+               
               />
             </Panel>
           )}

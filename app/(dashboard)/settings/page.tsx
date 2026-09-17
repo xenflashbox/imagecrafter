@@ -18,7 +18,7 @@ export default async function SettingsPage() {
   return (
     <SettingsClient
       packCards={
-        <CreditPackCards packs={packs} singlePriceCents={single.unitAmount} theme="dark" />
+        <CreditPackCards packs={packs} singlePriceCents={single.unitAmount} />
       }
     />
   );

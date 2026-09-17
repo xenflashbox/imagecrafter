@@ -20,3 +20,5 @@ export function requireEnv(name: string): string {
 export const getAiGatewayUrl = (): string => requireEnv("AI_GATEWAY_URL");
 
 export const getMauticApiUrl = (): string => requireEnv("MAUTIC_API_URL");
+
+export const getListmonkApiUrl = (): string => requireEnv("LISTMONK_API_URL");

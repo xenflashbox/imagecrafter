@@ -43,7 +43,7 @@ export default function DashboardLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#08080c] text-white">
+    <div className="noir min-h-screen bg-[#08080c] text-white">
       {/* Desktop Sidebar */}
       <aside className="fixed left-0 top-0 bottom-0 w-64 bg-[#0c0c12] border-r border-white/5 hidden lg:flex flex-col z-50">
         {/* Logo */}

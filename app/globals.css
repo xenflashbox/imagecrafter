@@ -3,39 +3,49 @@
 @tailwind utilities;
 
 /* ===========================================================================
-   ImageCrafter design tokens — "Gallery Noir"
-   One dark ground, one violet→fuchsia accent, a neutral ink ramp.
+   ImageCrafter design tokens — "Gallery Daylight"
+   A warm plaster wall, ink-brown type, one sienna accent. The storefront is a
+   gallery you walk into in daylight, not a dashboard: the portraits are the
+   only saturated things on the page, and everything else recedes.
    Every surface in the product reads from these. Never hardcode a hex or a
    slate-* class in a page: that is how the wizard drifted to light mode while
    the marketing page stayed dark.
+
+   The signed-in app (dashboard, admin) stays dark — see `.noir` below.
    =========================================================================== */
 
 :root {
   /* Ground */
-  --canvas: #06060a;
-  --surface: #0c0c12;
-  --surface-raised: #12121a;
+  --canvas: #faf7f2;
+  --surface: #f2ece2;
+  --surface-raised: #ffffff;
 
-  /* Ink */
-  --ink: #ffffff;
-  --ink-muted: rgba(255, 255, 255, 0.6);
-  --ink-subtle: rgba(255, 255, 255, 0.4);
-  --ink-faint: rgba(255, 255, 255, 0.28);
+  /* Ink — warm near-black, never pure #000 */
+  --ink: #1c1714;
+  --ink-muted: rgba(28, 23, 20, 0.68);
+  --ink-subtle: rgba(28, 23, 20, 0.5);
+  --ink-faint: rgba(28, 23, 20, 0.36);
 
   /* Frame */
-  --rim: rgba(255, 255, 255, 0.1);
-  --rim-strong: rgba(255, 255, 255, 0.18);
+  --rim: rgba(28, 23, 20, 0.12);
+  --rim-strong: rgba(28, 23, 20, 0.22);
 
   /* Accent */
-  --accent: #8b5cf6;
-  --accent-2: #d946ef;
-  --accent-soft: rgba(139, 92, 246, 0.15);
-  --accent-rim: rgba(139, 92, 246, 0.35);
+  --accent: #a4442a;
+  --accent-2: #c1873f;
+  --accent-soft: rgba(164, 68, 42, 0.1);
+  --accent-rim: rgba(164, 68, 42, 0.38);
 
   /* Signal */
-  --positive: #34d399;
-  --warning: #fbbf24;
-  --danger: #f87171;
+  --positive: #3f7d58;
+  --warning: #b57614;
+  --danger: #b3402f;
+
+  /* Chrome veil + artwork shadow, themed so `.noir` can override them */
+  --veil: rgba(250, 247, 242, 0.85);
+  --frame-shadow: 0 2px 4px rgba(28, 23, 20, 0.08),
+    0 18px 44px -20px rgba(28, 23, 20, 0.45);
+  --frame-sheen: rgba(255, 255, 255, 0.28);
 
   /* Rhythm — a 4px base, used as the only spacing scale */
   --step: 0.25rem;
@@ -43,6 +53,41 @@
   /* Tailwind bridge (kept for existing consumers) */
   --background: var(--canvas);
   --foreground: var(--ink);
+}
+
+/* The signed-in app keeps the original Gallery Noir ground. Scoping it here
+   rather than converting those pages keeps ~300 literal `text-white` classes
+   in the dashboard working, and the contrast is deliberate: the storefront is
+   a gallery, the app is a darkroom. */
+.noir {
+  --canvas: #06060a;
+  --surface: #0c0c12;
+  --surface-raised: #12121a;
+
+  --ink: #ffffff;
+  --ink-muted: rgba(255, 255, 255, 0.6);
+  --ink-subtle: rgba(255, 255, 255, 0.4);
+  --ink-faint: rgba(255, 255, 255, 0.28);
+
+  --rim: rgba(255, 255, 255, 0.1);
+  --rim-strong: rgba(255, 255, 255, 0.18);
+
+  --accent: #8b5cf6;
+  --accent-2: #d946ef;
+  --accent-soft: rgba(139, 92, 246, 0.15);
+  --accent-rim: rgba(139, 92, 246, 0.35);
+
+  --positive: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+
+  --veil: rgba(6, 6, 10, 0.82);
+  --frame-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 24px 60px -24px rgba(139, 92, 246, 0.35);
+  --frame-sheen: rgba(255, 255, 255, 0.12);
+
+  background: var(--canvas);
+  color: var(--ink);
 }
 
 body {
@@ -78,8 +123,8 @@ body {
 
 /* Selection */
 ::selection {
-  background: rgba(139, 92, 246, 0.3);
-  color: white;
+  background: var(--accent-soft);
+  color: var(--ink);
 }
 
 /* Focus styles */
@@ -123,32 +168,31 @@ html {
 }
 
 /* Fixed chrome sits on a veil so artwork scrolls under it without bleeding
-   through. A literal rgba, not `bg-canvas/80`: Tailwind v3 drops the opacity
+   through. Driven by --veil, not `bg-canvas/85`: Tailwind v3 drops the opacity
    modifier on a var()-based color and would render this fully opaque. */
 .chrome-veil {
-  background: rgba(6, 6, 10, 0.82);
+  background: var(--veil);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
 
 /* Glass effect */
 .glass {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-raised);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--rim);
 }
 
-/* The signature: artwork sits in a lit frame, the way a print sits on a wall.
-   This is the one element that should be recognisable with the logo removed. */
+/* The signature: artwork hangs on the wall rather than sitting in a card —
+   a hairline frame, a paper-white mat, and a real drop shadow. This is the one
+   element that should be recognisable with the logo removed. */
 .artframe {
   position: relative;
-  border-radius: 1rem;
+  border-radius: 2px;
   overflow: hidden;
-  border: 1px solid var(--rim);
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.6),
-    0 24px 60px -24px rgba(139, 92, 246, 0.35);
+  border: 1px solid var(--rim-strong);
+  box-shadow: var(--frame-shadow);
 }
 
 .artframe::after {
@@ -157,11 +201,20 @@ html {
   inset: 0;
   pointer-events: none;
   border-radius: inherit;
-  background: linear-gradient(
-    160deg,
-    rgba(255, 255, 255, 0.12),
-    transparent 38%
-  );
+  background: linear-gradient(160deg, var(--frame-sheen), transparent 38%);
+}
+
+/* A matted print: the frame plus the paper border a gallery print is mounted
+   on. Use for the pieces that carry a section — the hero, the memorial trio. */
+.artframe-matted {
+  padding: clamp(0.75rem, 2.2vw, 1.5rem);
+  background: var(--surface-raised);
+  border-radius: 3px;
+}
+
+.artframe-matted > img,
+.artframe-matted > * > img {
+  border-radius: 1px;
 }
 
 /* Hide scrollbar for specific elements */

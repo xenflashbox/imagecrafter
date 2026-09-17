@@ -117,7 +117,7 @@ function PrimaryButton({
   return (
     <button
       {...props}
-      className={`inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent to-accent-2 px-4 font-semibold text-white transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100 [&_svg]:size-4 ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent to-accent-2 px-4 font-semibold text-canvas transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:brightness-100 [&_svg]:size-4 ${className}`}
     >
       {children}
     </button>
@@ -220,7 +220,7 @@ function UploadZone({
             <div className="mb-2 flex size-12 items-center justify-center rounded-full bg-accent-soft ring-1 ring-accent-rim">
               <Upload className="size-5 text-accent" />
             </div>
-            <p className="text-lg font-semibold text-ink">Drop your photo here</p>
+            <p className="text-lg font-semibold text-ink">Drop their photo here</p>
             <p className="text-sm text-ink-subtle">or click to browse</p>
             <p className="text-xs text-ink-faint">
               JPEG, PNG, or WebP · Large photos are resized automatically
@@ -239,9 +239,10 @@ function UploadZone({
           letting the customer discover it as a failed generation. */}
       <Notice tone="info" icon={<UserRound />}>
         <strong className="font-semibold text-ink">One subject per portrait.</strong>{" "}
-        A single person or a single pet — group photos of couples or families are
-        declined by the studio. Use a well-lit, forward-facing photo and avoid heavy
-        shadows, blur, or very small subjects.
+        A single person or a single pet — we paint one at a time, so couples and
+        family photos will not work. Beyond that, what matters is that their face
+        is visible and roughly facing the camera. Phone snapshots, scans of
+        prints, and screenshots all work.
       </Notice>
     </div>
   );
@@ -298,7 +299,7 @@ function StylePackSelector({
                   <StyleThumb src={pack.thumbnailUrl} name={pack.name} />
                   {active && (
                     <div className="absolute inset-0 flex items-center justify-center bg-accent-soft">
-                      <span className="flex size-7 items-center justify-center rounded-full bg-accent text-white">
+                      <span className="flex size-7 items-center justify-center rounded-full bg-accent text-canvas">
                         <Check className="size-4" />
                       </span>
                     </div>
@@ -334,7 +335,7 @@ function StylePackSelector({
                     <StyleThumb src={variant.sampleImageUrl} name={variant.name} />
                     {active && (
                       <div className="absolute inset-0 flex items-center justify-center bg-accent-soft">
-                        <span className="flex size-6 items-center justify-center rounded-full bg-accent text-white">
+                        <span className="flex size-6 items-center justify-center rounded-full bg-accent text-canvas">
                           <Check className="size-3.5" />
                         </span>
                       </div>
@@ -633,7 +634,7 @@ function PreviewSection({
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link
               href={`/portraits/${portraitId}/preview`}
-              className="flex-1 rounded-xl bg-gradient-to-r from-accent to-accent-2 px-4 py-3 text-center text-sm font-semibold text-white transition-all hover:brightness-110"
+              className="flex-1 rounded-xl bg-gradient-to-r from-accent to-accent-2 px-4 py-3 text-center text-sm font-semibold text-canvas transition-all hover:brightness-110"
             >
               {digitalCents === null
                 ? "Purchase Digital"
@@ -1078,10 +1079,11 @@ function CreatePortraitContent() {
           <div className="flex flex-col gap-6">
             <div>
               <h1 className="mb-1 font-display text-3xl tracking-tight text-ink">
-                Upload your photo
+                Start with one photo
               </h1>
               <p className="text-sm text-ink-muted">
-                One clear photo of your subject. We&apos;ll paint them into the era you choose.
+                Your dog, your cat, or someone you love. One clear photo is all a
+                portrait needs — it does not have to be a good one.
               </p>
             </div>
             <UploadZone onFile={handlePickPhoto} preview={photoPreview} error={uploadError} />
@@ -1096,6 +1098,10 @@ function CreatePortraitContent() {
                 <>Continue to Style Selection <ArrowRight /></>
               )}
             </PrimaryButton>
+            <p className="text-center text-xs leading-relaxed text-ink-subtle">
+              You see the finished painting before you pay anything — about a
+              minute from now. No account needed.
+            </p>
           </div>
         )}
 

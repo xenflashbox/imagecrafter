@@ -45,7 +45,7 @@ export function RedeemButton({
       <button
         onClick={redeem}
         disabled={busy}
-        className="block w-full text-center rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-3 text-sm transition-colors"
+        className="block w-full text-center rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-ink font-semibold py-3 text-sm transition-colors"
       >
         {busy
           ? "Redeeming…"

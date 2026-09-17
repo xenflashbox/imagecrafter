@@ -1,7 +1,7 @@
 /**
  * /blog/[slug] — Blog Post Detail (Public)
  *
- * Server-rendered. Fetches from Payload CMS (cms.xencolabs.com) with
+ * Server-rendered. Fetches from Payload CMS (cms.imagecrafter.app) with
  * site ID 7 (ImageCrafter). Renders Lexical rich text content.
  *
  * SEO:
@@ -30,6 +30,7 @@ import {
   estimateReadTime,
 } from "@/lib/payload";
 import { Calendar, Clock, ArrowLeft, Share2 } from "lucide-react";
+import { AuthorAvatar } from "@/components/author-avatar";
 
 export const dynamic = "force-dynamic";
 
@@ -131,6 +132,7 @@ export default async function BlogPostPage({
 
   const firstCategory = post.categories?.[0];
   const tags = (post.tags || []).filter((t) => getTagLabel(t));
+  const author = typeof post.author === "object" ? post.author : null;
   const authorName =
     post.author
       ? typeof post.author === "string"
@@ -245,21 +247,21 @@ export default async function BlogPostPage({
         }}
       />
 
-      <article className="min-h-screen bg-[#06060a] text-white">
+      <article className="min-h-screen bg-canvas text-ink">
         {/* Header */}
-        <header className="border-b border-white/5">
+        <header className="border-b border-rim">
           <div className="max-w-3xl mx-auto px-6 py-8">
             {/* Breadcrumb */}
-            <nav className="flex items-center gap-1.5 text-xs text-white/30 mb-8" aria-label="Breadcrumb">
-              <Link href="/" className="hover:text-white transition-colors">Home</Link>
+            <nav className="flex items-center gap-1.5 text-xs text-ink-faint mb-8" aria-label="Breadcrumb">
+              <Link href="/" className="hover:text-ink transition-colors">Home</Link>
               <span>/</span>
-              <Link href="/blog" className="hover:text-white transition-colors">Blog</Link>
+              <Link href="/blog" className="hover:text-ink transition-colors">Blog</Link>
               {firstCategory && (
                 <>
                   <span>/</span>
                   <Link
                     href={`/blog?category=${getCategorySlug(firstCategory)}`}
-                    className="hover:text-white transition-colors"
+                    className="hover:text-ink transition-colors"
                   >
                     {getCategoryTitle(firstCategory)}
                   </Link>
@@ -269,7 +271,7 @@ export default async function BlogPostPage({
 
             <Link
               href="/blog"
-              className="inline-flex items-center gap-2 text-sm text-white/50 hover:text-white mb-8 transition-colors"
+              className="inline-flex items-center gap-2 text-sm text-ink-subtle hover:text-ink mb-8 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
               Back to Blog
@@ -278,7 +280,7 @@ export default async function BlogPostPage({
             {firstCategory && (
               <Link
                 href={`/blog?category=${getCategorySlug(firstCategory)}`}
-                className="text-xs px-3 py-1 rounded-full bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition-colors mb-4 inline-block"
+                className="text-xs px-3 py-1 rounded-full bg-accent-soft text-accent hover:bg-accent-soft transition-colors mb-4 inline-block"
               >
                 {getCategoryTitle(firstCategory)}
               </Link>
@@ -288,7 +290,7 @@ export default async function BlogPostPage({
               {post.title}
             </h1>
 
-            <div className="flex flex-wrap items-center gap-4 text-sm text-white/50">
+            <div className="flex flex-wrap items-center gap-4 text-sm text-ink-subtle">
               {formattedDate && (
                 <span className="flex items-center gap-1.5">
                   <Calendar className="w-4 h-4" />
@@ -299,9 +301,18 @@ export default async function BlogPostPage({
                 <Clock className="w-4 h-4" />
                 {readTime} min read
               </span>
-              {authorName !== SITE_NAME && (
-                <span className="text-white/40">By {authorName}</span>
-              )}
+              {authorName !== SITE_NAME &&
+                (author?.slug ? (
+                  <Link
+                    href={`/blog/author/${author.slug}`}
+                    className="flex items-center gap-2 hover:text-accent transition-colors"
+                  >
+                    <AuthorAvatar author={author} size={32} />
+                    By {authorName}
+                  </Link>
+                ) : (
+                  <span className="text-ink-subtle">By {authorName}</span>
+                ))}
             </div>
           </div>
         </header>
@@ -337,25 +348,25 @@ export default async function BlogPostPage({
           <div
             className="
               prose prose-invert prose-lg max-w-none
-              prose-headings:font-medium prose-headings:text-white prose-headings:scroll-mt-8
-              prose-p:text-white/80 prose-p:leading-relaxed
-              prose-a:text-violet-400 prose-a:no-underline hover:prose-a:underline
-              prose-strong:text-white
-              prose-code:bg-white/10 prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-violet-300
-              prose-pre:bg-white/5 prose-pre:border prose-pre:border-white/10
-              prose-blockquote:border-violet-500/60 prose-blockquote:bg-violet-500/5 prose-blockquote:text-white/70
+              prose-headings:font-medium prose-headings:text-ink prose-headings:scroll-mt-8
+              prose-p:text-ink-muted prose-p:leading-relaxed
+              prose-a:text-accent prose-a:no-underline hover:prose-a:underline
+              prose-strong:text-ink
+              prose-code:bg-surface prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-accent
+              prose-pre:bg-surface prose-pre:border prose-pre:border-rim
+              prose-blockquote:border-accent-rim prose-blockquote:bg-accent-soft prose-blockquote:text-ink-muted
               prose-blockquote:not-italic prose-blockquote:rounded-r-xl prose-blockquote:py-0.5
-              prose-hr:border-white/10
+              prose-hr:border-rim
               prose-img:rounded-xl
-              prose-ul:text-white/80
-              prose-ol:text-white/80
-              prose-li:text-white/80
+              prose-ul:text-ink-muted
+              prose-ol:text-ink-muted
+              prose-li:text-ink-muted
               [&_figure.article-image]:my-8
               [&_figure.article-image_img]:rounded-xl [&_figure.article-image_img]:w-full
-              [&_figure.article-image_figcaption]:text-sm [&_figure.article-image_figcaption]:text-white/40 [&_figure.article-image_figcaption]:mt-2 [&_figure.article-image_figcaption]:text-center
-              [&_code.inline-code]:bg-violet-900/40 [&_code.inline-code]:text-violet-300 [&_code.inline-code]:px-1.5 [&_code.inline-code]:py-0.5 [&_code.inline-code]:rounded [&_code.inline-code]:text-sm
-              [&_hr.article-divider]:border-none [&_hr.article-divider]:h-px [&_hr.article-divider]:bg-gradient-to-r [&_hr.article-divider]:from-transparent [&_hr.article-divider]:via-white/20 [&_hr.article-divider]:to-transparent [&_hr.article-divider]:my-12
-              [&_blockquote.article-blockquote]:border-l-4 [&_blockquote.article-blockquote]:border-violet-500 [&_blockquote.article-blockquote]:bg-violet-500/5 [&_blockquote.article-blockquote]:px-6 [&_blockquote.article-blockquote]:py-4 [&_blockquote.article-blockquote]:my-8 [&_blockquote.article-blockquote]:rounded-r-xl [&_blockquote.article-blockquote]:italic [&_blockquote.article-blockquote]:text-white/70
+              [&_figure.article-image_figcaption]:text-sm [&_figure.article-image_figcaption]:text-ink-subtle [&_figure.article-image_figcaption]:mt-2 [&_figure.article-image_figcaption]:text-center
+              [&_code.inline-code]:bg-accent-soft [&_code.inline-code]:text-accent [&_code.inline-code]:px-1.5 [&_code.inline-code]:py-0.5 [&_code.inline-code]:rounded [&_code.inline-code]:text-sm
+              [&_hr.article-divider]:border-none [&_hr.article-divider]:h-px [&_hr.article-divider]:bg-gradient-to-r [&_hr.article-divider]:from-transparent [&_hr.article-divider]:via-rim [&_hr.article-divider]:to-transparent [&_hr.article-divider]:my-12
+              [&_blockquote.article-blockquote]:border-l-4 [&_blockquote.article-blockquote]:border-accent [&_blockquote.article-blockquote]:bg-accent-soft [&_blockquote.article-blockquote]:px-6 [&_blockquote.article-blockquote]:py-4 [&_blockquote.article-blockquote]:my-8 [&_blockquote.article-blockquote]:rounded-r-xl [&_blockquote.article-blockquote]:italic [&_blockquote.article-blockquote]:text-ink-muted
             "
             dangerouslySetInnerHTML={{ __html: contentHtml }}
           />
@@ -372,7 +383,7 @@ export default async function BlogPostPage({
                   <Link
                     key={i}
                     href={`/blog?tag=${tagSlug}`}
-                    className="text-xs px-3 py-1 rounded-full bg-white/5 text-white/50 border border-white/10 hover:border-violet-500/50 hover:text-white/80 transition-colors"
+                    className="text-xs px-3 py-1 rounded-full bg-surface text-ink-subtle border border-rim hover:border-accent-rim hover:text-ink transition-colors"
                   >
                     #{label}
                   </Link>
@@ -383,11 +394,11 @@ export default async function BlogPostPage({
         )}
 
         {/* Share + CTA */}
-        <div className="border-t border-white/5">
+        <div className="border-t border-rim">
           <div className="max-w-3xl mx-auto px-6 py-10 flex flex-col md:flex-row items-center justify-between gap-6">
             {/* Social sharing */}
             <div className="flex items-center gap-3">
-              <span className="flex items-center gap-1.5 text-sm text-white/50">
+              <span className="flex items-center gap-1.5 text-sm text-ink-subtle">
                 <Share2 className="w-4 h-4" />
                 Share:
               </span>
@@ -395,7 +406,7 @@ export default async function BlogPostPage({
                 href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(post.title)}&url=${encodeURIComponent(postUrl)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-sm flex items-center gap-2"
+                className="px-4 py-2 rounded-lg bg-surface hover:bg-surface transition-colors text-sm flex items-center gap-2"
                 aria-label="Share on Twitter/X"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -407,7 +418,7 @@ export default async function BlogPostPage({
                 href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(postUrl)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-sm flex items-center gap-2"
+                className="px-4 py-2 rounded-lg bg-surface hover:bg-surface transition-colors text-sm flex items-center gap-2"
                 aria-label="Share on LinkedIn"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -419,7 +430,7 @@ export default async function BlogPostPage({
                 href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(postUrl)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-sm flex items-center gap-2"
+                className="px-4 py-2 rounded-lg bg-surface hover:bg-surface transition-colors text-sm flex items-center gap-2"
                 aria-label="Share on Facebook"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -431,7 +442,7 @@ export default async function BlogPostPage({
 
             <Link
               href="/"
-              className="px-6 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 font-medium transition-all text-sm whitespace-nowrap"
+              className="px-6 py-3 rounded-xl bg-accent text-canvas hover:opacity-90 font-medium transition-all text-sm whitespace-nowrap"
             >
               Try Portrait Studio Free →
             </Link>
@@ -440,9 +451,9 @@ export default async function BlogPostPage({
 
         {/* Related Posts */}
         {relatedPosts.length > 0 && (
-          <div className="border-t border-white/5 bg-white/2">
+          <div className="border-t border-rim bg-surface">
             <div className="max-w-5xl mx-auto px-6 py-12">
-              <h2 className="text-xl font-medium mb-6 text-white/80">
+              <h2 className="text-xl font-medium mb-6 text-ink-muted">
                 Related Articles
               </h2>
               <div className="grid md:grid-cols-3 gap-6">
@@ -452,7 +463,7 @@ export default async function BlogPostPage({
                     <Link
                       key={related.id}
                       href={`/blog/${related.slug}`}
-                      className="group bg-white/5 rounded-xl border border-white/10 overflow-hidden hover:border-violet-500/40 transition-all"
+                      className="group bg-surface rounded-xl border border-rim overflow-hidden hover:border-accent-rim transition-all"
                     >
                       {relImg ? (
                         <div className="aspect-video overflow-hidden">
@@ -464,12 +475,12 @@ export default async function BlogPostPage({
                           />
                         </div>
                       ) : (
-                        <div className="aspect-video bg-gradient-to-br from-violet-900/30 to-pink-900/30 flex items-center justify-center">
+                        <div className="aspect-video bg-surface flex items-center justify-center">
                           <span className="text-3xl">🎨</span>
                         </div>
                       )}
                       <div className="p-4">
-                        <h3 className="text-sm font-medium line-clamp-2 group-hover:text-violet-300 transition-colors">
+                        <h3 className="text-sm font-medium line-clamp-2 group-hover:text-accent transition-colors">
                           {related.title}
                         </h3>
                       </div>
