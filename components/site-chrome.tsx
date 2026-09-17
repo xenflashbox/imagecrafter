@@ -1,13 +1,22 @@
 /**
  * Shared site chrome — the one nav and footer every page wears.
  *
- * Presentational only (no hooks, no server imports) so both the server-rendered
- * marketing page and the client-side wizard can use it. Auth-aware controls are
- * passed in as `cta` by whichever page knows the auth state.
+ * No server imports, so both the server-rendered marketing page and the
+ * client-side wizard can use it. Auth-aware controls are passed in as `cta` by
+ * whichever page knows the auth state.
  */
 
 import Link from "next/link";
 import { Sparkles, Rss } from "lucide-react";
+import { MobileNav, type NavLink } from "@/components/mobile-nav";
+
+const NAV_LINKS: NavLink[] = [
+  { href: "/#styles", label: "Styles" },
+  { href: "/#results", label: "Results" },
+  { href: "/memorial", label: "Memorial" },
+  { href: "/#pricing", label: "Pricing" },
+  { href: "/blog", label: "Blog" },
+];
 
 export function Wordmark({ size = "md" }: { size?: "sm" | "md" }) {
   const box = size === "sm" ? "size-7" : "size-8";
@@ -38,25 +47,22 @@ export function SiteHeader({
 
         {links && (
           <div className="hidden md:flex items-center gap-6 text-sm text-ink-muted">
-            <Link href="/" className="hover:text-ink transition-colors">
-              Styles
-            </Link>
-            <Link href="/#results" className="hover:text-ink transition-colors">
-              Results
-            </Link>
-            <Link href="/memorial" className="hover:text-ink transition-colors">
-              Memorial
-            </Link>
-            <Link href="/#pricing" className="hover:text-ink transition-colors">
-              Pricing
-            </Link>
-            <Link href="/blog" className="hover:text-ink transition-colors">
-              Blog
-            </Link>
+            {NAV_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="hover:text-ink transition-colors"
+              >
+                {link.label}
+              </Link>
+            ))}
           </div>
         )}
 
-        <div className="flex items-center gap-3">{cta}</div>
+        <div className="flex items-center gap-3">
+          {cta}
+          {links && <MobileNav links={NAV_LINKS} />}
+        </div>
       </div>
     </nav>
   );

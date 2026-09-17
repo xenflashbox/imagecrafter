@@ -25,6 +25,7 @@ import {
   ArrowRight,
   Zap,
   Palette,
+  PenLine,
   ShoppingBag,
   Rss,
 } from "lucide-react";
@@ -168,6 +169,29 @@ async function getStylePacks() {
 // COMPONENTS
 // =============================================================================
 
+/** Stands in for the example image on the write-your-own style. */
+function PromptTile() {
+  return (
+    <div className="flex h-full flex-col justify-center gap-3 bg-accent-soft p-5">
+      <div className="flex items-center gap-2 text-accent">
+        <PenLine className="size-4" />
+        <span className="text-xs font-medium uppercase tracking-wide">
+          You write it
+        </span>
+      </div>
+      <div className="rounded-xl border border-accent-rim bg-canvas p-3">
+        <p className="font-display text-sm italic leading-relaxed text-ink">
+          &ldquo;My tabby as a Renaissance duke, asleep on a velvet
+          cushion.&rdquo;
+        </p>
+      </div>
+      <p className="text-xs leading-relaxed text-ink-subtle">
+        Any scene you can describe. No template to pick from.
+      </p>
+    </div>
+  );
+}
+
 function CategoryBadge({ category }: { category: string }) {
   const labels: Record<string, string> = {
     classic: "Classic",
@@ -234,9 +258,9 @@ export default async function LandingPage() {
                 </Link>
                 <Link
                   href="/portraits/create"
-                  className="rounded-xl bg-gradient-to-r from-accent to-accent-2 px-4 py-2 text-sm font-medium transition-all hover:brightness-110"
+                  className="whitespace-nowrap rounded-xl bg-gradient-to-r from-accent to-accent-2 px-4 py-2 text-sm font-medium transition-all hover:brightness-110"
                 >
-                  Upload Your Photo
+                  Upload<span className="hidden sm:inline"> Your Photo</span>
                 </Link>
               </>
             )
@@ -443,8 +467,6 @@ export default async function LandingPage() {
 
             <div className="flex flex-wrap justify-center gap-5">
               {stylePacks.map((pack) => {
-                // An empty src renders a broken-image icon, so fall through to
-                // the mark instead.
                 const hero =
                   pack.variants.find((v) => v.sampleImageUrl?.trim())?.sampleImageUrl ||
                   pack.thumbnailUrl?.trim();
@@ -464,9 +486,11 @@ export default async function LandingPage() {
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
                     ) : (
-                      <div className="flex h-full items-center justify-center text-ink-faint">
-                        <Palette className="size-8" />
-                      </div>
+                      /* A style with no example is the write-your-own one — it
+                         cannot have a single sample without contradicting the
+                         offer. An empty frame reads as a broken image, so show
+                         the prompt box the customer will actually type into. */
+                      <PromptTile />
                     )}
                   </div>
 

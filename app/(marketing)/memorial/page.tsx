@@ -80,9 +80,9 @@ export default async function MemorialPage() {
           ) : (
             <Link
               href="/portraits/create"
-              className="rounded-sm bg-ink px-4 py-2 text-sm font-medium text-canvas transition-opacity hover:opacity-85"
+              className="whitespace-nowrap rounded-sm bg-ink px-4 py-2 text-sm font-medium text-canvas transition-opacity hover:opacity-85"
             >
-              Begin a portrait
+              Begin<span className="hidden sm:inline"> a portrait</span>
             </Link>
           )
         }
