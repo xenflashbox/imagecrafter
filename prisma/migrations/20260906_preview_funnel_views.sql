@@ -8,7 +8,7 @@
 --
 -- Views only. Additive, no data touched, safe to re-run.
 
-CREATE OR REPLACE VIEW public."ic_PreviewsPerVisitor" AS
+CREATE OR REPLACE VIEW imagecrafter."ic_PreviewsPerVisitor" AS
 SELECT
   u."sessionId",
   min(u."email")                                 AS "email",
@@ -18,18 +18,18 @@ SELECT
   max(u."createdAt")                             AS "lastPreviewAt",
   EXISTS (
     SELECT 1
-      FROM public."ic_Order" o
-      JOIN public."ic_Portrait" p ON p."id" = o."portraitId"
+      FROM imagecrafter."ic_Order" o
+      JOIN imagecrafter."ic_Portrait" p ON p."id" = o."portraitId"
      WHERE p."sessionId" = u."sessionId"
        AND o."status" IN ('paid', 'fulfilled', 'shipped', 'delivered')
   )                                              AS "converted"
-FROM public."ic_PreviewUsage" u
+FROM imagecrafter."ic_PreviewUsage" u
 GROUP BY u."sessionId";
 
 -- One row per paid order: how many previews that buyer burned before paying.
 -- Matched on session OR email because the address only appears from preview #2,
 -- so a buyer's free first preview is anonymous and would otherwise be lost.
-CREATE OR REPLACE VIEW public."ic_PreviewsPerSale" AS
+CREATE OR REPLACE VIEW imagecrafter."ic_PreviewsPerSale" AS
 SELECT
   o."id"        AS "orderId",
   o."email",
@@ -39,11 +39,11 @@ SELECT
   p."sessionId",
   (
     SELECT count(*)
-      FROM public."ic_PreviewUsage" u
+      FROM imagecrafter."ic_PreviewUsage" u
      WHERE u."status" = 'allowed'
        AND u."createdAt" <= o."createdAt"
        AND (u."sessionId" = p."sessionId" OR lower(u."email") = lower(o."email"))
   )             AS "previewsBeforePurchase"
-FROM public."ic_Order" o
-JOIN public."ic_Portrait" p ON p."id" = o."portraitId"
+FROM imagecrafter."ic_Order" o
+JOIN imagecrafter."ic_Portrait" p ON p."id" = o."portraitId"
 WHERE o."status" IN ('paid', 'fulfilled', 'shipped', 'delivered');

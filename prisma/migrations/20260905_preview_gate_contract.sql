@@ -12,7 +12,7 @@ BEGIN;
 
 -- Catch anything the expand deploy wrote through the old path while the two
 -- code versions overlapped. Should affect zero rows; cheap insurance if not.
-UPDATE public."ic_MauticCapture"
+UPDATE imagecrafter."ic_MauticCapture"
    SET "dedupeKey" = 'stripe:' || "stripeSessionId"
  WHERE "dedupeKey" IS NULL
    AND "stripeSessionId" IS NOT NULL;
@@ -20,10 +20,10 @@ UPDATE public."ic_MauticCapture"
 -- Takes the unique constraint and its index with it, and the trigger loses the
 -- column it derived from, so both go now.
 DROP TRIGGER IF EXISTS ic_mautic_capture_fill_dedupekey
-  ON public."ic_MauticCapture";
-DROP FUNCTION IF EXISTS public.ic_mautic_capture_fill_dedupekey();
+  ON imagecrafter."ic_MauticCapture";
+DROP FUNCTION IF EXISTS imagecrafter.ic_mautic_capture_fill_dedupekey();
 
-ALTER TABLE public."ic_MauticCapture"
+ALTER TABLE imagecrafter."ic_MauticCapture"
   DROP COLUMN IF EXISTS "stripeSessionId";
 
 COMMIT;

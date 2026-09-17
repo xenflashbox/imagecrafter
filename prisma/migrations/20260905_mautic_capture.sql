@@ -16,7 +16,7 @@
 
 BEGIN;
 
-CREATE TABLE IF NOT EXISTS public."ic_MauticCapture" (
+CREATE TABLE IF NOT EXISTS imagecrafter."ic_MauticCapture" (
   "id"              TEXT PRIMARY KEY,
   "stripeSessionId" TEXT NOT NULL UNIQUE,
   "email"           TEXT NOT NULL,
@@ -34,6 +34,6 @@ CREATE TABLE IF NOT EXISTS public."ic_MauticCapture" (
 );
 
 CREATE INDEX IF NOT EXISTS "ic_MauticCapture_status_idx"
-  ON public."ic_MauticCapture" ("status");
+  ON imagecrafter."ic_MauticCapture" ("status");
 
 COMMIT;

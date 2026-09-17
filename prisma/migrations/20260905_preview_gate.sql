@@ -24,7 +24,7 @@
 
 BEGIN;
 
-CREATE TABLE IF NOT EXISTS public."ic_PreviewUsage" (
+CREATE TABLE IF NOT EXISTS imagecrafter."ic_PreviewUsage" (
   "id"         TEXT PRIMARY KEY,
   "sessionId"  TEXT NOT NULL,
   "ip"         TEXT NOT NULL,
@@ -35,20 +35,20 @@ CREATE TABLE IF NOT EXISTS public."ic_PreviewUsage" (
 );
 
 CREATE INDEX IF NOT EXISTS "ic_PreviewUsage_sessionId_createdAt_idx"
-  ON public."ic_PreviewUsage" ("sessionId", "createdAt");
+  ON imagecrafter."ic_PreviewUsage" ("sessionId", "createdAt");
 CREATE INDEX IF NOT EXISTS "ic_PreviewUsage_ip_createdAt_idx"
-  ON public."ic_PreviewUsage" ("ip", "createdAt");
+  ON imagecrafter."ic_PreviewUsage" ("ip", "createdAt");
 CREATE INDEX IF NOT EXISTS "ic_PreviewUsage_email_createdAt_idx"
-  ON public."ic_PreviewUsage" ("email", "createdAt");
+  ON imagecrafter."ic_PreviewUsage" ("email", "createdAt");
 
-ALTER TABLE public."ic_MauticCapture"
+ALTER TABLE imagecrafter."ic_MauticCapture"
   ADD COLUMN IF NOT EXISTS "dedupeKey"  TEXT,
   ADD COLUMN IF NOT EXISTS "stage"      TEXT NOT NULL DEFAULT 'buyer',
   ADD COLUMN IF NOT EXISTS "previewUrl" TEXT;
 
 -- Every existing row is a buyer, so its key is the Stripe session under the
 -- same "stripe:<session>" shape captureBuyer now writes.
-UPDATE public."ic_MauticCapture"
+UPDATE imagecrafter."ic_MauticCapture"
    SET "dedupeKey" = 'stripe:' || "stripeSessionId"
  WHERE "dedupeKey" IS NULL;
 
@@ -56,7 +56,7 @@ UPDATE public."ic_MauticCapture"
 -- NOT NULL would 500 every checkout capture between this migration and the new
 -- deploy — the outage expand/contract exists to prevent. The trigger derives
 -- the key for those writes; the contract step drops it with the column.
-CREATE OR REPLACE FUNCTION public.ic_mautic_capture_fill_dedupekey()
+CREATE OR REPLACE FUNCTION imagecrafter.ic_mautic_capture_fill_dedupekey()
 RETURNS TRIGGER AS $$
 BEGIN
   IF NEW."dedupeKey" IS NULL AND NEW."stripeSessionId" IS NOT NULL THEN
@@ -67,20 +67,20 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS ic_mautic_capture_fill_dedupekey
-  ON public."ic_MauticCapture";
+  ON imagecrafter."ic_MauticCapture";
 CREATE TRIGGER ic_mautic_capture_fill_dedupekey
-  BEFORE INSERT OR UPDATE ON public."ic_MauticCapture"
-  FOR EACH ROW EXECUTE FUNCTION public.ic_mautic_capture_fill_dedupekey();
+  BEFORE INSERT OR UPDATE ON imagecrafter."ic_MauticCapture"
+  FOR EACH ROW EXECUTE FUNCTION imagecrafter.ic_mautic_capture_fill_dedupekey();
 
-ALTER TABLE public."ic_MauticCapture"
+ALTER TABLE imagecrafter."ic_MauticCapture"
   ALTER COLUMN "dedupeKey" SET NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "ic_MauticCapture_dedupeKey_key"
-  ON public."ic_MauticCapture" ("dedupeKey");
+  ON imagecrafter."ic_MauticCapture" ("dedupeKey");
 
 -- A previewer has neither a Stripe session nor a purchase type. Both columns
 -- have to accept NULL before the new code can insert one.
-ALTER TABLE public."ic_MauticCapture"
+ALTER TABLE imagecrafter."ic_MauticCapture"
   ALTER COLUMN "stripeSessionId" DROP NOT NULL,
   ALTER COLUMN "purchaseType"    DROP NOT NULL;
 
