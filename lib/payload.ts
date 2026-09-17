@@ -29,6 +29,13 @@ const SITE_ID = Number(process.env.PAYLOAD_SITE_ID || 7);
 
 export const DEFAULT_BLOG_PLACEHOLDER = "/placeholder-blog.jpg";
 
+/**
+ * Cache tag on every CMS read, so /api/revalidate can drop the whole Payload
+ * Data Cache the moment an article is published instead of waiting out the
+ * 60s window below.
+ */
+export const PAYLOAD_CACHE_TAG = "payload";
+
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -136,7 +143,7 @@ async function payloadFetch<T>(
   const response = await fetch(url, {
     ...options,
     headers,
-    next: { revalidate: 60 },
+    next: { revalidate: 60, tags: [PAYLOAD_CACHE_TAG] },
   });
 
   if (!response.ok) {

@@ -41,6 +41,10 @@ const isPublicRoute = createRouteMatcher([
   // Blog (public content — fetched from Payload CMS)
   "/blog(.*)",
 
+  // Payload CMS publish hook. No Clerk session exists, so auth.protect() would
+  // 404 the CMS; the route enforces its own REVALIDATE_SECRET check.
+  "/api/revalidate",
+
   // Newsletter subscription (public)
   "/api/newsletter(.*)",
 ]);
