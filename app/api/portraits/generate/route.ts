@@ -20,6 +20,7 @@ import { prisma } from "@/lib/prisma";
 import { generatePortrait } from "@/lib/services/portrait-generation";
 import { checkPreviewGate, clientIp, isNewPreviewer } from "@/lib/services/preview-gate";
 import { capturePreviewer } from "@/lib/services/mautic";
+import { publishProgress } from "@/lib/services/portrait-progress";
 
 // The synchronous pipeline (analysis → stand-in + fidelity gate → swap →
 // acceptance gate, each leg with retries) routinely exceeds the project's
@@ -184,6 +185,14 @@ export async function POST(request: NextRequest) {
     });
 
     if (!result.success) {
+      // One terminal event for every failure branch in the pipeline. The HTTP
+      // response already carries the message; this only stops the wizard's
+      // stage list from sitting on a step that will never finish.
+      await publishProgress(portraitId, {
+        stage: "failed",
+        label: result.error ?? "Generation failed.",
+      });
+
       const status =
         result.errorType === "quality"
           ? 422

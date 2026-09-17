@@ -54,6 +54,8 @@ import {
   upscalePortraitBuffer,
 } from "./replicate-portrait";
 import { postToService, getFromService, serviceErrorMessage } from "./image-generation";
+import { publishProgress } from "./portrait-progress";
+import { STAGE_LABELS } from "../portrait-stages";
 
 // =============================================================================
 // TYPES
@@ -584,6 +586,10 @@ export async function generatePortrait(
     where: { id: portraitId },
     data: { status: "analyzing" },
   });
+  await publishProgress(portraitId, {
+    stage: "analyzing",
+    label: STAGE_LABELS.analyzing,
+  });
 
   // --- Step 3: Analyze photo with Claude Vision ---
   const analysisResult = await analyzePortraitPhoto(portrait.sourceImageUrl);
@@ -695,6 +701,10 @@ export async function generatePortrait(
   // --- Step 6: Build the stand-in prompt ---
   // The stand-in is GENERIC: coloring + demographics from the analysis JSON
   // (required for the swap to bridge), never the real identity.
+  await publishProgress(portraitId, {
+    stage: "composing",
+    label: STAGE_LABELS.composing,
+  });
   const standInDescriptor = buildStandInDescriptor(analysis);
   let enhancedPrompt: string;
 
@@ -824,6 +834,11 @@ export async function generatePortrait(
     console.log(
       `[PortraitGen] Step 1: generating ${STANDIN_CANDIDATES} stand-in candidates in parallel`
     );
+    await publishProgress(portraitId, {
+      stage: "painting",
+      label: STAGE_LABELS.painting,
+      note: "This is the long part — a few minutes is normal.",
+    });
     const results = await Promise.all(
       Array.from({ length: STANDIN_CANDIDATES }, () =>
         generateStandInScene(enhancedPrompt, styleVariantSlug, standInPhaseDeadline)
@@ -848,6 +863,13 @@ export async function generatePortrait(
     // The fidelity veto still runs on every candidate, unchanged: a stand-in
     // whose colouring has drifted off the subject cannot be rescued by being
     // the best of a bad set.
+    await publishProgress(portraitId, {
+      stage: "checking",
+      label: STAGE_LABELS.checking,
+      ...(sceneUrls.length < STANDIN_CANDIDATES && {
+        note: `${sceneUrls.length} of ${STANDIN_CANDIDATES} versions came back — choosing from those.`,
+      }),
+    });
     const fidelities = await Promise.all(
       sceneUrls.map((url) =>
         checkStandInFidelity(portrait.sourceImageUrl, url, subjectKind)
@@ -922,6 +944,10 @@ export async function generatePortrait(
 
   // Step 8b: identity swap — the real photo is image 1 (identity anchor).
   console.log("[PortraitGen] Step 2: swapping identity onto stand-in scene");
+  await publishProgress(portraitId, {
+    stage: "likeness",
+    label: STAGE_LABELS.likeness,
+  });
   let swap = await swapFaceIntoScene({
     photoUrl: portrait.sourceImageUrl,
     sceneUrl,
@@ -949,6 +975,10 @@ export async function generatePortrait(
   // measurably reframes it in both directions (PLAN/results/best-of-n-verdict.md,
   // #78b) — so a second swap onto one stand-in is a genuinely independent draw,
   // at a fraction of the cost of regenerating the stand-in set.
+  await publishProgress(portraitId, {
+    stage: "reviewing",
+    label: STAGE_LABELS.reviewing,
+  });
   let verdict = await assessOutput(swap.imageUrl);
   let swapAttempts = 1;
   for (let attempt = 2; attempt <= SWAP_ATTEMPTS && !verdict.pass; attempt++) {
@@ -961,6 +991,11 @@ export async function generatePortrait(
     console.log(
       `[PortraitGen] Acceptance gate failed (identity=${verdict.identity}, style=${verdict.style}, ip=${verdict.ip}) — swap attempt ${attempt}/${SWAP_ATTEMPTS}`
     );
+    await publishProgress(portraitId, {
+      stage: "likeness",
+      label: STAGE_LABELS.likeness,
+      note: `Attempt ${attempt} of ${SWAP_ATTEMPTS} — the first didn't look enough like them.`,
+    });
     const retry = await swapFaceIntoScene({
       photoUrl: portrait.sourceImageUrl,
       sceneUrl,
@@ -997,6 +1032,11 @@ export async function generatePortrait(
   genResult = { imageUrl: swap.imageUrl! };
   console.log("[PortraitGen] Two-step generation complete");
 
+
+  await publishProgress(portraitId, {
+    stage: "finishing",
+    label: STAGE_LABELS.finishing,
+  });
 
   // --- Step 9: Fetch generated image ---
   let imageBuffer: Buffer;
@@ -1112,6 +1152,8 @@ export async function generatePortrait(
       updatedAt: new Date(),
     },
   });
+
+  await publishProgress(portraitId, { stage: "done", label: "Done" });
 
   return {
     success: true,

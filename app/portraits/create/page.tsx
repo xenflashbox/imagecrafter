@@ -31,6 +31,8 @@ import {
 } from "lucide-react";
 import { SiteHeader, SiteFooter } from "@/components/site-chrome";
 import { Turnstile } from "@/components/turnstile";
+import { PORTRAIT_STAGES, STAGE_LABELS, type PortraitStage } from "@/lib/portrait-stages";
+import { subscribeToProgress } from "@/lib/portrait-progress-client";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -464,12 +466,119 @@ function PreviewGatePanel({
   );
 }
 
+/**
+ * What the wizard knows about the run. `stage` is null until the pipeline
+ * reports its first boundary — nothing here is ever inferred from a timer.
+ */
+type ProgressState = {
+  stage: PortraitStage | null;
+  note: string | null;
+  /** Value of generationElapsedMs when the current stage began. */
+  stageAtMs: number;
+};
+
+const mmss = (ms: number) => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+};
+
+/**
+ * The waiting screen.
+ *
+ * Every completed row is a boundary the pipeline actually crossed; the active
+ * row carries its own timer. When the progress feed says nothing — it is
+ * unreachable, or the run has not reached its first boundary — this degrades
+ * to the elapsed clock rather than inventing a stage.
+ */
+function GenerationProgress({
+  generationElapsedMs,
+  progress,
+}: {
+  generationElapsedMs: number;
+  progress: ProgressState;
+}) {
+  const currentIdx = progress.stage ? PORTRAIT_STAGES.indexOf(progress.stage) : -1;
+  const overall = mmss(generationElapsedMs);
+
+  return (
+    <div className="flex min-h-[400px] flex-col items-center justify-center gap-6 py-8">
+      <div className="relative size-16">
+        <div className="size-16 animate-spin rounded-full border-4 border-rim border-t-accent" />
+        <span className="absolute inset-0 flex items-center justify-center">
+          <Sparkles className="size-5 text-accent" />
+        </span>
+      </div>
+
+      <div className="max-w-sm text-center">
+        <p className="mb-1 font-display text-xl text-ink">Creating your portrait…</p>
+        <p className="text-sm leading-relaxed text-ink-muted">
+          Most take 4–6 minutes. Some take longer, and some fail — either way
+          this screen will tell you. Please keep this tab open.
+        </p>
+      </div>
+
+      {currentIdx === -1 ? (
+        <p className="font-display text-2xl tabular-nums text-ink-subtle">{overall}</p>
+      ) : (
+        <ol className="w-full max-w-sm">
+          {PORTRAIT_STAGES.map((stage, i) => {
+            const done = i < currentIdx;
+            const active = i === currentIdx;
+            return (
+              <li
+                key={stage}
+                className="flex items-baseline gap-3 border-b border-rim py-2 last:border-0"
+              >
+                <span className="flex w-4 shrink-0 justify-center self-center">
+                  {done ? (
+                    <Check className="size-4 text-positive" />
+                  ) : active ? (
+                    <Loader2 className="size-4 animate-spin text-accent" />
+                  ) : (
+                    <span className="size-1.5 rounded-full bg-rim" />
+                  )}
+                </span>
+                <span
+                  className={`flex-1 text-sm ${
+                    active ? "text-ink" : done ? "text-ink-muted" : "text-ink-faint"
+                  }`}
+                >
+                  {STAGE_LABELS[stage]}
+                </span>
+                {active && (
+                  <span className="shrink-0 text-xs tabular-nums text-ink-subtle">
+                    {mmss(generationElapsedMs - progress.stageAtMs)}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+
+      {/* A real complication the pipeline reported — a retry, a short render.
+          Never decoration: the server only sends this when something happened. */}
+      {progress.note && (
+        <p className="flex max-w-sm items-start gap-2 text-center text-xs text-ink-muted">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-accent" />
+          <span className="text-left">{progress.note}</span>
+        </p>
+      )}
+
+      {currentIdx !== -1 && (
+        <p className="text-xs tabular-nums text-ink-faint">{overall} elapsed</p>
+      )}
+    </div>
+  );
+}
+
 function PreviewSection({
   portraitId,
   previewUrl,
   isGenerating,
   error,
   generationElapsedMs,
+  progress,
   onRegenerate,
   onChangeStyle,
   onNewPhoto,
@@ -484,6 +593,7 @@ function PreviewSection({
   isGenerating: boolean;
   error: string | null;
   generationElapsedMs: number;
+  progress: ProgressState;
   onRegenerate?: () => void;
   onChangeStyle?: () => void;
   onNewPhoto?: () => void;
@@ -511,34 +621,11 @@ function PreviewSection({
   }, []);
 
   if (isGenerating) {
-    // Elapsed wall-clock only. The pipeline reports no intermediate progress,
-    // so anything shaped like a percentage or a stage list would be invented.
-    const secs = Math.floor(generationElapsedMs / 1000);
-    const clock = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
     return (
-      <div className="flex min-h-[400px] flex-col items-center justify-center gap-6">
-        <div className="relative size-24">
-          <div className="size-24 animate-spin rounded-full border-4 border-rim border-t-accent" />
-          <span className="absolute inset-0 flex items-center justify-center">
-            <Sparkles className="size-6 text-accent" />
-          </span>
-        </div>
-        <div className="max-w-sm text-center">
-          <p className="mb-1 font-display text-xl text-ink">Creating your portrait…</p>
-          <p className="text-sm leading-relaxed text-ink-muted">
-            Good portraits take 3–5 minutes. We paint a scene around your subject,
-            then work the face into it — that&rsquo;s the part that makes it look
-            like them. Please keep this tab open.
-          </p>
-        </div>
-        <p className="font-display text-2xl tabular-nums text-ink-subtle">{clock}</p>
-        {secs >= 360 && (
-          <p className="max-w-sm text-center text-xs text-ink-faint">
-            This one is taking longer than usual. It is still running — we will
-            show it or tell you it failed.
-          </p>
-        )}
-      </div>
+      <GenerationProgress
+        generationElapsedMs={generationElapsedMs}
+        progress={progress}
+      />
     );
   }
 
@@ -729,6 +816,12 @@ function CreatePortraitContent() {
   const [userScene, setUserScene] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationElapsedMs, setGenerationElapsedMs] = useState(0);
+  const [progress, setProgress] = useState<ProgressState>({
+    stage: null,
+    note: null,
+    stageAtMs: 0,
+  });
+  const unsubscribeProgress = useRef<(() => void) | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
   // Preview gate. gateCode decides which prompt to show; previewEmail is the
@@ -959,7 +1052,20 @@ function CreatePortraitContent() {
 
     const startedAt = Date.now();
     setGenerationElapsedMs(0);
+    setProgress({ stage: null, note: null, stageAtMs: 0 });
     const interval = setInterval(() => setGenerationElapsedMs(Date.now() - startedAt), 1000);
+
+    // Subscribed before the request goes out, so the first boundary the
+    // pipeline crosses cannot land before anyone is listening.
+    unsubscribeProgress.current?.();
+    unsubscribeProgress.current = subscribeToProgress(portraitId, (event) => {
+      if (event.stage === "done" || event.stage === "failed") return;
+      setProgress({
+        stage: event.stage,
+        note: event.note ?? null,
+        stageAtMs: Date.now() - startedAt,
+      });
+    });
 
     try {
       const res = await fetch("/api/portraits/generate", {
@@ -990,9 +1096,14 @@ function CreatePortraitContent() {
       setGenerationError("Network error during generation. Please try again.");
     } finally {
       clearInterval(interval);
+      unsubscribeProgress.current?.();
+      unsubscribeProgress.current = null;
       setIsGenerating(false);
     }
   };
+
+  // A navigation mid-generation must not leave the socket reconnecting forever.
+  useEffect(() => () => unsubscribeProgress.current?.(), []);
 
   // Retry the refused generation with whatever the gate asked for.
   const handleGateSubmit = async () => {
@@ -1231,6 +1342,7 @@ function CreatePortraitContent() {
               isGenerating={isGenerating}
               error={generationError}
               generationElapsedMs={generationElapsedMs}
+              progress={progress}
               onRegenerate={handleRegenerate}
               onChangeStyle={handleRetry}
               onNewPhoto={handleStartOver}
