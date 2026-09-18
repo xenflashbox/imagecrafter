@@ -1,4 +1,5 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { LEGAL_LINKS } from "@/lib/legal";
 
 const isPublicRoute = createRouteMatcher([
   // Marketing & auth
@@ -6,6 +7,10 @@ const isPublicRoute = createRouteMatcher([
   "/memorial",
   "/sign-in(.*)",
   "/sign-up(.*)",
+
+  // Legal pages. Public by definition — a customer, a card network and Stripe
+  // all read them signed out, and auth.protect() would 404 them.
+  ...LEGAL_LINKS.map((l) => l.href),
 
   // SEO metadata routes (must bypass auth)
   "/robots.txt",
