@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import type { PlanTier, SubscriptionStatus } from "@prisma/client";
 import { buildDownloadPageUrl } from "@/lib/services/download-token";
 import {
@@ -16,7 +17,7 @@ import {
   sendPrintPurchaseEmail,
 } from "@/lib/services/email-notification";
 import { createProdigiOrder } from "@/lib/services/print-fulfillment";
-import { grantPackCredits } from "@/lib/services/credits";
+import { grantPackCredits, getCreditBalance } from "@/lib/services/credits";
 import { resolvePackPrice } from "@/lib/services/pricing";
 import { trackTikTokEvent } from "@/lib/services/tiktok-events";
 import { trackMetaEvent } from "@/lib/services/meta-events";
@@ -161,6 +162,10 @@ export async function POST(request: NextRequest) {
 
       case "invoice.payment_failed":
         await handleInvoiceFailed(event.data.object as Stripe.Invoice);
+        break;
+
+      case "charge.refunded":
+        await handleChargeRefunded(event.data.object as Stripe.Charge);
         break;
 
       case "checkout.session.expired": {
@@ -598,6 +603,189 @@ async function handlePortraitCheckoutCompleted(
       });
     }
   }
+}
+
+/**
+ * Refund issued in Stripe (dashboard or API) — take the goods back.
+ *
+ * Without this, refunding returns the money but leaves the order marked paid,
+ * the portrait marked purchased and the download link live.
+ *
+ * Partial refunds are recorded and escalated, never auto-revoked: a partial is
+ * almost always a goodwill gesture or a shipping adjustment, and revoking a
+ * download the customer is still entitled to is worse than a human looking at
+ * it. Only a full refund revokes.
+ */
+async function handleChargeRefunded(charge: Stripe.Charge) {
+  const paymentIntentId =
+    typeof charge.payment_intent === "string"
+      ? charge.payment_intent
+      : charge.payment_intent?.id ?? null;
+
+  const isFullRefund = charge.amount_refunded >= charge.amount;
+
+  if (!paymentIntentId) {
+    console.error(
+      `[stripe-webhook] charge.refunded ${charge.id} has no payment_intent — cannot match a purchase, MANUAL REVIEW REQUIRED`
+    );
+    return;
+  }
+
+  const order = await prisma.order.findFirst({
+    where: { stripePaymentIntentId: paymentIntentId },
+    select: {
+      id: true,
+      type: true,
+      status: true,
+      email: true,
+      portraitId: true,
+      prodigiOrderId: true,
+      prodigiStatus: true,
+    },
+  });
+
+  if (order) {
+    await refundPortraitOrder(order, charge, isFullRefund);
+    return;
+  }
+
+  // No order row means this was a credit-pack purchase — packs write a
+  // CreditLedger row, not an Order. The charge carries no session id, so
+  // resolve the checkout session that produced this payment intent.
+  const sessions = await getStripe().checkout.sessions.list({
+    payment_intent: paymentIntentId,
+    limit: 1,
+  });
+  const session = sessions.data[0];
+  const packSku = session?.metadata?.packSku;
+
+  if (!session || !packSku) {
+    console.error(
+      `[stripe-webhook] charge.refunded ${charge.id} (pi ${paymentIntentId}): no order and no pack checkout found — MANUAL REVIEW REQUIRED`
+    );
+    return;
+  }
+
+  await clawBackPackCredits(session, packSku, charge, isFullRefund);
+}
+
+async function refundPortraitOrder(
+  order: {
+    id: string;
+    type: string;
+    status: string;
+    email: string;
+    portraitId: string;
+    prodigiOrderId: string | null;
+    prodigiStatus: string | null;
+  },
+  charge: Stripe.Charge,
+  isFullRefund: boolean
+) {
+  if (!isFullRefund) {
+    console.error(
+      `[stripe-webhook] PARTIAL REFUND on order ${order.id} (${charge.amount_refunded} of ${charge.amount} ${charge.currency}) — access left intact, MANUAL REVIEW REQUIRED`
+    );
+    return;
+  }
+
+  if (order.status === "refunded") {
+    return; // webhook replay
+  }
+
+  // status alone closes the download: /api/orders/download rejects anything
+  // that is not paid|fulfilled, and /api/orders/[id] only hands out the link
+  // on "paid". The expiry is belt-and-braces for a link already in an inbox.
+  await prisma.order.update({
+    where: { id: order.id },
+    data: { status: "refunded", downloadExpiresAt: new Date() },
+  });
+
+  // Back to preview: the customer no longer owns the hi-res, and the portrait
+  // rejoins the unpurchased pool the terms cover.
+  await prisma.portrait.update({
+    where: { id: order.portraitId },
+    data: { status: "preview" },
+  });
+
+  if (order.type === "print" && order.prodigiOrderId) {
+    // Prodigi has already been paid and the print may be in the post. Nothing
+    // here can recall it — this is a real cost that a human has to see.
+    console.error(
+      `[stripe-webhook] Order ${order.id} refunded but print ${order.prodigiOrderId} was already sent to Prodigi (${order.prodigiStatus ?? "unknown"}) — COST NOT RECOVERABLE, cancel with Prodigi manually if it has not shipped`
+    );
+  }
+
+  console.log(
+    `[stripe-webhook] Order ${order.id} (${order.type}) refunded in full — download revoked, portrait ${order.portraitId} reverted to preview`
+  );
+}
+
+async function clawBackPackCredits(
+  session: Stripe.Checkout.Session,
+  packSku: string,
+  charge: Stripe.Charge,
+  isFullRefund: boolean
+) {
+  const userId = session.metadata?.packUserId;
+  if (!userId) {
+    console.error(
+      `[stripe-webhook] Pack refund for session ${session.id} (${packSku}) has no packUserId — CREDITS NOT CLAWED BACK, MANUAL REVIEW REQUIRED`
+    );
+    return;
+  }
+
+  if (!isFullRefund) {
+    console.error(
+      `[stripe-webhook] PARTIAL REFUND on pack ${packSku} for user ${userId} (${charge.amount_refunded} of ${charge.amount}) — credits left intact, MANUAL REVIEW REQUIRED`
+    );
+    return;
+  }
+
+  const pack = await resolvePackPrice(packSku);
+  const credits = pack?.credits ?? parseInt(session.metadata?.credits || "0");
+  if (!credits || credits <= 0) {
+    console.error(
+      `[stripe-webhook] Pack refund ${session.id}: unknown SKU ${packSku} and no credits in metadata — CREDITS NOT CLAWED BACK, MANUAL REVIEW REQUIRED`
+    );
+    return;
+  }
+
+  try {
+    // The grant row already holds the raw session id in the unique column, so
+    // the reversal keys off a prefixed form — same replay protection, no clash.
+    await prisma.creditLedger.create({
+      data: {
+        userId,
+        delta: -credits,
+        reason: "refund",
+        stripeSessionId: `refund_${session.id}`,
+        packSku,
+      },
+    });
+  } catch (err) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2002"
+    ) {
+      return; // webhook replay
+    }
+    throw err;
+  }
+
+  const balance = await getCreditBalance(userId);
+  if (balance < 0) {
+    // They spent credits before the refund landed. The negative balance is
+    // correct and blocks further redemption, but somebody got portraits for
+    // free and that has to be visible.
+    console.error(
+      `[stripe-webhook] Pack ${packSku} refunded for user ${userId}: balance is now ${balance} — credits were spent before the refund, MANUAL REVIEW REQUIRED`
+    );
+  }
+
+  console.log(
+    `[stripe-webhook] Pack ${packSku} refunded for user ${userId} — ${credits} credits reversed, balance ${balance}`
+  );
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
