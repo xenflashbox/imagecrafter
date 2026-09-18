@@ -102,6 +102,49 @@ body {
   font-optical-sizing: auto;
 }
 
+/* ---------------------------------------------------------------------------
+   @xenco/editorial-blocks token bridge.
+   The package ships Compare ITAD's brand as its :root defaults, so without
+   this every callout, step card and comparison table renders in another
+   property's navy-and-ochre. Scoped to the article rather than :root so it
+   inherits whichever ground the page is on (daylight or .noir) and so it
+   wins regardless of stylesheet order.
+   --------------------------------------------------------------------------- */
+.article-body {
+  --brand-primary: var(--ink);
+  --brand-accent: var(--accent);
+  --brand-primary-soft: var(--surface);
+  --brand-accent-soft: var(--accent-soft);
+
+  --surface-base: var(--canvas);
+  --surface-elevated: var(--surface-raised);
+
+  --text-headline: var(--ink);
+  --text-body: var(--ink);
+  --text-secondary: var(--ink-muted);
+  --text-link: var(--accent);
+  --text-link-hover: var(--accent-2);
+
+  --border-subtle: var(--rim);
+  --border-strong: var(--accent-rim);
+
+  --risk-best-green: var(--positive);
+  --risk-amber: var(--warning);
+  --risk-red: var(--danger);
+
+  --callout-info-bg: var(--surface);
+  --callout-info-border: var(--rim-strong);
+  --callout-warning-bg: var(--surface);
+  --callout-warning-border: var(--warning);
+  --callout-note-bg: var(--surface);
+  --callout-note-border: var(--rim-strong);
+
+  --font-headline: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  --font-display: var(--font-headline);
+  --font-body: var(--font-manrope), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

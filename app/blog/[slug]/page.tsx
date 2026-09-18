@@ -19,7 +19,8 @@ import { notFound } from "next/navigation";
 import {
   getBlogPost,
   getRelatedPosts,
-  getPostHtml,
+  getLegacyHtml,
+  getLexicalContent,
   getMediaUrl,
   getMediaUrlOrNull,
   getCategoryTitle,
@@ -31,6 +32,7 @@ import {
 } from "@/lib/payload";
 import { Calendar, Clock, ArrowLeft, Share2 } from "lucide-react";
 import { AuthorAvatar } from "@/components/author-avatar";
+import { ArticleBody } from "@/components/article-body";
 
 export const dynamic = "force-dynamic";
 
@@ -125,7 +127,8 @@ export default async function BlogPostPage({
 
   const pubDate = getPostPublishedDate(post);
   const readTime = estimateReadTime(post);
-  const contentHtml = getPostHtml(post);
+  const legacyHtml = getLegacyHtml(post);
+  const lexicalContent = legacyHtml ? null : getLexicalContent(post);
   const imageUrl = getMediaUrlOrNull(post.featuredImage);
   const postUrl = `${APP_URL}/blog/${post.slug}`;
   const canonical = post.canonicalUrl || postUrl;
@@ -343,10 +346,11 @@ export default async function BlogPostPage({
           </div>
         )}
 
-        {/* Lexical content */}
+        {/* Article body */}
         <div className="max-w-3xl mx-auto px-6 py-10">
-          <div
-            className="
+          {legacyHtml ? (
+            <div
+              className="
               prose prose-invert prose-lg max-w-none
               prose-headings:font-medium prose-headings:text-ink prose-headings:scroll-mt-8
               prose-p:text-ink-muted prose-p:leading-relaxed
@@ -368,8 +372,13 @@ export default async function BlogPostPage({
               [&_hr.article-divider]:border-none [&_hr.article-divider]:h-px [&_hr.article-divider]:bg-gradient-to-r [&_hr.article-divider]:from-transparent [&_hr.article-divider]:via-rim [&_hr.article-divider]:to-transparent [&_hr.article-divider]:my-12
               [&_blockquote.article-blockquote]:border-l-4 [&_blockquote.article-blockquote]:border-accent [&_blockquote.article-blockquote]:bg-accent-soft [&_blockquote.article-blockquote]:px-6 [&_blockquote.article-blockquote]:py-4 [&_blockquote.article-blockquote]:my-8 [&_blockquote.article-blockquote]:rounded-r-xl [&_blockquote.article-blockquote]:italic [&_blockquote.article-blockquote]:text-ink-muted
             "
-            dangerouslySetInnerHTML={{ __html: contentHtml }}
-          />
+              dangerouslySetInnerHTML={{ __html: legacyHtml }}
+            />
+          ) : lexicalContent ? (
+            <ArticleBody content={lexicalContent} />
+          ) : post.excerpt ? (
+            <p className="text-ink-muted leading-relaxed">{post.excerpt}</p>
+          ) : null}
         </div>
 
         {/* Tags */}

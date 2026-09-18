@@ -256,178 +256,31 @@ export function getCategorySlug(
 }
 
 // =============================================================================
-// LEXICAL RICH TEXT → HTML RENDERER
+// ARTICLE BODY
 // =============================================================================
 
-function slugifyHeading(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 60);
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function renderLexicalText(node: Record<string, unknown>): string {
-  let text = (node.text as string) || "";
-  if (!text) return "";
-
-  const format = (node.format as number) || 0;
-  if (format & 1) text = `<strong>${text}</strong>`;
-  if (format & 2) text = `<em>${text}</em>`;
-  if (format & 4) text = `<s>${text}</s>`;
-  if (format & 8) text = `<u>${text}</u>`;
-  if (format & 16) text = `<code class="inline-code">${text}</code>`;
-  if (format & 32) text = `<sub>${text}</sub>`;
-  if (format & 64) text = `<sup>${text}</sup>`;
-
-  return text;
-}
-
-function renderLexicalChildren(
-  children: unknown[] | undefined
-): string {
-  if (!children || !Array.isArray(children)) return "";
-  return children
-    .map((child) => renderLexicalNode(child as Record<string, unknown>))
-    .join("");
-}
-
-function renderLexicalNode(node: Record<string, unknown>): string {
-  const type = node.type as string;
-  const children = node.children as unknown[] | undefined;
-  const innerHtml = renderLexicalChildren(children);
-
-  switch (type) {
-    case "text":
-      return renderLexicalText(node);
-
-    case "paragraph":
-      return innerHtml
-        ? `<p>${innerHtml}</p>`
-        : `<p>&nbsp;</p>`;
-
-    case "heading": {
-      const tag = (node.tag as string) || "h2";
-      const text = children
-        ? (children as Record<string, unknown>[])
-            .map((c) => (c.text as string) || "")
-            .join("")
-        : "";
-      const id = slugifyHeading(text);
-      return `<${tag} id="${id}">${innerHtml}</${tag}>`;
-    }
-
-    case "list": {
-      const listType = node.listType as string;
-      const tag = listType === "number" ? "ol" : "ul";
-      return `<${tag}>${innerHtml}</${tag}>`;
-    }
-
-    case "listitem":
-      return `<li>${innerHtml}</li>`;
-
-    case "quote":
-    case "blockquote":
-      return `<blockquote class="article-blockquote">${innerHtml}</blockquote>`;
-
-    case "horizontalrule":
-      return `<hr class="article-divider" />`;
-
-    case "link": {
-      const fields = isObject(node.fields) ? node.fields : {};
-      const url = (fields.url as string) || "#";
-      const newTab = fields.newTab as boolean;
-      const isExternal =
-        newTab || url.startsWith("http") || url.startsWith("//");
-      const rel = isExternal ? ' rel="noopener noreferrer"' : "";
-      const target = isExternal ? ' target="_blank"' : "";
-      return `<a href="${url}"${target}${rel}>${innerHtml}</a>`;
-    }
-
-    case "upload": {
-      const value = isObject(node.value) ? node.value : {};
-      const fields = isObject(node.fields) ? node.fields : {};
-      const imgUrl = getMediaUrl(value as PayloadMedia);
-      const alt =
-        (value.alt as string) ||
-        (fields.caption as string) ||
-        "";
-      const caption = fields.caption as string | undefined;
-      const width = value.width as number | undefined;
-      const height = value.height as number | undefined;
-      return `<figure class="article-image">
-  <img
-    src="${imgUrl}"
-    alt="${alt}"
-    ${width ? `width="${width}"` : ""}
-    ${height ? `height="${height}"` : ""}
-    loading="lazy"
-    decoding="async"
-  />
-  ${caption ? `<figcaption>${caption}</figcaption>` : ""}
-</figure>`;
-    }
-
-    case "checklist": {
-      const checked = node.checked as boolean;
-      return `<li class="checklist-item ${checked ? "checked" : ""}">
-  <input type="checkbox" disabled ${checked ? "checked" : ""} />
-  <span>${innerHtml}</span>
-</li>`;
-    }
-
-    default:
-      return innerHtml || "";
-  }
-}
-
 /**
- * Render a Payload Lexical JSON tree to HTML.
- * Accepts the full `content` field value (the root node or the content object).
+ * Pre-rendered HTML from a legacy WordPress import.
+ *
+ * Lexical articles return null and must be rendered by the editorial-blocks
+ * <RichText> router instead — a string converter drops every block node.
  */
-export function renderLexicalToHtml(content: unknown): string {
-  if (!content) return "";
-  if (typeof content === "string") return content;
-
-  let root: Record<string, unknown> | null = null;
-
-  if (isObject(content)) {
-    if (content.root && isObject(content.root)) {
-      root = content.root as Record<string, unknown>;
-    } else if (content.type === "root") {
-      root = content as Record<string, unknown>;
-    }
-  }
-
-  if (!root) return "";
-
-  const children = root.children as unknown[] | undefined;
-  if (!children) return "";
-
-  return children
-    .map((node) => renderLexicalNode(node as Record<string, unknown>))
-    .join("\n");
-}
-
-/**
- * Get the best renderable HTML from a post.
- * Falls back to excerpt if no content available.
- */
-export function getPostHtml(post: PayloadPost): string {
+export function getLegacyHtml(post: PayloadPost): string | null {
   if (typeof post.html === "string" && post.html.trim()) return post.html;
   if (typeof post.contentHtml === "string" && post.contentHtml.trim())
     return post.contentHtml;
   if (typeof post.content === "string" && post.content.trim())
     return post.content;
-  if (post.content && typeof post.content === "object") {
-    const html = renderLexicalToHtml(post.content);
-    if (html.trim()) return html;
+  return null;
+}
+
+/** The Lexical tree, or null when the post carries no structured body. */
+export function getLexicalContent(post: PayloadPost): { root: unknown } | null {
+  const content = post.content;
+  if (content && typeof content === "object" && "root" in content) {
+    return content as { root: unknown };
   }
-  return `<p>${post.excerpt || ""}</p>`;
+  return null;
 }
 
 export function estimateReadTime(post: PayloadPost): number {
