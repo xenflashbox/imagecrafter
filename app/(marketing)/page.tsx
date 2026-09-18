@@ -30,6 +30,7 @@ import {
   Rss,
 } from "lucide-react";
 import { SiteHeader, Wordmark } from "@/components/site-chrome";
+import { LEGAL_LINKS } from "@/lib/legal";
 import NewsletterSignup from "./NewsletterSignup";
 
 export const dynamic = "force-dynamic";
@@ -669,7 +670,12 @@ export default async function LandingPage() {
 
             <div className="border-t border-rim pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-ink-faint">
               <p>© {new Date().getFullYear()} ImageCrafter · Powered by Xenco Labs</p>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+                {LEGAL_LINKS.map((l) => (
+                  <Link key={l.href} href={l.href} className="hover:text-ink transition-colors">
+                    {l.label}
+                  </Link>
+                ))}
                 <Link href="/blog/rss.xml" className="hover:text-ink flex items-center gap-1 transition-colors">
                   <Rss className="w-3 h-3" /> RSS
                 </Link>
