@@ -82,7 +82,7 @@ export default async function AuthorPage({
     await getPostsByAuthor(author.id, { page, limit: 9 });
 
   return (
-    <div className="min-h-screen bg-canvas text-ink">
+    <div className="bg-canvas text-ink">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{

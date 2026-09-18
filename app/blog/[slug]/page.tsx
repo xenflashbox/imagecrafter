@@ -250,7 +250,7 @@ export default async function BlogPostPage({
         }}
       />
 
-      <article className="min-h-screen bg-canvas text-ink">
+      <article className="bg-canvas text-ink">
         {/* Header */}
         <header className="border-b border-rim">
           <div className="max-w-3xl mx-auto px-6 py-8">

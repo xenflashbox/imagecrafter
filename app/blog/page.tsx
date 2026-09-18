@@ -83,7 +83,7 @@ export default async function BlogPage({
   const { docs: posts, totalPages, hasPrevPage, hasNextPage } = postsData;
 
   return (
-    <div className="min-h-screen bg-canvas text-ink">
+    <div className="bg-canvas text-ink">
       {/* Header */}
       <div className="border-b border-rim bg-surface">
         <div className="max-w-5xl mx-auto px-6 py-16 text-center">

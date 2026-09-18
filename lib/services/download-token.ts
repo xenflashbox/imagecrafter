@@ -75,8 +75,22 @@ export function validateDownloadToken(token: string): TokenValidationResult {
   }
 }
 
-/** Build the full download URL for a given order */
+/**
+ * Direct download URL. Fetching it consumes one of the order's downloads, so
+ * it is only safe behind a control the customer physically clicks in our own UI.
+ */
 export function buildDownloadUrl(orderId: string, baseUrl: string): string {
   const token = generateDownloadToken(orderId);
-  return `${baseUrl}/api/orders/download?token=${token}`;
+  return `${baseUrl}/api/orders/download?token=${token}&confirm=1`;
+}
+
+/**
+ * Landing page for the same token — use this in email. Brevo rewrites every
+ * link through its click tracker, and mail scanners, chat unfurls and browser
+ * prefetch all GET the rewritten URL; each would otherwise burn a download
+ * before the customer had opened the message.
+ */
+export function buildDownloadPageUrl(orderId: string, baseUrl: string): string {
+  const token = generateDownloadToken(orderId);
+  return `${baseUrl}/download?token=${token}`;
 }

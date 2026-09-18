@@ -9,7 +9,7 @@ import { headers } from "next/headers";
 import Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 import type { PlanTier, SubscriptionStatus } from "@prisma/client";
-import { buildDownloadUrl } from "@/lib/services/download-token";
+import { buildDownloadPageUrl } from "@/lib/services/download-token";
 import {
   sendDigitalPurchaseEmail,
   sendPackPurchaseEmail,
@@ -445,7 +445,7 @@ async function handlePortraitCheckoutCompleted(
     });
 
     // Generate download token and send email
-    const downloadUrl = buildDownloadUrl(orderId, BASE_URL);
+    const downloadUrl = buildDownloadPageUrl(orderId, BASE_URL);
     const sent = await sendPostPaymentEmail(`Digital order ${orderId}`, () =>
       sendDigitalPurchaseEmail({
         to: customerEmail,

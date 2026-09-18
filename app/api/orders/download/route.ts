@@ -9,6 +9,11 @@
  * 3. Download count must be < maxDownloads (default 5)
  * 4. Order must be in "paid" or "fulfilled" status
  * 5. Increments downloadCount atomically (prevents race conditions via transaction)
+ *
+ * Without `confirm=1` this consumes nothing and redirects to /download, where
+ * the customer clicks for real. Anything that follows a link on its own — a
+ * mail scanner, a chat unfurl, Brevo's click tracker, browser prefetch — lands
+ * there instead of spending one of five downloads.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -21,6 +26,13 @@ export async function GET(request: NextRequest) {
 
   if (!token) {
     return new NextResponse("Missing download token", { status: 400 });
+  }
+
+  if (searchParams.get("confirm") !== "1") {
+    return NextResponse.redirect(
+      new URL(`/download?token=${encodeURIComponent(token)}`, request.url),
+      { status: 303, headers: { "Cache-Control": "no-store" } }
+    );
   }
 
   const validation = validateDownloadToken(token);

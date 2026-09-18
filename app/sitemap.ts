@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { LEGAL_LINKS } from "@/lib/legal";
 
 /**
  * Dynamic Sitemap Generator
@@ -36,6 +37,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly" as const,
       priority: 0.8,
     },
+    ...LEGAL_LINKS.map((l) => ({
+      url: `${baseUrl}${l.href}`,
+      lastModified: new Date(),
+      changeFrequency: "yearly" as const,
+      priority: 0.3,
+    })),
   ];
 
   // TODO: Add dynamic blog posts from Payload CMS

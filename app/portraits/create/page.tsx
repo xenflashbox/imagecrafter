@@ -1218,6 +1218,20 @@ function CreatePortraitContent() {
               You see the finished painting before you pay anything — about a
               minute from now. No account needed.
             </p>
+            {/* The gallery licence has to be visible where the photo is handed
+                over, not only in the terms, or it is not a fair bargain. */}
+            <p className="text-center text-xs leading-relaxed text-ink-faint">
+              Free previews may be shown in our public gallery as examples.
+              Buying the portrait makes it private. See our{" "}
+              <Link href="/terms" className="underline underline-offset-2 hover:text-ink-muted">
+                terms
+              </Link>{" "}
+              and{" "}
+              <Link href="/privacy" className="underline underline-offset-2 hover:text-ink-muted">
+                privacy policy
+              </Link>
+              .
+            </p>
           </div>
         )}
 

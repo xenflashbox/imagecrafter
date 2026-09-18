@@ -29,6 +29,10 @@ const isPublicRoute = createRouteMatcher([
   "/api/orders/(.*)",
   "/api/print/(.*)",
 
+  // Download landing page — reached from the order email, where no Clerk
+  // session exists. The HMAC token is the credential.
+  "/download",
+
   // Stripe-sourced amounts for client components. Public: guests see prices
   // before they ever sign in.
   "/api/pricing",

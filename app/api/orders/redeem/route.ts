@@ -17,7 +17,7 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { ensureUser } from "@/lib/ensure-user";
 import { cookies } from "next/headers";
-import { buildDownloadUrl } from "@/lib/services/download-token";
+import { buildDownloadPageUrl } from "@/lib/services/download-token";
 import { sendDigitalPurchaseEmail } from "@/lib/services/email-notification";
 import {
   redeemCreditForPortrait,
@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
   // Fulfillment — same as the cash digital flow. Email failure must not
   // hollow-succeed: surfaced in the response (the download also works from
   // the success page, so the redemption itself stands).
-  const downloadUrl = buildDownloadUrl(orderId, BASE_URL);
+  const downloadUrl = buildDownloadPageUrl(orderId, BASE_URL);
   let emailSent = true;
   try {
     await sendDigitalPurchaseEmail({

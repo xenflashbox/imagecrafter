@@ -9,6 +9,7 @@
 import Link from "next/link";
 import { Sparkles, Rss } from "lucide-react";
 import { MobileNav, type NavLink } from "@/components/mobile-nav";
+import { LEGAL_LINKS } from "@/lib/legal";
 
 const NAV_LINKS: NavLink[] = [
   { href: "/#styles", label: "Styles" },
@@ -93,6 +94,18 @@ export function SiteFooter() {
             <Rss className="size-3" /> RSS
           </Link>
         </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-rim pt-6 text-xs text-ink-faint md:justify-end">
+        {LEGAL_LINKS.map((l) => (
+          <Link
+            key={l.href}
+            href={l.href}
+            className="hover:text-ink-muted transition-colors"
+          >
+            {l.label}
+          </Link>
+        ))}
       </div>
     </footer>
   );
