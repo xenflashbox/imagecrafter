@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Wand2,
   Images,
-  FolderKanban,
+  LayoutDashboard,
   History,
   Settings,
   Menu,
@@ -23,9 +23,9 @@ import { UserButton } from "@clerk/nextjs";
 // ============================================================================
 
 const navItems = [
-  { href: "/generate", label: "Create", icon: Wand2, accent: true },
+  { href: "/portraits/create", label: "New portrait", icon: Wand2, accent: true },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/gallery", label: "Gallery", icon: Images },
-  { href: "/projects", label: "Projects", icon: FolderKanban, badge: "Pro" },
   { href: "/history", label: "History", icon: History },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -48,7 +48,7 @@ export default function DashboardLayout({
       <aside className="fixed left-0 top-0 bottom-0 w-64 bg-[#0c0c12] border-r border-white/5 hidden lg:flex flex-col z-50">
         {/* Logo */}
         <div className="p-6 border-b border-white/5">
-          <Link href="/generate" className="flex items-center gap-3">
+          <Link href="/dashboard" className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
@@ -85,11 +85,6 @@ export default function DashboardLayout({
                 )}
                 <Icon className={`w-5 h-5 ${item.accent && !isActive ? "text-violet-400" : ""}`} />
                 <span className="font-medium">{item.label}</span>
-                {item.badge && (
-                  <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
-                    {item.badge}
-                  </span>
-                )}
                 {item.accent && !isActive && (
                   <ChevronRight className="w-4 h-4 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
                 )}
@@ -105,7 +100,7 @@ export default function DashboardLayout({
             className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all text-sm font-medium"
           >
             <Zap className="w-4 h-4" />
-            Upgrade Plan
+            Buy credits
           </Link>
         </div>
 
@@ -129,7 +124,7 @@ export default function DashboardLayout({
 
       {/* Mobile Header */}
       <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-[#0c0c12]/90 backdrop-blur-xl border-b border-white/5 z-50 flex items-center justify-between px-4">
-        <Link href="/generate" className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
             <Sparkles className="w-4 h-4 text-white" />
           </div>
@@ -170,11 +165,6 @@ export default function DashboardLayout({
                   >
                     <Icon className="w-5 h-5" />
                     <span className="font-medium">{item.label}</span>
-                    {item.badge && (
-                      <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300">
-                        {item.badge}
-                      </span>
-                    )}
                   </Link>
                 );
               })}
@@ -188,7 +178,7 @@ export default function DashboardLayout({
                 className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all text-sm font-medium"
               >
                 <Zap className="w-4 h-4" />
-                Upgrade Plan
+                Buy credits
               </Link>
             </div>
           </motion.div>
