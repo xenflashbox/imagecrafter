@@ -1179,6 +1179,7 @@ function CreatePortraitContent() {
         <div className="mx-auto flex max-w-2xl items-center gap-4 px-6 py-3">
           <Link
             href="/"
+            aria-label="Style Gallery"
             className="flex items-center gap-1.5 text-xs text-ink-subtle transition-colors hover:text-ink"
           >
             <ArrowLeft className="size-3.5" />
