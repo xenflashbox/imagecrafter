@@ -436,10 +436,22 @@ const ASYNC_POLL_TIMEOUT_MS = Number(process.env.ASYNC_POLL_TIMEOUT_MS) || 480_0
 const STANDIN_PHASE_BUDGET_MS =
   Number(process.env.STANDIN_PHASE_BUDGET_MS) || 450_000;
 
-/** Generate a stand-in scene on a PINNED engine via the async endpoint. */
-async function generatePinnedScene(
+/**
+ * Generate a stand-in scene via the async submit-and-poll endpoint.
+ *
+ * Every style goes through here, pinned or not. The sync endpoint holds one
+ * HTTP connection open for the whole render, and the edge in front of
+ * image-gen cuts that connection long before a 3:4 portrait finishes — it
+ * comes back as `HTTP 499: Client Closed Request` after ~300s of paid work
+ * (observed on time-traveler/roman, 2026-09-19). Async submits in ~50ms and
+ * polls, so no proxy is holding anything open.
+ *
+ * `engine` is omitted for styles with no bake-off winner; the service
+ * auto-routes those.
+ */
+async function generateStandInJob(
   prompt: string,
-  engine: { provider: string; model?: string },
+  engine: { provider: string; model?: string } | undefined,
   phaseDeadline: number
 ): Promise<{ sceneUrl: string } | { error: string }> {
   if (Date.now() >= phaseDeadline) {
@@ -451,8 +463,8 @@ async function generatePinnedScene(
       prompt,
       aspect_ratio: "3:4",
       source_app: "imagecrafter",
-      provider: engine.provider,
-      ...(engine.model ? { model: engine.model } : {}),
+      ...(engine ? { provider: engine.provider } : {}),
+      ...(engine?.model ? { model: engine.model } : {}),
     });
   } catch (error) {
     return {
@@ -464,8 +476,8 @@ async function generatePinnedScene(
   if (!res.ok || !jobId) {
     return {
       error: res.ok
-        ? "Image service returned no job_id for pinned stand-in scene"
-        : serviceErrorMessage(res, "pinned stand-in scene submission"),
+        ? "Image service returned no job_id for stand-in scene"
+        : serviceErrorMessage(res, "stand-in scene submission"),
     };
   }
 
@@ -491,7 +503,7 @@ async function generatePinnedScene(
         return { error: `Stand-in job ${jobId} completed without an image URL` };
       }
       console.log(
-        `[PortraitGen] Pinned stand-in served by ${result?.provider}/${result?.model}`
+        `[PortraitGen] Stand-in served by ${result?.provider}/${result?.model}`
       );
       return { sceneUrl };
     }
@@ -522,43 +534,16 @@ export async function generateStandInScene(
   phaseDeadline?: number
 ): Promise<{ sceneUrl: string } | { error: string }> {
   const engine = styleVariantSlug ? STYLE_ENGINE[styleVariantSlug] : undefined;
-  if (engine) {
-    console.log(
-      `[PortraitGen] Style "${styleVariantSlug}" pinned to ${engine.provider}${engine.model ? `/${engine.model}` : ""} (bake-off winner)`
-    );
-    return generatePinnedScene(
-      prompt,
-      engine,
-      phaseDeadline ?? Date.now() + STANDIN_PHASE_BUDGET_MS
-    );
-  }
-
-  let res;
-  try {
-    res = await postToService("/api/v1/generate", {
-      prompt,
-      aspect_ratio: "3:4",
-      source_app: "imagecrafter",
-    });
-  } catch (error) {
-    return {
-      error: `Image service unreachable: ${error instanceof Error ? error.message : "network error"}`,
-    };
-  }
-
-  const imageData =
-    res.ok && res.json
-      ? (res.json.image as Record<string, unknown> | undefined)
-      : undefined;
-  const sceneUrl = imageData?.image_url as string | undefined;
-  if (!res.ok || !sceneUrl) {
-    return {
-      error: res.ok
-        ? "Image service returned no image URL for stand-in scene"
-        : serviceErrorMessage(res, "stand-in scene generation"),
-    };
-  }
-  return { sceneUrl };
+  console.log(
+    engine
+      ? `[PortraitGen] Style "${styleVariantSlug}" pinned to ${engine.provider}${engine.model ? `/${engine.model}` : ""} (bake-off winner)`
+      : `[PortraitGen] Style "${styleVariantSlug}" has no pin — auto-routing`
+  );
+  return generateStandInJob(
+    prompt,
+    engine,
+    phaseDeadline ?? Date.now() + STANDIN_PHASE_BUDGET_MS
+  );
 }
 
 // =============================================================================
