@@ -7,7 +7,8 @@
  */
 
 import Link from "next/link";
-import { Sparkles, Rss } from "lucide-react";
+import { Rss } from "lucide-react";
+import { ArchMark } from "@/components/arch-mark";
 import { MobileNav, type NavLink } from "@/components/mobile-nav";
 import { LEGAL_LINKS } from "@/lib/legal";
 
@@ -19,16 +20,18 @@ const NAV_LINKS: NavLink[] = [
   { href: "/blog", label: "Blog" },
 ];
 
-export function Wordmark({ size = "md" }: { size?: "sm" | "md" }) {
+export function Wordmark({
+  size = "md",
+  href = "/",
+}: {
+  size?: "sm" | "md";
+  href?: string;
+}) {
   const box = size === "sm" ? "size-7" : "size-8";
   const text = size === "sm" ? "text-base" : "text-lg";
   return (
-    <Link href="/" className="flex items-center gap-2.5">
-      <div
-        className={`${box} rounded-sm bg-accent flex items-center justify-center`}
-      >
-        <Sparkles className="size-4 text-canvas" />
-      </div>
+    <Link href={href} className="flex items-center gap-2.5">
+      <ArchMark className={`${box} rounded-md`} />
       <span className={`font-semibold ${text} tracking-tight`}>ImageCrafter</span>
     </Link>
   );

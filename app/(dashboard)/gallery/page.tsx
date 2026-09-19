@@ -22,7 +22,6 @@ import {
   LayoutGrid,
   Download,
   Heart,
-  Trash2,
   Copy,
   X,
   Calendar,
@@ -237,17 +236,17 @@ export default function GalleryPage() {
   // ==========================================================================
 
   return (
-    <div className="min-h-screen bg-[#08080c]">
+    <div className="min-h-screen bg-canvas">
       {/* Header */}
-      <div className="sticky top-0 z-30 bg-[#08080c]/80 backdrop-blur-xl border-b border-white/5">
+      <div className="sticky top-0 z-30 chrome-veil border-b border-rim">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex flex-col md:flex-row md:items-center gap-4">
             {/* Tabs */}
-            <div className="flex items-center gap-1 bg-white/5 rounded-xl p-1">
+            <div className="flex items-center gap-1 bg-surface border border-rim rounded-xl p-1">
               <button
                 onClick={() => setTab("images")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  tab === "images" ? "bg-violet-600 text-white" : "text-white/50 hover:text-white"
+                  tab === "images" ? "bg-accent text-canvas" : "text-ink-muted hover:text-ink"
                 }`}
               >
                 <ImageIcon className="w-4 h-4" />
@@ -257,7 +256,7 @@ export default function GalleryPage() {
               <button
                 onClick={() => setTab("portraits")}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  tab === "portraits" ? "bg-violet-600 text-white" : "text-white/50 hover:text-white"
+                  tab === "portraits" ? "bg-accent text-canvas" : "text-ink-muted hover:text-ink"
                 }`}
               >
                 <Camera className="w-4 h-4" />
@@ -269,13 +268,13 @@ export default function GalleryPage() {
             {/* Search (images tab only) */}
             {tab === "images" && (
               <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-subtle" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search prompts, templates..."
-                  className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 focus:outline-none focus:border-violet-500/50 transition-all text-sm"
+                  className="w-full pl-10 pr-4 py-2.5 bg-surface-raised border border-rim rounded-xl text-ink placeholder:text-ink-subtle focus:outline-none focus:border-accent-rim transition-all text-sm"
                 />
               </div>
             )}
@@ -287,8 +286,8 @@ export default function GalleryPage() {
                   onClick={() => setFavoritesOnly(!favoritesOnly)}
                   className={`p-2.5 rounded-xl border transition-all ${
                     favoritesOnly
-                      ? "bg-pink-500/20 border-pink-500/50 text-pink-300"
-                      : "bg-white/5 border-white/10 text-white/50 hover:text-white"
+                      ? "bg-accent-soft border-accent-rim text-accent"
+                      : "bg-surface-raised border-rim text-ink-muted hover:text-ink"
                   }`}
                   title="Favorites only"
                 >
@@ -298,22 +297,22 @@ export default function GalleryPage() {
                   onClick={() => setShowFilters(!showFilters)}
                   className={`p-2.5 rounded-xl border transition-all ${
                     showFilters || filterTemplate
-                      ? "bg-violet-500/20 border-violet-500/50 text-violet-300"
-                      : "bg-white/5 border-white/10 text-white/50 hover:text-white"
+                      ? "bg-accent-soft border-accent-rim text-accent"
+                      : "bg-surface-raised border-rim text-ink-muted hover:text-ink"
                   }`}
                 >
                   <Filter className="w-4 h-4" />
                 </button>
-                <div className="flex rounded-xl overflow-hidden border border-white/10">
+                <div className="flex rounded-xl overflow-hidden border border-rim">
                   <button
                     onClick={() => setViewMode("grid")}
-                    className={`p-2.5 transition-all ${viewMode === "grid" ? "bg-white/10 text-white" : "bg-white/5 text-white/50"}`}
+                    className={`p-2.5 transition-all ${viewMode === "grid" ? "bg-accent-soft text-accent" : "bg-surface-raised text-ink-muted hover:text-ink"}`}
                   >
                     <Grid3X3 className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setViewMode("masonry")}
-                    className={`p-2.5 transition-all ${viewMode === "masonry" ? "bg-white/10 text-white" : "bg-white/5 text-white/50"}`}
+                    className={`p-2.5 transition-all ${viewMode === "masonry" ? "bg-accent-soft text-accent" : "bg-surface-raised text-ink-muted hover:text-ink"}`}
                   >
                     <LayoutGrid className="w-4 h-4" />
                   </button>
@@ -327,8 +326,8 @@ export default function GalleryPage() {
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 onClick={() => setFilterTemplate(null)}
-                className={`px-3 py-1.5 rounded-full text-xs transition-all ${
-                  !filterTemplate ? "bg-violet-500 text-white" : "bg-white/5 text-white/50 hover:text-white"
+                className={`px-3 py-1.5 rounded-full text-xs border transition-all ${
+                  !filterTemplate ? "bg-accent border-accent text-canvas" : "bg-surface-raised border-rim text-ink-muted hover:text-ink"
                 }`}
               >
                 All templates
@@ -337,8 +336,8 @@ export default function GalleryPage() {
                 <button
                   key={name}
                   onClick={() => setFilterTemplate(name === filterTemplate ? null : name || null)}
-                  className={`px-3 py-1.5 rounded-full text-xs transition-all ${
-                    filterTemplate === name ? "bg-violet-500 text-white" : "bg-white/5 text-white/50 hover:text-white"
+                  className={`px-3 py-1.5 rounded-full text-xs border transition-all ${
+                    filterTemplate === name ? "bg-accent border-accent text-canvas" : "bg-surface-raised border-rim text-ink-muted hover:text-ink"
                   }`}
                 >
                   {name}
@@ -352,7 +351,7 @@ export default function GalleryPage() {
       <div className="max-w-7xl mx-auto px-6 py-8">
 
         {loadError && (
-          <div className="text-red-400 text-sm bg-red-500/10 px-4 py-3 rounded-xl mb-6">
+          <div className="text-danger text-sm bg-surface border border-danger px-4 py-3 rounded-xl mb-6">
             {loadError}
           </div>
         )}
@@ -362,25 +361,25 @@ export default function GalleryPage() {
           <>
             {loadingImages ? (
               <div className="flex items-center justify-center py-24">
-                <Loader2 className="w-8 h-8 animate-spin text-violet-400" />
+                <Loader2 className="w-8 h-8 animate-spin text-accent" />
               </div>
             ) : images.length === 0 ? (
               <div className="text-center py-24">
-                <ImageIcon className="w-16 h-16 text-white/20 mx-auto mb-4" />
-                <h3 className="text-xl font-light text-white/60 mb-2">
+                <ImageIcon className="w-16 h-16 text-ink-faint mx-auto mb-4" />
+                <h3 className="font-display text-xl font-light text-ink mb-2">
                   {searchQuery || filterTemplate || favoritesOnly ? "No matching images" : "No images yet"}
                 </h3>
-                <p className="text-white/40 mb-6">
+                <p className="text-ink-muted mb-6">
                   {searchQuery || filterTemplate || favoritesOnly
                     ? "Try adjusting your filters"
                     : "Create your first image to start your gallery"}
                 </p>
                 {!searchQuery && !filterTemplate && !favoritesOnly && (
                   <Link
-                    href="/generate"
-                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 font-medium hover:from-violet-500 hover:to-fuchsia-500 transition-all"
+                    href="/portraits/create"
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-accent text-canvas font-medium hover:bg-accent-2 transition-all"
                   >
-                    Create an image
+                    Create a portrait
                   </Link>
                 )}
               </div>
@@ -397,7 +396,7 @@ export default function GalleryPage() {
                       className={`group relative ${viewMode === "masonry" ? "mb-4 break-inside-avoid" : ""}`}
                     >
                       <div
-                        className="relative overflow-hidden rounded-xl border border-white/10 bg-white/5 cursor-pointer"
+                        className="artframe bg-surface cursor-pointer"
                         onClick={() => setSelectedImage(img)}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -409,40 +408,40 @@ export default function GalleryPage() {
                           }`}
                         />
 
-                        {/* Hover overlay */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                          <div className="absolute bottom-0 left-0 right-0 p-4">
-                            <p className="text-sm text-white/90 line-clamp-2 mb-2">{img.originalPrompt}</p>
-                            <div className="flex items-center gap-2 text-xs text-white/50">
-                              {img.template && (
-                                <span className="px-2 py-0.5 rounded-full bg-white/10">{img.template.name}</span>
-                              )}
-                              <span>{formatDate(img.generatedAt)}</span>
-                            </div>
+                        {/* Hover overlay — a gallery wall label rather than a dark scrim */}
+                        <div className="absolute bottom-0 left-0 right-0 z-10 bg-surface-raised border-t border-rim p-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <p className="text-sm text-ink line-clamp-2 mb-2">{img.originalPrompt}</p>
+                          <div className="flex items-center gap-2 text-xs text-ink-subtle">
+                            {img.template && (
+                              <span className="px-2 py-0.5 rounded-full bg-surface border border-rim">{img.template.name}</span>
+                            )}
+                            <span>{formatDate(img.generatedAt)}</span>
                           </div>
                         </div>
 
                         {/* Quick actions */}
-                        <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute top-3 right-3 z-10 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
                             onClick={(e) => { e.stopPropagation(); toggleFavorite(img); }}
-                            className={`p-2 rounded-lg backdrop-blur-xl transition-all ${
-                              img.isFavorite ? "bg-pink-500/80 text-white" : "bg-black/50 text-white/70 hover:text-white"
+                            className={`p-2 rounded-lg border transition-all ${
+                              img.isFavorite
+                                ? "bg-accent border-accent text-canvas"
+                                : "bg-surface-raised border-rim text-ink-muted hover:text-ink"
                             }`}
                           >
                             <Heart className={`w-4 h-4 ${img.isFavorite ? "fill-current" : ""}`} />
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleDownload(img); }}
-                            className="p-2 rounded-lg bg-black/50 backdrop-blur-xl text-white/70 hover:text-white transition-all"
+                            className="p-2 rounded-lg bg-surface-raised border border-rim text-ink-muted hover:text-ink transition-all"
                           >
                             <Download className="w-4 h-4" />
                           </button>
                         </div>
 
                         {img.isFavorite && (
-                          <div className="absolute top-3 left-3">
-                            <Heart className="w-4 h-4 text-pink-500 fill-current" />
+                          <div className="absolute top-3 left-3 z-10 p-1.5 rounded-lg bg-surface-raised border border-rim">
+                            <Heart className="w-4 h-4 text-accent fill-current" />
                           </div>
                         )}
                       </div>
@@ -456,7 +455,7 @@ export default function GalleryPage() {
                     <button
                       onClick={handleLoadMore}
                       disabled={loadingMore}
-                      className="px-8 py-3 rounded-xl bg-white/10 hover:bg-white/20 transition-all font-medium flex items-center gap-2 mx-auto disabled:opacity-50"
+                      className="px-8 py-3 rounded-xl bg-surface-raised border border-rim text-ink hover:bg-surface transition-all font-medium flex items-center gap-2 mx-auto disabled:opacity-50"
                     >
                       {loadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronDown className="w-4 h-4" />}
                       Load more images
@@ -473,18 +472,18 @@ export default function GalleryPage() {
           <>
             {loadingPortraits ? (
               <div className="flex items-center justify-center py-24">
-                <Loader2 className="w-8 h-8 animate-spin text-violet-400" />
+                <Loader2 className="w-8 h-8 animate-spin text-accent" />
               </div>
             ) : portraits.length === 0 ? (
               <div className="text-center py-24">
-                <Camera className="w-16 h-16 text-white/20 mx-auto mb-4" />
-                <h3 className="text-xl font-light text-white/60 mb-2">No portraits yet</h3>
-                <p className="text-white/40 mb-6">
+                <Camera className="w-16 h-16 text-ink-faint mx-auto mb-4" />
+                <h3 className="font-display text-xl font-light text-ink mb-2">No portraits yet</h3>
+                <p className="text-ink-muted mb-6">
                   Transform your photos into AI-generated art with Portrait Studio.
                 </p>
                 <Link
                   href="/portraits/create"
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 font-medium hover:from-violet-500 hover:to-fuchsia-500 transition-all"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-accent text-canvas font-medium hover:bg-accent-2 transition-all"
                 >
                   Create a portrait
                 </Link>
@@ -492,9 +491,9 @@ export default function GalleryPage() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {portraits.map((portrait) => (
-                  <div key={portrait.id} className="group relative rounded-xl border border-white/10 bg-white/5 overflow-hidden">
+                  <div key={portrait.id} className="group artframe bg-surface-raised">
                     {/* Preview image */}
-                    <div className="aspect-square bg-gradient-to-br from-violet-900/30 to-pink-900/30 flex items-center justify-center">
+                    <div className="aspect-square bg-surface flex items-center justify-center">
                       {portrait.previewImageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -503,25 +502,25 @@ export default function GalleryPage() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <Camera className="w-12 h-12 text-white/20" />
+                        <Camera className="w-12 h-12 text-ink-faint" />
                       )}
                     </div>
 
-                    {/* Info */}
-                    <div className="p-4">
-                      <div className="text-sm font-medium text-white mb-1 capitalize">
+                    {/* Info — the plaque under the frame */}
+                    <div className="p-4 border-t border-rim">
+                      <div className="text-sm font-medium text-ink mb-1 capitalize">
                         {formatPortraitStyle(portrait)}
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-white/40">
+                      <div className="flex items-center gap-2 text-xs text-ink-subtle">
                         <Calendar className="w-3 h-3" />
                         {formatDate(portrait.createdAt)}
                         {portrait.order && (
-                          <span className={`ml-auto px-2 py-0.5 rounded-full ${
+                          <span className={`ml-auto px-2 py-0.5 rounded-full border border-rim bg-surface ${
                             portrait.order.status === "paid" || portrait.order.status === "fulfilled" || portrait.order.status === "shipped"
-                              ? "bg-green-500/20 text-green-400"
+                              ? "text-positive"
                               : portrait.order.status === "pending"
-                              ? "bg-yellow-500/20 text-yellow-400"
-                              : "bg-white/10 text-white/40"
+                              ? "text-warning"
+                              : "text-ink-subtle"
                           }`}>
                             {portrait.order.type === "digital" ? "Digital" : "Print"} · {portrait.order.status}
                           </span>
@@ -530,11 +529,11 @@ export default function GalleryPage() {
                     </div>
 
                     {/* Hover overlay */}
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/60">
+                    <div className="absolute inset-0 z-10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity chrome-veil">
                       <div className="flex gap-2">
                         <Link
                           href={`/portraits/${portrait.id}/preview`}
-                          className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-sm font-medium transition-all flex items-center gap-2"
+                          className="px-4 py-2 rounded-xl bg-accent text-canvas hover:bg-accent-2 text-sm font-medium transition-all flex items-center gap-2"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <ExternalLink className="w-4 h-4" />
@@ -553,31 +552,31 @@ export default function GalleryPage() {
       {/* ===== IMAGE DETAIL MODAL ===== */}
       {selectedImage && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 chrome-veil"
           onClick={() => setSelectedImage(null)}
         >
           <div
-            className="relative max-w-5xl w-full max-h-[90vh] bg-[#12121a] rounded-2xl overflow-hidden border border-white/10"
+            className="relative max-w-5xl w-full max-h-[90vh] bg-surface-raised rounded-2xl overflow-hidden border border-rim-strong shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-col lg:flex-row h-full max-h-[90vh]">
-              {/* Image */}
-              <div className="flex-1 flex items-center justify-center bg-black/50 p-4">
+              {/* Image — matted and framed */}
+              <div className="flex-1 flex items-center justify-center bg-surface p-6">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={selectedImage.imageUrl}
                   alt={selectedImage.originalPrompt}
-                  className="max-w-full max-h-[60vh] lg:max-h-[80vh] object-contain rounded-lg"
+                  className="artframe max-w-full max-h-[60vh] lg:max-h-[80vh] object-contain"
                 />
               </div>
 
               {/* Details */}
-              <div className="w-full lg:w-80 p-6 border-t lg:border-t-0 lg:border-l border-white/10 overflow-y-auto">
+              <div className="w-full lg:w-80 p-6 border-t lg:border-t-0 lg:border-l border-rim overflow-y-auto">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="font-medium">Image Details</h3>
+                  <h3 className="font-medium text-ink">Image Details</h3>
                   <button
                     onClick={() => setSelectedImage(null)}
-                    className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-all"
+                    className="p-1.5 rounded-lg bg-surface border border-rim text-ink-muted hover:text-ink transition-all"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -586,19 +585,19 @@ export default function GalleryPage() {
                 {/* Meta */}
                 <div className="space-y-3 mb-6">
                   <div className="flex items-center gap-2 text-sm">
-                    <Calendar className="w-4 h-4 text-white/40" />
-                    <span className="text-white/60">{formatDate(selectedImage.generatedAt)}</span>
+                    <Calendar className="w-4 h-4 text-ink-subtle" />
+                    <span className="text-ink-muted">{formatDate(selectedImage.generatedAt)}</span>
                   </div>
-                  <div className="text-xs text-white/40">
+                  <div className="text-xs text-ink-subtle">
                     {selectedImage.resolution} · {selectedImage.aspectRatio} · {selectedImage.creditsCost} credit{selectedImage.creditsCost > 1 ? "s" : ""}
                   </div>
                   {selectedImage.template && (
-                    <span className="inline-flex px-3 py-1 rounded-full bg-violet-500/20 text-violet-300 text-xs">
+                    <span className="inline-flex px-3 py-1 rounded-full bg-accent-soft border border-accent-rim text-accent text-xs">
                       {selectedImage.template.name}
                     </span>
                   )}
                   {selectedImage.project && (
-                    <span className="inline-flex px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 text-xs ml-2">
+                    <span className="inline-flex px-3 py-1 rounded-full bg-surface border border-rim text-ink-muted text-xs ml-2">
                       {selectedImage.project.name}
                     </span>
                   )}
@@ -608,32 +607,32 @@ export default function GalleryPage() {
                 <div className="space-y-4">
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-white/40 uppercase tracking-wider">Your prompt</span>
-                      <button onClick={() => copyPrompt(selectedImage.originalPrompt)} className="p-1 rounded hover:bg-white/10 transition-all">
-                        <Copy className="w-3 h-3 text-white/40" />
+                      <span className="text-xs text-ink-subtle uppercase tracking-wider">Your prompt</span>
+                      <button onClick={() => copyPrompt(selectedImage.originalPrompt)} className="p-1 rounded text-ink-subtle hover:text-ink hover:bg-surface transition-all">
+                        <Copy className="w-3 h-3" />
                       </button>
                     </div>
-                    <p className="text-sm text-white/70">{selectedImage.originalPrompt}</p>
+                    <p className="text-sm text-ink">{selectedImage.originalPrompt}</p>
                   </div>
 
                   {selectedImage.enhancedPrompt && (
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-white/40 uppercase tracking-wider">Enhanced</span>
-                        <button onClick={() => copyPrompt(selectedImage.enhancedPrompt!)} className="p-1 rounded hover:bg-white/10 transition-all">
-                          <Copy className="w-3 h-3 text-white/40" />
+                        <span className="text-xs text-ink-subtle uppercase tracking-wider">Enhanced</span>
+                        <button onClick={() => copyPrompt(selectedImage.enhancedPrompt!)} className="p-1 rounded text-ink-subtle hover:text-ink hover:bg-surface transition-all">
+                          <Copy className="w-3 h-3" />
                         </button>
                       </div>
-                      <p className="text-sm text-white/50 leading-relaxed line-clamp-6">{selectedImage.enhancedPrompt}</p>
+                      <p className="text-sm text-ink-muted leading-relaxed line-clamp-6">{selectedImage.enhancedPrompt}</p>
                     </div>
                   )}
                 </div>
 
                 {/* Actions */}
-                <div className="mt-6 pt-6 border-t border-white/10 space-y-2">
+                <div className="mt-6 pt-6 border-t border-rim space-y-2">
                   <button
                     onClick={() => handleDownload(selectedImage)}
-                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all flex items-center justify-center gap-2 font-medium"
+                    className="w-full py-2.5 rounded-xl bg-accent text-canvas hover:bg-accent-2 transition-all flex items-center justify-center gap-2 font-medium"
                   >
                     <Download className="w-4 h-4" />
                     Download
@@ -641,19 +640,21 @@ export default function GalleryPage() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => toggleFavorite(selectedImage)}
-                      className={`flex-1 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all ${
-                        selectedImage.isFavorite ? "bg-pink-500/20 text-pink-300" : "bg-white/5 text-white/60 hover:text-white"
+                      className={`flex-1 py-2.5 rounded-xl border flex items-center justify-center gap-2 transition-all ${
+                        selectedImage.isFavorite
+                          ? "bg-accent-soft border-accent-rim text-accent"
+                          : "bg-surface border-rim text-ink-muted hover:text-ink"
                       }`}
                     >
                       <Heart className={`w-4 h-4 ${selectedImage.isFavorite ? "fill-current" : ""}`} />
                       {selectedImage.isFavorite ? "Saved" : "Save"}
                     </button>
                     <Link
-                      href="/generate"
-                      className="flex-1 py-2.5 rounded-xl bg-white/5 text-white/60 hover:text-white flex items-center justify-center gap-2 transition-all text-sm"
+                      href="/portraits/create"
+                      className="flex-1 py-2.5 rounded-xl bg-surface border border-rim text-ink-muted hover:text-ink flex items-center justify-center gap-2 transition-all text-sm"
                     >
                       <RefreshCw className="w-4 h-4" />
-                      New image
+                      New portrait
                     </Link>
                   </div>
                 </div>

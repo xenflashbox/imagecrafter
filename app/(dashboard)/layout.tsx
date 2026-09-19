@@ -12,11 +12,11 @@ import {
   Settings,
   Menu,
   X,
-  Sparkles,
   ChevronRight,
   Zap,
 } from "lucide-react";
 import { UserButton } from "@clerk/nextjs";
+import { ArchMark } from "@/components/arch-mark";
 
 // ============================================================================
 // NAVIGATION CONFIG
@@ -43,19 +43,17 @@ export default function DashboardLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <div className="noir min-h-screen bg-[#08080c] text-white">
+    <div className="min-h-screen bg-canvas text-ink">
       {/* Desktop Sidebar */}
-      <aside className="fixed left-0 top-0 bottom-0 w-64 bg-[#0c0c12] border-r border-white/5 hidden lg:flex flex-col z-50">
+      <aside className="fixed left-0 top-0 bottom-0 w-64 bg-surface border-r border-rim hidden lg:flex flex-col z-50">
         {/* Logo */}
-        <div className="p-6 border-b border-white/5">
+        <div className="p-6 border-b border-rim">
           <Link href="/dashboard" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-white" />
-            </div>
+            <ArchMark className="size-10 rounded-xl" />
             <div>
               <span className="font-semibold text-lg tracking-tight">ImageCrafter</span>
-              <span className="block text-[10px] text-white/40 uppercase tracking-wider">
-                AI Image Studio
+              <span className="block text-[10px] text-ink-subtle uppercase tracking-wider">
+                Portrait Studio
               </span>
             </div>
           </Link>
@@ -73,17 +71,17 @@ export default function DashboardLayout({
                 href={item.href}
                 className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-all group ${
                   isActive
-                    ? "bg-white/10 text-white"
-                    : "text-white/50 hover:text-white hover:bg-white/5"
-                } ${item.accent && !isActive ? "text-violet-400 hover:text-violet-300" : ""}`}
+                    ? "bg-accent-soft text-ink"
+                    : "text-ink-muted hover:text-ink hover:bg-surface-raised"
+                } ${item.accent && !isActive ? "text-accent hover:text-accent-2" : ""}`}
               >
                 {isActive && (
                   <motion.div
                     layoutId="nav-indicator"
-                    className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-violet-500 to-fuchsia-500 rounded-r-full"
+                    className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-accent rounded-r-full"
                   />
                 )}
-                <Icon className={`w-5 h-5 ${item.accent && !isActive ? "text-violet-400" : ""}`} />
+                <Icon className={`w-5 h-5 ${item.accent && !isActive ? "text-accent" : ""}`} />
                 <span className="font-medium">{item.label}</span>
                 {item.accent && !isActive && (
                   <ChevronRight className="w-4 h-4 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -97,7 +95,7 @@ export default function DashboardLayout({
         <div className="p-4">
           <Link
             href="/settings"
-            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all text-sm font-medium"
+            className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-accent text-canvas hover:bg-accent-2 transition-colors text-sm font-medium"
           >
             <Zap className="w-4 h-4" />
             Buy credits
@@ -105,7 +103,7 @@ export default function DashboardLayout({
         </div>
 
         {/* User Section */}
-        <div className="p-4 border-t border-white/5">
+        <div className="p-4 border-t border-rim">
           <div className="flex items-center gap-3">
             <UserButton
               appearance={{
@@ -116,23 +114,22 @@ export default function DashboardLayout({
             />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">Account</p>
-              <p className="text-xs text-white/40 truncate">Manage profile</p>
+              <p className="text-xs text-ink-subtle truncate">Manage profile</p>
             </div>
           </div>
         </div>
       </aside>
 
       {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-[#0c0c12]/90 backdrop-blur-xl border-b border-white/5 z-50 flex items-center justify-between px-4">
+      <header className="lg:hidden chrome-veil fixed top-0 left-0 right-0 h-16 border-b border-rim z-50 flex items-center justify-between px-4">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-white" />
-          </div>
+          <ArchMark className="size-8 rounded-lg" />
           <span className="font-semibold">ImageCrafter</span>
         </Link>
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="p-2 rounded-lg bg-white/5"
+          className="p-2 rounded-lg bg-surface border border-rim"
+          aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
         >
           {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
         </button>
@@ -145,7 +142,7 @@ export default function DashboardLayout({
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="lg:hidden fixed top-16 left-0 right-0 bottom-0 bg-[#0c0c12]/95 backdrop-blur-xl z-40 p-4"
+            className="lg:hidden chrome-veil fixed top-16 left-0 right-0 bottom-0 z-40 p-4"
           >
             <nav className="space-y-1">
               {navItems.map((item) => {
@@ -159,8 +156,8 @@ export default function DashboardLayout({
                     onClick={() => setMobileMenuOpen(false)}
                     className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
                       isActive
-                        ? "bg-white/10 text-white"
-                        : "text-white/50 hover:text-white hover:bg-white/5"
+                        ? "bg-accent-soft text-ink"
+                        : "text-ink-muted hover:text-ink hover:bg-surface-raised"
                     }`}
                   >
                     <Icon className="w-5 h-5" />
@@ -175,7 +172,7 @@ export default function DashboardLayout({
               <Link
                 href="/settings"
                 onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 transition-all text-sm font-medium"
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-accent text-canvas hover:bg-accent-2 transition-colors text-sm font-medium"
               >
                 <Zap className="w-4 h-4" />
                 Buy credits

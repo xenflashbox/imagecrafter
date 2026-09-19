@@ -11,7 +11,7 @@
    slate-* class in a page: that is how the wizard drifted to light mode while
    the marketing page stayed dark.
 
-   The signed-in app (dashboard, admin) stays dark — see `.noir` below.
+   The customer-facing app now wears daylight too; only /admin keeps `.noir`.
    =========================================================================== */
 
 :root {
@@ -20,11 +20,15 @@
   --surface: #f2ece2;
   --surface-raised: #ffffff;
 
-  /* Ink — warm near-black, never pure #000 */
+  /* Ink — warm near-black, never pure #000.
+     The alphas are contrast targets against --canvas, not taste: muted 8.4:1,
+     subtle 4.9:1, faint 4.0:1. The first pass sat at 5.9 / 3.3 / 2.3, which put
+     every tile caption and every line of fine print under AA on a page this
+     bright. Lower any of these and small text stops being readable. */
   --ink: #1c1714;
-  --ink-muted: rgba(28, 23, 20, 0.68);
-  --ink-subtle: rgba(28, 23, 20, 0.5);
-  --ink-faint: rgba(28, 23, 20, 0.36);
+  --ink-muted: rgba(28, 23, 20, 0.78);
+  --ink-subtle: rgba(28, 23, 20, 0.62);
+  --ink-faint: rgba(28, 23, 20, 0.56);
 
   /* Frame */
   --rim: rgba(28, 23, 20, 0.12);
@@ -55,10 +59,9 @@
   --foreground: var(--ink);
 }
 
-/* The signed-in app keeps the original Gallery Noir ground. Scoping it here
-   rather than converting those pages keeps ~300 literal `text-white` classes
-   in the dashboard working, and the contrast is deliberate: the storefront is
-   a gallery, the app is a darkroom. */
+/* Gallery Noir, now scoped to /admin alone. The customer dashboard was
+   converted to daylight so signing in doesn't feel like changing products;
+   the internal tooling keeps the darkroom. */
 .noir {
   --canvas: #06060a;
   --surface: #0c0c12;
