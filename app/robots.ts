@@ -17,8 +17,7 @@ export default function robots(): MetadataRoute.Robots {
         allow: "/",
         disallow: [
           "/api/",           // Don't index API routes
-          "/generate",       // Don't index authenticated pages
-          "/gallery",
+          "/gallery",        // Signed-in surfaces below
           "/projects",
           "/history",
           "/settings",

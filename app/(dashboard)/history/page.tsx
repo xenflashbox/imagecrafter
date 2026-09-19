@@ -6,7 +6,6 @@ import {
   History as HistoryIcon,
   Search,
   Copy,
-  Play,
   Bookmark,
   BookmarkCheck,
   Trash2,
@@ -386,13 +385,6 @@ export default function HistoryPage() {
 
                               {/* Action Buttons */}
                               <div className="flex gap-2 pt-2">
-                                <Link
-                                  href={`/generate?prompt=${encodeURIComponent(displayPrompt(item))}`}
-                                  className="flex-1 py-2.5 rounded-xl bg-accent text-canvas hover:bg-accent-2 transition-all flex items-center justify-center gap-2 font-medium text-sm"
-                                >
-                                  <Play className="w-4 h-4" />
-                                  Run Again
-                                </Link>
                                 <button
                                   onClick={() => deleteItem(item.id)}
                                   disabled={actionLoading === `${item.id}-delete`}
