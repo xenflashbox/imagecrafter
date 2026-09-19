@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/with-vault.mjs next dev",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
@@ -14,7 +14,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "r2:migrate": "tsx scripts/migrate-to-r2.ts",
-    "r2:migrate:dry": "tsx scripts/migrate-to-r2.ts --dry-run"
+    "r2:migrate:dry": "tsx scripts/migrate-to-r2.ts --dry-run",
+    "build:local": "node scripts/with-vault.mjs npx next build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -59,7 +60,6 @@
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "autoprefixer": "^10.4.20",
-    "dotenv": "^17.4.2",
     "eslint": "^9.17.0",
     "eslint-config-next": "15.5.19",
     "postcss": "^8.4.49",
