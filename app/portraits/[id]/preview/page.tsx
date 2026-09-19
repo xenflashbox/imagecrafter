@@ -24,6 +24,7 @@ import { getCreditBalance } from "@/lib/services/credits";
 import { RedeemButton } from "@/components/redeem-button";
 import { CreditPackCards } from "@/components/credit-pack-cards";
 import { SiteHeader, SiteFooter } from "@/components/site-chrome";
+import { ShareButtons } from "@/components/share-buttons";
 import {
   getPackCatalog,
   getPrices,
@@ -40,6 +41,8 @@ interface Props {
 export async function generateMetadata(): Promise<Metadata> {
   return { title: "Your Portrait Preview | ImageCrafter" };
 }
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
 
 // The four art-print sizes teased here; sizes come from the catalog, amounts
 // from Stripe (keyed on these SKUs).
@@ -212,6 +215,14 @@ export default async function PortraitPreviewPage({ params }: Props) {
                 {portrait.styleVariantSlug?.replace(/-/g, " ")}
               </span>
             </div>
+
+            {portrait.previewImageUrl && (
+              <ShareButtons
+                portraitId={portrait.id}
+                shareUrl={`${APP_URL}/p/${portrait.id}`}
+                imageUrl={portrait.previewImageUrl}
+              />
+            )}
           </div>
 
           {/* Purchase options */}

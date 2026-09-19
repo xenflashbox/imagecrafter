@@ -34,6 +34,10 @@ const isPublicRoute = createRouteMatcher([
   // scheduler. Each route enforces its own Bearer CRON_SECRET check.
   "/api/cron/(.*)",
 
+  // Public share pages. Reached from a stranger's feed, and from the platform
+  // scrapers that fetch the OG card — neither has a session.
+  "/p/(.*)",
+
   // Portrait Studio — guest purchase flow (no auth required)
   "/portraits(.*)",
   "/api/portraits/(.*)",
