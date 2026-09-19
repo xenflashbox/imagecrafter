@@ -42,27 +42,27 @@ export const metadata: Metadata = {
   description:
     "Turn your photo — or your pet's — into a portrait that actually looks like them. Royal portraits, fine art, 70s disco. No account needed. Pay only if you love it.",
   openGraph: {
-    title: "ImageCrafter — AI Portrait Studio",
+    title: "Your dog, painted like royalty.",
     description:
-      "Transform any photo into stunning AI art. Royal portraits, fantasy scenes, masterpieces. No account needed for guest portraits.",
+      "Upload one photo. We paint your pet or your family as Baroque aristocrats, disco icons or oil-painted heirlooms — museum quality, in minutes. No account needed.",
     url: APP_URL,
     type: "website",
     siteName: "ImageCrafter",
     images: [
       {
-        url: `${APP_URL}/og-image.jpg`,
+        url: `${APP_URL}/og-image.png`,
         width: 1200,
         height: 630,
-        alt: "ImageCrafter AI Portrait Studio",
+        alt: "A grinning corgi painted as a Baroque aristocrat in a lace collar and blue doublet",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "ImageCrafter — AI Portrait Studio",
+    title: "Your dog, painted like royalty.",
     description:
-      "Transform any photo into stunning AI art. No account needed for guest portraits.",
-    images: [`${APP_URL}/og-image.jpg`],
+      "Upload one photo. Museum-quality portraits of pets and people, in minutes.",
+    images: [`${APP_URL}/og-image.png`],
   },
   alternates: { canonical: APP_URL },
 };
