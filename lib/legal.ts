@@ -23,6 +23,7 @@ export const LEGAL = {
 } as const;
 
 export const LEGAL_LINKS = [
+  { href: "/support", label: "Support" },
   { href: "/terms", label: "Terms" },
   { href: "/privacy", label: "Privacy" },
   { href: "/refunds", label: "Refunds" },
