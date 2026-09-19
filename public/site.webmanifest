@@ -1,11 +1,11 @@
 {
   "name": "ImageCrafter",
   "short_name": "ImageCrafter",
-  "description": "AI Image Generation Made Simple",
+  "description": "Portraits of the ones you love, painted by AI.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#06060a",
-  "theme_color": "#8b5cf6",
+  "background_color": "#1c1714",
+  "theme_color": "#1c1714",
   "icons": [
     {
       "src": "/android-chrome-192x192.png",
@@ -16,6 +16,11 @@
       "src": "/android-chrome-512x512.png",
       "sizes": "512x512",
       "type": "image/png"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
     }
   ]
 }
