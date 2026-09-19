@@ -387,8 +387,10 @@ export const STYLE_ENGINE: Record<string, { provider: string; model?: string }> 
  * (PLAN/results/best-of-n-verdict.md), so we now take the first that clears
  * the veto.
  *
- * The candidates render in PARALLEL, so this costs engine spend but roughly no
- * wall-clock against a sequential retry loop.
+ * They are RACED, not gathered: the first to clear the veto wins and the rest
+ * are abandoned. Raising this number therefore buys more veto headroom without
+ * costing wall-clock — but gathering them would, because the wall clock would
+ * become the slowest draw of N against a fat latency tail.
  */
 const STANDIN_CANDIDATES = Number(process.env.STANDIN_CANDIDATES) || 3;
 
@@ -817,72 +819,100 @@ export async function generatePortrait(
 
   const acquireStandIn = async (): Promise<StandInOutcome> => {
     console.log(
-      `[PortraitGen] Step 1: generating ${STANDIN_CANDIDATES} stand-in candidates in parallel`
+      `[PortraitGen] Step 1: racing ${STANDIN_CANDIDATES} stand-in candidates`
     );
     await publishProgress(portraitId, {
       stage: "painting",
       label: STAGE_LABELS.painting,
       note: "This is the long part — a few minutes is normal.",
     });
-    const results = await Promise.all(
-      Array.from({ length: STANDIN_CANDIDATES }, () =>
-        generateStandInScene(enhancedPrompt, styleVariantSlug, standInPhaseDeadline)
-      )
-    );
+    // Each candidate is rendered AND vetted on its own, and the first one to
+    // clear the fidelity veto wins the race.
+    //
+    // Awaiting all N first made the wall clock the SLOWEST draw. Stand-in
+    // latency has a fat tail — roughly 1 job in 12 runs past 300s, observed max
+    // 373s (PLAN/results/standin-latency.md) — so three draws land in that tail
+    // ~23% of the time against ~8% for one. That is how a 40s render becomes a
+    // 6-minute one. Racing costs nothing, because the selection below was
+    // already "first eligible" and never a ranked best.
+    type Settled =
+      | { kind: "match"; sceneUrl: string }
+      | { kind: "reject" }
+      | { kind: "unknown" }
+      | { kind: "error"; message: string };
 
-    const sceneUrls = results.flatMap((r) => ("error" in r ? [] : [r.sceneUrl]));
-    if (sceneUrls.length === 0) {
+    let checkingAnnounced = false;
+    const renderAndVet = async (): Promise<Settled> => {
+      try {
+        const r = await generateStandInScene(
+          enhancedPrompt,
+          styleVariantSlug,
+          standInPhaseDeadline
+        );
+        if ("error" in r) return { kind: "error", message: r.error };
+        if (!checkingAnnounced) {
+          checkingAnnounced = true;
+          await publishProgress(portraitId, {
+            stage: "checking",
+            label: STAGE_LABELS.checking,
+          });
+        }
+        const fidelity = await checkStandInFidelity(
+          portrait.sourceImageUrl,
+          r.sceneUrl,
+          subjectKind
+        );
+        if (fidelity === "unknown") return { kind: "unknown" };
+        if (fidelity !== "match") return { kind: "reject" };
+        return { kind: "match", sceneUrl: r.sceneUrl };
+      } catch (err) {
+        // Keeps a late rejection from surfacing as an unhandled rejection after
+        // a sibling has already won the race and returned.
+        return { kind: "error", message: err instanceof Error ? err.message : String(err) };
+      }
+    };
+
+    const inflight = new Map<number, Promise<{ i: number; v: Settled }>>();
+    for (let i = 0; i < STANDIN_CANDIDATES; i++) {
+      inflight.set(i, renderAndVet().then((v) => ({ i, v })));
+    }
+
+    const settled: Settled[] = [];
+    while (inflight.size > 0) {
+      const { i, v } = await Promise.race(inflight.values());
+      inflight.delete(i);
+      settled.push(v);
+      if (v.kind === "match") {
+        console.log(
+          `[PortraitGen] Stand-in candidate ${i + 1} cleared the veto first — using it`
+        );
+        return { ok: true, sceneUrl: v.sceneUrl };
+      }
+    }
+
+    const errors = settled.filter(
+      (s): s is { kind: "error"; message: string } => s.kind === "error"
+    );
+    if (errors.length === settled.length) {
       // Every candidate failed, so the engine itself is the problem. Report
       // the first error verbatim rather than a count: the operator needs the
       // provider's own message to tell an outage from a rejected prompt.
-      const firstError = results.find((r) => "error" in r) as { error: string };
-      console.error("[PortraitGen] All stand-in candidates failed:", firstError.error);
-      return { ok: false, kind: "engine", message: firstError.error };
+      console.error("[PortraitGen] All stand-in candidates failed:", errors[0].message);
+      return { ok: false, kind: "engine", message: errors[0].message };
     }
-    if (sceneUrls.length < STANDIN_CANDIDATES) {
-      console.warn(
-        `[PortraitGen] Only ${sceneUrls.length}/${STANDIN_CANDIDATES} stand-in candidates rendered — selecting from those`
-      );
-    }
-
-    // The fidelity veto still runs on every candidate, unchanged: a stand-in
-    // whose colouring has drifted off the subject cannot be rescued by being
-    // the best of a bad set.
-    await publishProgress(portraitId, {
-      stage: "checking",
-      label: STAGE_LABELS.checking,
-      ...(sceneUrls.length < STANDIN_CANDIDATES && {
-        note: `${sceneUrls.length} of ${STANDIN_CANDIDATES} versions came back — choosing from those.`,
-      }),
-    });
-    const fidelities = await Promise.all(
-      sceneUrls.map((url) =>
-        checkStandInFidelity(portrait.sourceImageUrl, url, subjectKind)
-      )
-    );
-    if (fidelities.includes("unknown")) {
+    if (settled.some((s) => s.kind === "unknown")) {
       // FAIL-CLOSED: the verifier is blind — abort rather than ship an
       // unverified stand-in (standing rule: fail loudly, never proceed on
-      // missing/degraded dependencies).
+      // missing/degraded dependencies). Reached only when nothing matched, so a
+      // candidate the verifier DID clear still wins over a blind sibling: the
+      // rule bars shipping an unverified stand-in, not racing a verified one.
       console.error("[PortraitGen] Stand-in fidelity check UNAVAILABLE — aborting");
       return { ok: false, kind: "verifier" };
     }
-    const eligible = sceneUrls.filter((_, i) => fidelities[i] === "match");
-    if (eligible.length === 0) {
-      console.warn(
-        `[PortraitGen] All ${sceneUrls.length} stand-in candidates failed the fidelity veto`
-      );
-      return { ok: false, kind: "mismatch" };
-    }
-
-    // First eligible candidate, not a ranked one. Comparative ranking was
-    // measured and did not pay (PLAN/results/best-of-n-verdict.md): across 4
-    // divergent head-to-heads it went 2-1-1 by gate and 1-2-1 by eye, and in
-    // one run it vetoed the candidate that produced the better likeness. The
-    // ranker had nothing to work with — it called 17/18 candidates defect-free,
-    // because N candidates from a pinned engine come back near-identical.
-    console.log(`[PortraitGen] Using first of ${eligible.length} eligible stand-ins`);
-    return { ok: true, sceneUrl: eligible[0] };
+    console.warn(
+      `[PortraitGen] All ${settled.length - errors.length} stand-in candidates failed the fidelity veto`
+    );
+    return { ok: false, kind: "mismatch" };
   };
 
   const firstStandIn = await acquireStandIn();
