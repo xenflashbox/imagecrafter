@@ -59,9 +59,20 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, request) => {
-  if (!isPublicRoute(request)) {
+  if (isPublicRoute(request)) return;
+
+  // auth.protect() rewrites to 404 by default, which is right for an API route
+  // but wrong for a page: order emails link to /dashboard, and a customer who
+  // clicks one from a browser without a session should be asked to sign in,
+  // not told the page doesn't exist.
+  if (request.nextUrl.pathname.startsWith("/api/")) {
     await auth.protect();
+    return;
   }
+
+  const signIn = new URL("/sign-in", request.url);
+  signIn.searchParams.set("redirect_url", request.url);
+  await auth.protect({ unauthenticatedUrl: signIn.toString() });
 });
 
 export const config = {
