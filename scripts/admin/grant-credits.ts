@@ -9,10 +9,11 @@
  *   npx tsx scripts/admin/grant-credits.ts --email=a@b.com --credits=50 [--apply]
  */
 
-import { config } from "dotenv";
 import { PrismaClient } from "@prisma/client";
 
-config();
+import { loadVaultEnv } from "../_env";
+
+loadVaultEnv();
 
 const APPLY = process.argv.includes("--apply");
 

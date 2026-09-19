@@ -11,10 +11,11 @@
  *   npx tsx scripts/admin/backfill-clerk-users.ts [--apply]
  */
 
-import { config } from "dotenv";
 import { PrismaClient } from "@prisma/client";
 
-config();
+import { loadVaultEnv } from "../_env";
+
+loadVaultEnv();
 
 const APPLY = process.argv.includes("--apply");
 

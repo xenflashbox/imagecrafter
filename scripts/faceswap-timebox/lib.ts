@@ -24,6 +24,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { loadVaultEnv } from "../_env";
+
 // ---------------------------------------------------------------------------
 // Paths
 // ---------------------------------------------------------------------------
@@ -35,38 +37,22 @@ export const UPLOADS_JSON = path.join(OUTPUT_DIR, "replicate-uploads.json");
 export const ANALYSIS_DIR = path.join(OUTPUT_DIR, "analysis");
 
 // ---------------------------------------------------------------------------
-// Env loading (.env at repo root; no dotenv dep needed)
+// Env loading (Infisical vault; nothing is read from a local .env)
 // ---------------------------------------------------------------------------
 export async function loadEnv(): Promise<void> {
-  const envPath = path.join(ROOT, ".env");
-  const raw = fs.readFileSync(envPath, "utf8");
-  for (const line of raw.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-    const key = trimmed.slice(0, eq).trim();
-    let value = trimmed.slice(eq + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    if (!(key in process.env)) process.env[key] = value;
-  }
+  loadVaultEnv();
+
   // Enable the face-preservation service for THIS PROCESS ONLY.
   process.env.ENABLE_FACE_PRESERVATION = "true";
 
   if (!process.env.REPLICATE_API_TOKEN) {
-    throw new Error("REPLICATE_API_TOKEN missing from .env — blocker.");
+    throw new Error("REPLICATE_API_TOKEN missing from the vault — blocker.");
   }
   // STANDING RULE (2026-07-12): a missing credential is a P0 to escalate,
   // never something to work around. No shared-vault borrowing, no fallback.
-  // Inject ImageCrafter's own key at runtime; never write it to .env.
   if (!process.env.IMAGECRAFTER_ANTHROPIC_API_KEY) {
     throw new Error(
-      "IMAGECRAFTER_ANTHROPIC_API_KEY missing — STOP and report. Inject it from the imagecrafter-production vault at runtime; do not borrow from any shared vault."
+      "IMAGECRAFTER_ANTHROPIC_API_KEY missing — STOP and report. It belongs in the imagecrafter-production vault; do not borrow from any shared vault."
     );
   }
 }

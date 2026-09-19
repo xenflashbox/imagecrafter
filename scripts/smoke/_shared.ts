@@ -4,7 +4,8 @@
  * Run with: npx tsx scripts/smoke/service-single.ts
  *           npx tsx scripts/smoke/service-dual.ts
  *
- * Env comes from .env (loaded here, never overriding already-set vars).
+ * Env comes from the Infisical vault (loaded here, never overriding already-set
+ * vars), so it needs LAN/VPN access. Nothing is read from a local .env.
  * Required: DATABASE_URL, IMAGE_GEN_API_URL, IMAGE_GEN_API_KEY.
  * Optional: SMOKE_USER_ID — use an existing user instead of the deterministic
  * smoke user.
@@ -12,17 +13,13 @@
  * These scripts make ONE real service call each — real spend, real rows.
  */
 
-import { readFileSync } from "node:fs";
+import { loadVaultEnv } from "../_env";
 
 export function loadEnv(): void {
-  try {
-    // Node >= 20.12 — does not override vars already set in the environment.
-    process.loadEnvFile(".env");
-  } catch {
-    // No .env (e.g. CI with real env vars) — fine, requireEnv will fail loud
-    // if something is actually missing.
-  }
-  assertDatabaseIsNotProduction();
+  // Never overrides what the caller already set — that is how an isolated
+  // branch DATABASE_URL survives this.
+  const secrets = loadVaultEnv();
+  assertDatabaseIsNotProduction(secrets.DATABASE_URL);
 }
 
 function hostOf(url: string): string | null {
@@ -36,33 +33,29 @@ function hostOf(url: string): string | null {
 /**
  * Refuse to run a smoke test against the production database.
  *
- * `.env` holds the production credential, and `loadEnvFile` above fills in
+ * The vault holds the production credential, and loadEnv above fills in
  * DATABASE_URL from it whenever the caller did not supply one — so the default
  * path silently targets production. In 2026-08 that wrote 147 test rows,
  * including Vision descriptions of real children, into the live database.
- * Comparing the resolved host against `.env`'s is the check that would have
+ * Comparing the resolved host against the vault's is the check that would have
  * caught it; a filename claiming to be a smoke DB is not evidence.
+ *
+ * The baseline used to come from `.env`, which could drift out of date without
+ * anyone noticing — a stale baseline means the guard compares against the wrong
+ * host and waves production through. The vault cannot go stale.
  */
-function assertDatabaseIsNotProduction(): void {
+function assertDatabaseIsNotProduction(vaultDatabaseUrl: string | undefined): void {
   const active = process.env.DATABASE_URL;
   if (!active) fail("DATABASE_URL is not set");
 
-  let prodLine: string | undefined;
-  try {
-    prodLine = readFileSync(".env", "utf8")
-      .split("\n")
-      .find((l) => l.startsWith("DATABASE_URL="));
-  } catch {
-    // fall through to the missing-baseline failure below
-  }
-  if (!prodLine) {
+  if (!vaultDatabaseUrl) {
     fail(
-      "Cannot read DATABASE_URL from .env, so the production host is unknown " +
-        "and this run cannot be proven safe. Run from the repo root."
+      "The vault has no DATABASE_URL, so the production host is unknown and " +
+        "this run cannot be proven safe."
     );
   }
 
-  const prodHost = hostOf(prodLine.slice("DATABASE_URL=".length).trim().replace(/^"|"$/g, ""));
+  const prodHost = hostOf(vaultDatabaseUrl);
   const activeHost = hostOf(active);
   if (!prodHost || !activeHost) fail("DATABASE_URL is not a parseable URL");
 

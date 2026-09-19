@@ -9,10 +9,12 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { loadVaultEnv } from "../_env";
+
 // Not loadEnv(): that asserts DATABASE_URL is a non-production branch because
 // smoke tests write rows. This script only PUTs to R2. Dropping DATABASE_URL
 // keeps that true — a future DB call here fails loud instead of hitting prod.
-process.loadEnvFile(".env");
+loadVaultEnv();
 delete process.env.DATABASE_URL;
 
 const ROOT = path.resolve(__dirname, "../..");

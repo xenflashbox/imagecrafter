@@ -9,7 +9,9 @@ import { writeFileSync, mkdirSync } from "fs";
 import { swapFaceIntoScene } from "../../lib/services/replicate-portrait";
 import { checkIdentityPresence } from "../../lib/services/portrait-analysis";
 
-process.loadEnvFile(".env");
+import { loadVaultEnv } from "../_env";
+
+loadVaultEnv();
 
 const SOURCE =
   "https://images.imagecrafter.app/portraits/uploads/e9aefb7c-8c48-425f-b040-3e45045868e7/054122216b6043abbf2693dbdb8f6b58.png";
