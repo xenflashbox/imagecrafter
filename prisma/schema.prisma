@@ -28,6 +28,11 @@ model User {
   // Stripe integration
   stripeCustomerId  String?  @unique
 
+  // Facebook's numeric user id, captured from the Clerk external account. Meta's
+  // deletion callback identifies the person by this and nothing else, so without
+  // it a deletion request cannot be matched to an account.
+  facebookUserId    String?  @unique
+
   // Relations
   subscription      Subscription?
   projects          Project[]
@@ -822,4 +827,30 @@ model BlogCategory {
   posts           BlogPost[]
 
   @@map("ic_BlogCategory")
+}
+
+// =============================================================================
+// DATA DELETION (Meta/Facebook deletion callback)
+// =============================================================================
+
+model DataDeletionRequest {
+  id               String    @id @default(cuid())
+  userId           String?
+  facebookUserId   String
+  confirmationCode String    @unique
+  status           String    @default("pending") // pending | processing | completed | failed
+  platform         String    @default("facebook")
+  requestedAt      DateTime  @default(now())
+  processedAt      DateTime?
+  completedAt      DateTime?
+  deletionDetails  Json      @default("{}")
+  errorMessage     String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([confirmationCode])
+  @@index([facebookUserId])
+  @@index([status])
+  @@index([userId])
+  @@map("ic_DataDeletionRequest")
 }

@@ -19,6 +19,19 @@ interface ClerkUserData {
   first_name: string | null;
   last_name: string | null;
   image_url: string | null;
+  external_accounts?: Array<{ provider: string; provider_user_id: string }>;
+}
+
+/**
+ * Meta's data-deletion callback identifies the person by their Facebook numeric
+ * id and nothing else, so it has to be stored at sign-up or the request can
+ * never be matched to an account.
+ */
+function facebookUserIdOf(userData: ClerkUserData): string | null {
+  const account = userData.external_accounts?.find(
+    (a) => a.provider === "oauth_facebook"
+  );
+  return account?.provider_user_id ?? null;
 }
 
 interface ClerkWebhookEvent {
@@ -94,6 +107,7 @@ async function handleUserCreated(userData: ClerkUserData) {
       firstName: userData.first_name,
       lastName: userData.last_name,
       imageUrl: userData.image_url,
+      facebookUserId: facebookUserIdOf(userData),
     },
   });
 
@@ -145,6 +159,11 @@ async function handleUserUpdated(userData: ClerkUserData) {
       firstName: userData.first_name,
       lastName: userData.last_name,
       imageUrl: userData.image_url,
+      // Only mirror the link when Clerk actually sent the accounts list —
+      // an absent field means "not included", not "unlinked".
+      ...(userData.external_accounts
+        ? { facebookUserId: facebookUserIdOf(userData) }
+        : {}),
     },
   });
 }

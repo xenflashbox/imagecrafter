@@ -26,5 +26,6 @@ export const LEGAL_LINKS = [
   { href: "/terms", label: "Terms" },
   { href: "/privacy", label: "Privacy" },
   { href: "/refunds", label: "Refunds" },
+  { href: "/data-deletion", label: "Data Deletion" },
   { href: "/contact", label: "Contact" },
 ] as const;

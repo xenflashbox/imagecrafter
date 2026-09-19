@@ -12,6 +12,12 @@ const isPublicRoute = createRouteMatcher([
   // all read them signed out, and auth.protect() would 404 them.
   ...LEGAL_LINKS.map((l) => l.href),
 
+  // Meta's deletion callback arrives with no session and is verified by its own
+  // HMAC signature; the status lookup is reached from a Facebook confirmation
+  // code, so neither can require a signed-in user.
+  "/api/facebook/(.*)",
+  "/data-deletion-status",
+
   // SEO metadata routes (must bypass auth)
   "/robots.txt",
   "/sitemap.xml",

@@ -37,6 +37,13 @@ export default function PrivacyPage() {
           <li>
             <strong>Account details</strong> if you create one: name and email,
             held by our sign-in provider. We never see or store your password.
+            If you sign in with Google, Facebook or GitHub,{" "}
+            <strong>
+              that provider passes us your name, your email address and your
+              profile picture
+            </strong>{" "}
+            — nothing else. We never read your posts, your friends or your
+            photos, and we never post on your behalf.
           </li>
           <li>
             <strong>Order details</strong> if you buy: what you bought, the
@@ -160,6 +167,16 @@ export default function PrivacyPage() {
           To exercise any of this, email{" "}
           <a href={`mailto:${LEGAL.contactEmail}`}>{LEGAL.contactEmail}</a>. We
           answer within 30 days, usually much sooner.
+        </p>
+
+        <h2>Deleting your data</h2>
+        <p>
+          <Link href="/data-deletion">Data Deletion</Link> explains exactly what
+          gets removed and how to ask. If you remove {LEGAL.service} from
+          Facebook, Facebook tells us automatically and we unlink the
+          connection — you can{" "}
+          <Link href="/data-deletion-status">check the status</Link> of that
+          request with the confirmation code Facebook gives you.
         </p>
 
         <h2>Children</h2>
