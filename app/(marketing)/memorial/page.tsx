@@ -31,6 +31,14 @@ export const metadata: Metadata = {
     url: `${APP_URL}/memorial`,
     type: "website",
     siteName: "ImageCrafter",
+    images: [
+      {
+        url: `${APP_URL}/og-memorial.png`,
+        width: 1200,
+        height: 630,
+        alt: "A scruffy terrier in a soft oil-painted portrait",
+      },
+    ],
   },
   alternates: { canonical: `${APP_URL}/memorial` },
 };

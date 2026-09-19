@@ -23,6 +23,12 @@ const ACCENT_RIM = "rgba(164, 68, 42, 0.38)";
 const SOURCE =
   process.env.OG_SOURCE ||
   "https://images.imagecrafter.app/gallery/v4/after/d-dog-corgi--baroque.jpg";
+const OUT = process.env.OG_OUT || "og-image";
+const HEADLINE = (process.env.OG_HEADLINE || "Your dog,|painted like|royalty.").split("|");
+const SUBHEAD = (
+  process.env.OG_SUBHEAD ||
+  "One photo in. A museum-quality|portrait out — pets and people."
+).split("|");
 
 const art = await fetch(SOURCE).then(async (r) => {
   if (!r.ok) throw new Error(`source image ${r.status} ${SOURCE}`);
@@ -38,14 +44,11 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
   <text x="${PAD}" y="150" font-family="Manrope" font-weight="700" font-size="19"
         letter-spacing="5.5" fill="${ACCENT}">IMAGECRAFTER</text>
   <g font-family="Fraunces" font-weight="700" font-size="63" fill="${INK}">
-    <text x="${PAD}" y="252">Your dog,</text>
-    <text x="${PAD}" y="325">painted like</text>
-    <text x="${PAD}" y="398">royalty.</text>
+    ${HEADLINE.map((l, i) => `<text x="${PAD}" y="${252 + i * 73}">${l}</text>`).join("\n    ")}
   </g>
   <line x1="${PAD}" y1="440" x2="${PAD + 64}" y2="440" stroke="${ACCENT}" stroke-width="3"/>
   <g font-family="Manrope" font-weight="500" font-size="23" fill="${INK_MUTED}">
-    <text x="${PAD}" y="489">One photo in. A museum-quality</text>
-    <text x="${PAD}" y="522">portrait out — pets and people.</text>
+    ${SUBHEAD.map((l, i) => `<text x="${PAD}" y="${489 + i * 33}">${l}</text>`).join("\n    ")}
   </g>
   <line x1="${ART_X}" y1="0" x2="${ART_X}" y2="${H}" stroke="${ACCENT_RIM}" stroke-width="2"/>
 </svg>`;
@@ -54,12 +57,6 @@ await mkdir("public", { recursive: true });
 await sharp(Buffer.from(svg))
   .composite([{ input: artPanel, left: ART_X, top: 0 }])
   .png({ quality: 92 })
-  .toFile("public/og-image.png");
+  .toFile(`public/${OUT}.png`);
 
-// Twitter/X and several scrapers fetch a square variant when one is offered.
-await sharp(art)
-  .resize(1200, 1200, { fit: "cover", position: "top" })
-  .jpeg({ quality: 88 })
-  .toFile("public/og-square.jpg");
-
-console.log("wrote public/og-image.png + public/og-square.jpg");
+console.log(`wrote public/${OUT}.png`);
