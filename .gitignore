@@ -47,6 +47,8 @@ imagecrafter.zip
 .claude/secrets/*
 .claude/IMAGECRAFTER_CLUSTER_CONFIGS.md
 docs/*
+# except the brand system, which every design sprint is required to cite
+!docs/brand-system-v1.md
 
 # Architect direction artifacts (operational, not source)
 ASSESSMENT-DIRECTIVE-*.md
