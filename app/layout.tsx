@@ -26,22 +26,22 @@ const fraunces = Fraunces({
 export const metadata: Metadata = {
   // Basic Meta
   title: {
-    default: "ImageCrafter - AI Image Generation Made Simple",
+    default: "ImageCrafter — Custom Pet & Family Portraits from One Photo",
     template: "%s | ImageCrafter",
   },
   description:
-    "Create stunning AI images without learning complex prompts. Smart templates, character consistency, and professional results every time. Start free.",
+    "Upload one photo and watch your dog, cat or family become a Baroque aristocrat, a disco icon or an oil-painted heirloom. Museum-quality portraits, printed and shipped or downloaded in minutes.",
   keywords: [
-    "AI image generation",
-    "text to image",
-    "AI art generator",
-    "image creator",
-    "children's book illustrations",
-    "blog images",
-    "AI graphics",
-    "prompt engineering",
-    "Gemini image generator",
-    "AI marketing images",
+    "custom pet portrait",
+    "pet portrait from photo",
+    "royal pet portrait",
+    "dog portrait painting",
+    "cat portrait painting",
+    "renaissance pet portrait",
+    "custom family portrait",
+    "pet memorial portrait",
+    "personalized portrait gift",
+    "canvas pet art print",
   ],
   authors: [{ name: "Xenco Labs", url: "https://xencolabs.com" }],
   creator: "Xenco Labs",
@@ -66,15 +66,15 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: "https://imagecrafter.app",
     siteName: "ImageCrafter",
-    title: "ImageCrafter - AI Image Generation Made Simple",
+    title: "Your dog, painted like royalty.",
     description:
-      "Create stunning AI images without learning complex prompts. Smart templates and professional results every time.",
+      "Upload one photo. We paint your pet or your family as Baroque aristocrats, disco icons or oil-painted heirlooms — museum quality, in minutes.",
     images: [
       {
         url: "https://imagecrafter.app/og-image.png",
         width: 1200,
         height: 630,
-        alt: "ImageCrafter - AI Image Generation Made Simple",
+        alt: "A grinning corgi painted as a Baroque aristocrat in a lace collar and blue doublet",
       },
     ],
   },
@@ -82,9 +82,9 @@ export const metadata: Metadata = {
   // Twitter
   twitter: {
     card: "summary_large_image",
-    title: "ImageCrafter - AI Image Generation Made Simple",
+    title: "Your dog, painted like royalty.",
     description:
-      "Create stunning AI images without learning complex prompts. Start free.",
+      "Upload one photo. Museum-quality portraits of pets and people, in minutes.",
     images: ["https://imagecrafter.app/og-image.png"],
     creator: "@xencolabs",
   },
