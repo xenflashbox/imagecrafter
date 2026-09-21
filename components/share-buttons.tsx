@@ -24,26 +24,61 @@ function PinterestIcon({ className }: { className?: string }) {
 
 export function ShareButtons({ portraitId, shareUrl, imageUrl }: Props) {
   const [copied, setCopied] = useState(false);
+  const [url, setUrl] = useState(shareUrl);
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
+  const [linkError, setLinkError] = useState(false);
+  const [shareFile, setShareFile] = useState<File | null>(null);
+  useEffect(() => {
+    if (!navigator.canShare) return;
+    const controller = new AbortController();
+    setShareFile(null);
+    fetch(`/api/portraits/${portraitId}/share-image`, { signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) return;
+        const file = new File([await response.blob()], "imagecrafter-portrait.png", { type: "image/png" });
+        if (!controller.signal.aborted && navigator.canShare({ files: [file] })) setShareFile(file);
+      }).catch(error => {
+        if (error.name !== "AbortError") console.warn("Share image unavailable; link sharing remains available");
+      });
+    return () => controller.abort();
+  }, [portraitId]);
+  useEffect(() => {
+    const controller = new AbortController();
+    setUrl(shareUrl);
+    setLinkError(false);
+    fetch(`/api/portraits/${portraitId}/share-link`, { method: "POST", signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) throw new Error("Branded link unavailable");
+        const data = await response.json();
+        if (!controller.signal.aborted) setUrl(data.url);
+      }).catch(error => { if (error.name !== "AbortError") setLinkError(true); });
+    return () => controller.abort();
+  }, [portraitId, shareUrl, retry]);
 
   const openIntent = (url: string) =>
     window.open(url, "_blank", "noopener,noreferrer,width=620,height=680");
 
-  const encodedUrl = encodeURIComponent(shareUrl);
+  const encodedUrl = encodeURIComponent(url);
   const encodedText = encodeURIComponent(CAPTION);
 
   const copyLink = async () => {
-    await navigator.clipboard.writeText(shareUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(url);
+      setError("");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { setError("Could not copy the link. Select and copy it below."); }
   };
 
   // Chrome desktop exposes navigator.share too, so this is not a mobile-only
   // branch — it is simply the best available surface when the browser has one.
   const nativeShare = async () => {
     try {
-      await navigator.share({ title: "ImageCrafter", text: CAPTION, url: shareUrl });
-    } catch {
-      // The user dismissed the sheet. Not an error worth surfacing.
+      await navigator.share({ title: "ImageCrafter", text: CAPTION, url });
+      setError("");
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) setError("Sharing failed. Try copying the link instead.");
     }
   };
 
@@ -55,16 +90,23 @@ export function ShareButtons({ portraitId, shareUrl, imageUrl }: Props) {
   }, []);
 
   return (
-    <div className="rounded-2xl border border-rim bg-surface p-5">
+    <div className="border-t border-rim py-5">
       <h3 className="mb-1 flex items-center gap-2 font-semibold">
         <Share2 className="size-4 text-accent" /> Show someone
       </h3>
-      <p className="mb-4 text-sm text-ink-muted">
-        Share the watermarked preview anywhere — it stays yours, and you can
-        still buy the clean copy afterwards.
-      </p>
 
       <div className="flex flex-wrap gap-2">
+        {shareFile && <button
+          onClick={async () => {
+            try {
+              await navigator.share({ files: [shareFile], title: "ImageCrafter", text: `${CAPTION} ${url}` });
+              setError("");
+            } catch (error) {
+              if (!(error instanceof DOMException && error.name === "AbortError")) setError("Could not share the image. Try Save image or Copy link.");
+            }
+          }}
+          className="inline-flex items-center gap-2 rounded-lg border border-rim px-3 py-2 text-sm"
+        ><Share2 className="size-4" /> Share image</button>}
         {hasNativeShare && (
           <button
             onClick={nativeShare}
@@ -129,11 +171,8 @@ export function ShareButtons({ portraitId, shareUrl, imageUrl }: Props) {
           <Download className="size-4" /> Save image
         </a>
       </div>
-
-      <p className="mt-3 text-xs text-ink-faint">
-        Instagram and TikTok have no web posting — save the image and post it
-        from the app.
-      </p>
+      {linkError && <p role="status" className="mt-3 text-sm text-ink-muted">Branded link unavailable; sharing your direct preview link. <button onClick={() => setRetry(value => value + 1)} className="underline">Retry</button></p>}
+      {error && <div role="alert" className="mt-3 text-sm"><p>{error}</p><input aria-label="Preview link" readOnly value={url} onFocus={event => event.target.select()} className="mt-2 w-full min-w-0 border border-rim bg-canvas p-2" /></div>}
     </div>
   );
 }

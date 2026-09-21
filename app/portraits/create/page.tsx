@@ -56,7 +56,7 @@ interface StylePack {
 type Step = "upload" | "style" | "generate";
 
 // Height of the fixed SiteHeader (py-4 + a size-8 wordmark + hairline border).
-const CHROME_OFFSET = "65px";
+const CHROME_OFFSET = "69px";
 
 // ─── Photo normalization ─────────────────────────────────────────────────────
 

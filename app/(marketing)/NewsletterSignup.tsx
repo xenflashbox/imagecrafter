@@ -55,7 +55,7 @@ export default function NewsletterSignup() {
           required
           placeholder="your@email.com"
           disabled={status === "loading"}
-          className="flex-1 px-3 py-2 rounded-xl bg-surface border border-rim text-sm text-ink placeholder-ink-faint focus:outline-none focus:border-accent-rim transition-colors disabled:opacity-50"
+          className="min-w-0 flex-1 px-3 py-2 rounded-lg bg-surface border border-rim text-sm text-ink placeholder-ink-faint focus:outline-none focus:border-accent-rim transition-colors disabled:opacity-50"
           aria-label="Email address for newsletter"
         />
         <button

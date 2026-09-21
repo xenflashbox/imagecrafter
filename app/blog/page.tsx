@@ -28,9 +28,9 @@ const SITE_NAME = "ImageCrafter";
 const SITE_DOMAIN = "imagecrafter.app";
 
 export const metadata: Metadata = {
-  title: "Blog — AI Portrait & Image Generation Tips | ImageCrafter",
+  title: "Pet Portrait Guides & Photo Tips",
   description:
-    "Learn how to create stunning AI portraits and images. Tips on AI pet portraits, family portraits, prompt engineering, and the best AI art generators in 2026.",
+    "Choose better reference photos, compare pet portrait styles, and learn how AI-generated digital portraits work with ImageCrafter.",
   openGraph: {
     title: "ImageCrafter Blog",
     description:

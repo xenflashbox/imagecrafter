@@ -26,6 +26,7 @@ import { PRINT_CATALOG, resolveSku } from "@/lib/services/print-fulfillment";
 import { trackTikTokEvent } from "@/lib/services/tiktok-events";
 import { trackMetaEvent, fbcFromFbclid } from "@/lib/services/meta-events";
 import { requireEnv } from "@/lib/env";
+import { printCheckoutEnabled } from "@/lib/launch-flags";
 import { getPrice, DIGITAL_SKU, PriceUnavailableError } from "@/lib/services/pricing";
 
 // Built per request, not at module scope: Next.js collects page data during the
@@ -47,6 +48,9 @@ export async function GET(request: NextRequest) {
   const portraitId = searchParams.get("portraitId");
   const type = searchParams.get("type") as "digital" | "print" | null;
   const sku = searchParams.get("sku");
+  if (type === "print" && !printCheckoutEnabled()) {
+    return NextResponse.json({ success: false, error: "Print ordering is not available yet. Digital portraits are available." }, { status: 503 });
+  }
 
   if (!portraitId || !type) {
     return NextResponse.json(

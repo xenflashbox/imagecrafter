@@ -12,10 +12,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PRINT_CATALOG, isProdigiSandbox } from "@/lib/services/print-fulfillment";
 import { getPrices, PriceUnavailableError } from "@/lib/services/pricing";
+import { printCheckoutEnabled } from "@/lib/launch-flags";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_request: NextRequest) {
+  if (!printCheckoutEnabled()) {
+    return NextResponse.json({ success: false, error: "Print ordering is not available yet. Digital portraits are available." }, { status: 503 });
+  }
   let priced: Array<(typeof PRINT_CATALOG)[number] & { priceCents: number }>;
   try {
     const prices = await getPrices(PRINT_CATALOG.map((p) => p.sku));

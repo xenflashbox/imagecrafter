@@ -26,11 +26,11 @@ const fraunces = Fraunces({
 export const metadata: Metadata = {
   // Basic Meta
   title: {
-    default: "ImageCrafter — Custom Pet & Family Portraits from One Photo",
+    default: "ImageCrafter — Custom Pet Portraits from One Photo",
     template: "%s | ImageCrafter",
   },
   description:
-    "Upload one photo and watch your dog, cat or family become a Baroque aristocrat, a disco icon or an oil-painted heirloom. Museum-quality portraits, printed and shipped or downloaded in minutes.",
+    "Turn one photo of your pet or one person into AI-generated portrait art. Preview free, then buy the watermark-free digital download if you love it.",
   keywords: [
     "custom pet portrait",
     "pet portrait from photo",
@@ -38,10 +38,10 @@ export const metadata: Metadata = {
     "dog portrait painting",
     "cat portrait painting",
     "renaissance pet portrait",
-    "custom family portrait",
+    "custom person portrait",
     "pet memorial portrait",
     "personalized portrait gift",
-    "canvas pet art print",
+    "digital pet portrait",
   ],
   authors: [{ name: "Xenco Labs", url: "https://xencolabs.com" }],
   creator: "Xenco Labs",
@@ -68,7 +68,7 @@ export const metadata: Metadata = {
     siteName: "ImageCrafter",
     title: "Your dog, painted like royalty.",
     description:
-      "Upload one photo. We paint your pet or your family as Baroque aristocrats, disco icons or oil-painted heirlooms — museum quality, in minutes.",
+      "Upload one photo of one pet or one person. Choose a style, preview free, and buy the digital portrait only if you love it.",
     images: [
       {
         url: "https://imagecrafter.app/og-image.png",
@@ -84,7 +84,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Your dog, painted like royalty.",
     description:
-      "Upload one photo. Museum-quality portraits of pets and people, in minutes.",
+      "One photo, a personal work of art. Free preview; watermark-free digital download after purchase.",
     images: ["https://imagecrafter.app/og-image.png"],
     creator: "@xencolabs",
   },
@@ -105,7 +105,8 @@ export const metadata: Metadata = {
 
   // Verification (add your IDs)
   verification: {
-    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION,
+    google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION === "your-code"
+      ? undefined : process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION,
   },
 
   // Canonical
@@ -139,7 +140,7 @@ const structuredData = {
   applicationCategory: "DesignApplication",
   operatingSystem: "Web",
   description:
-    "AI portrait studio — turn your photo into a Renaissance, Starry Night, or Elven fantasy portrait. Full 4K digital downloads and museum-quality prints.",
+    "AI portrait studio — turn one photo of one pet or person into a stylized portrait. Free previews and watermark-free digital downloads.",
   url: "https://imagecrafter.app",
   author: {
     "@type": "Organization",

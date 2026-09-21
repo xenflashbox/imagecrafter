@@ -62,7 +62,7 @@ const REASSURANCES = [
   },
   {
     q: "Can I have it printed?",
-    a: "Yes. Museum-quality prints ship worldwide, or you can download the full-resolution file and print it yourself.",
+    a: "You can purchase the digital file and arrange printing with a provider you choose. Physical prints and shipping are not included in the digital order.",
   },
   {
     q: "How long does it take?",
@@ -148,7 +148,7 @@ export default async function MemorialPage() {
               ],
               [
                 "Keep it, or don't",
-                `If it is right, the download is ${formatUsd(digital.unitAmount)} and prints can be posted to you. If it is not, you owe nothing.`,
+                `If it is right, the digital download is ${formatUsd(digital.unitAmount)}. If it is not, you owe nothing.`,
               ],
             ].map(([title, body], i) => (
               <li key={title} className="flex gap-5">
