@@ -30,6 +30,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { SiteHeader, SiteFooter } from "@/components/site-chrome";
+import { ShareButtons } from "@/components/share-buttons";
 import { Turnstile } from "@/components/turnstile";
 import { PORTRAIT_STAGES, STAGE_LABELS, type PortraitStage } from "@/lib/portrait-stages";
 import { subscribeToProgress } from "@/lib/portrait-progress-client";
@@ -722,6 +723,12 @@ function PreviewSection({
         <p className="text-center text-xs text-ink-faint">
           Regenerate for a different version · Change style or photo to start fresh
         </p>
+
+        {portraitId && <ShareButtons
+          portraitId={portraitId}
+          shareUrl={`https://imagecrafter.app/p/${portraitId}`}
+          imageUrl={previewUrl}
+        />}
 
         <div className="rounded-2xl border border-accent-rim bg-surface p-6">
           <h3 className="mb-1 font-display text-xl text-ink">Love your portrait?</h3>
