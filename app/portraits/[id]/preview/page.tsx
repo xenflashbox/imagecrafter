@@ -33,6 +33,7 @@ import {
   DIGITAL_SKU,
 } from "@/lib/services/pricing";
 import { resolveSku } from "@/lib/services/print-fulfillment";
+import { printCheckoutEnabled } from "@/lib/launch-flags";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -158,7 +159,7 @@ export default async function PortraitPreviewPage({ params }: Props) {
   const [packs, digital, printPrices] = await Promise.all([
     getPackCatalog(),
     getPrice(DIGITAL_SKU),
-    getPrices(PRINT_TEASER_SKUS),
+    printCheckoutEnabled() ? getPrices(PRINT_TEASER_SKUS) : Promise.resolve([]),
   ]);
 
   return (
@@ -331,7 +332,7 @@ export default async function PortraitPreviewPage({ params }: Props) {
               )}
 
               {/* Print options */}
-              <div>
+              {printCheckoutEnabled() && <div>
                 <h3 className="mb-3 flex items-center gap-2 font-semibold">
                   <Printer className="size-4 text-accent" /> Museum-Quality Print
                 </h3>
@@ -359,7 +360,7 @@ export default async function PortraitPreviewPage({ params }: Props) {
                 <p className="mt-2 text-center text-xs text-ink-faint">
                   Canvas, framed, and art print options · Ships worldwide
                 </p>
-              </div>
+              </div>}
 
               <p className="text-center text-xs text-ink-faint">
                 Secure checkout powered by Stripe · No account required

@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
   revalidateTag(PAYLOAD_CACHE_TAG);
   revalidatePath(`/blog/${slug}`);
   revalidatePath("/blog");
+  revalidatePath("/sitemap.xml");
 
   console.log(`[Revalidate] purged Payload cache for slug="${slug}"`);
 

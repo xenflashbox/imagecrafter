@@ -90,6 +90,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     },
     twitter: { card: "summary_large_image", title, description },
     alternates: { canonical: `${APP_URL}/p/${id}` },
+    robots: { index: false, follow: true, googleBot: { index: false, follow: true } },
   };
 }
 
@@ -98,13 +99,14 @@ export default async function PublicPortraitPage({ params }: Props) {
   const portrait = await getPortrait(id);
 
   if (!portrait) notFound();
+  const createUrl = `/portraits/create?pack=${encodeURIComponent(portrait.stylePackSlug || "")}&utm_source=portrait_share&utm_medium=referral&utm_campaign=preview&ref=${encodeURIComponent(id)}`;
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas text-ink">
       <SiteHeader
         cta={
           <Link
-            href="/portraits/create"
+            href={createUrl}
             className="whitespace-nowrap rounded-sm bg-ink px-4 py-2 text-sm font-medium text-canvas transition-opacity hover:opacity-85"
           >
             Make<span className="hidden sm:inline"> your own</span>
@@ -138,12 +140,12 @@ export default async function PublicPortraitPage({ params }: Props) {
             Painted from a single photograph
           </h1>
           <p className="mx-auto mb-8 max-w-md leading-relaxed text-ink-muted">
-            Upload one photo of your pet or your family and watch it become an
+            Upload one photo of your pet or one person and watch it become an
             oil painting, a Baroque portrait or a 70s disco shot. You see the
             finished piece before you decide anything.
           </p>
           <Link
-            href="/portraits/create"
+            href={createUrl}
             className="inline-flex items-center gap-3 rounded-sm bg-ink px-8 py-4 text-lg text-canvas transition-opacity hover:opacity-85"
           >
             Make your own

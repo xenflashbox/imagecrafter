@@ -38,13 +38,13 @@ export const dynamic = "force-dynamic";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
 
 export const metadata: Metadata = {
-  title: "ImageCrafter — AI Portrait Studio & Image Generator",
+  title: { absolute: "ImageCrafter | Custom Pet Portraits from Your Photo" },
   description:
     "Turn your photo — or your pet's — into a portrait that actually looks like them. Royal portraits, fine art, 70s disco. No account needed. Pay only if you love it.",
   openGraph: {
     title: "Your dog, painted like royalty.",
     description:
-      "Upload one photo. We paint your pet or your family as Baroque aristocrats, disco icons or oil-painted heirlooms — museum quality, in minutes. No account needed.",
+      "Turn one photo of your pet or one person into a personal work of art. Free preview, no account needed. Pay only if you love it.",
     url: APP_URL,
     type: "website",
     siteName: "ImageCrafter",
@@ -61,7 +61,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Your dog, painted like royalty.",
     description:
-      "Upload one photo. Museum-quality portraits of pets and people, in minutes.",
+      "One photo, a personal work of art. Free preview; watermark-free digital download after purchase.",
     images: [`${APP_URL}/og-image.png`],
   },
   alternates: { canonical: APP_URL },
@@ -273,47 +273,38 @@ export default async function LandingPage() {
         ================================================================ */}
         <section
           id="portraits"
-          className="pt-32 pb-20 px-6 relative overflow-hidden"
+          className="pt-24 pb-10 px-4 sm:px-6 relative overflow-hidden"
         >
-          {/* Background glow */}
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-accent-soft rounded-full blur-3xl" />
-            <div className="absolute top-20 left-1/4 w-[400px] h-[400px] bg-accent-soft rounded-full blur-3xl" />
-          </div>
-
           <div className="relative max-w-6xl mx-auto">
-            <div className="text-center mb-16">
+            <div className="text-center mb-6">
               {/* Badge */}
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-accent-soft border border-accent-rim text-accent text-sm mb-6">
+              <div className="inline-flex items-center gap-2 text-accent text-sm mb-3">
                 <Camera className="w-3.5 h-3.5" />
-                No account needed · Instant preview
+                Free preview · No account needed
               </div>
 
-              <h1 className="font-display text-5xl md:text-7xl font-light leading-[1.08] tracking-tight mb-6">
-                Your Pet, Painted
-                <br />
-                <span className="italic text-accent">Like a Masterpiece</span>
+              <h1 className="font-display text-4xl md:text-6xl font-light leading-tight mb-3">
+                Custom Pet Portraits
               </h1>
 
-              <p className="text-xl text-ink-muted max-w-2xl mx-auto mb-10 leading-relaxed">
-                Upload one photo of your dog, cat — or anyone you love. Choose a style.
-                Get a museum-quality portrait delivered to your door, or download instantly.
-                <strong className="text-ink-muted"> No account required.</strong>
+              <p className="text-base md:text-lg text-ink-muted max-w-xl mx-auto mb-5 leading-relaxed">
+                One photo. A portrait full of personality. Preview it free,
+                then keep the watermark-free digital artwork for {formatUsd(digital.unitAmount)}.
               </p>
 
               {/* Primary CTA */}
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <div className="flex flex-wrap items-center justify-center gap-3">
                 <Link
                   href="/portraits/create"
-                  className="group flex items-center gap-3 px-8 py-4 rounded-2xl bg-accent text-canvas hover:opacity-90 transition-all text-lg font-semibold shadow-lg shadow-rim-strong"
+                  className="group flex items-center gap-2 px-5 py-3 rounded-lg bg-accent text-canvas hover:opacity-90 transition-all text-base font-semibold"
                 >
                   <Camera className="w-5 h-5" />
-                  Create Your Portrait
+                  Create Free Preview
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </Link>
                 <Link
                   href="#styles"
-                  className="flex items-center gap-2 px-8 py-4 rounded-2xl bg-surface hover:bg-surface border border-rim transition-all text-base"
+                  className="hidden sm:flex items-center gap-2 px-4 py-3 text-sm underline underline-offset-4"
                 >
                   <Palette className="w-5 h-5 text-ink-subtle" />
                   See All {stylePacks.length} Styles
@@ -321,10 +312,10 @@ export default async function LandingPage() {
               </div>
 
               {/* Trust signals */}
-              <div className="flex flex-wrap items-center justify-center gap-6 mt-8 text-sm text-ink-subtle">
+              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 mt-4 text-xs text-ink-subtle">
                 <span className="flex items-center gap-1.5">
                   <Check className="w-3.5 h-3.5 text-positive" />
-                  No sign-up needed
+                  One pet or one person
                 </span>
                 <span className="flex items-center gap-1.5">
                   <Check className="w-3.5 h-3.5 text-positive" />
@@ -332,11 +323,11 @@ export default async function LandingPage() {
                 </span>
                 <span className="flex items-center gap-1.5">
                   <Check className="w-3.5 h-3.5 text-positive" />
-                  Prints delivered worldwide
+                  Secure checkout
                 </span>
                 <span className="flex items-center gap-1.5">
                   <ShoppingBag className="w-3.5 h-3.5 text-positive" />
-                  Museum-quality prints
+                  Digital delivery
                 </span>
               </div>
             </div>
@@ -344,9 +335,9 @@ export default async function LandingPage() {
             {/* The art is the product — show it big, once, above the fold.
                 The full pack grid lives at #styles; four thumbnails here only
                 shrank the one thing worth looking at. */}
-            <div className="flex flex-col lg:flex-row items-center lg:items-end justify-center gap-6 lg:gap-10 max-w-5xl mx-auto">
-              <figure className="w-52 sm:w-60 lg:w-72 shrink-0">
-                <div className="artframe relative overflow-hidden">
+            <div className="flex items-end justify-center gap-3 sm:gap-6 max-w-lg mx-auto">
+              <figure className="w-[32%] shrink-0">
+                  <div className="relative overflow-hidden">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={HERO.before}
@@ -363,8 +354,8 @@ export default async function LandingPage() {
 
               {/* The finished piece is deliberately the largest thing on the
                   page, and the only one that gets the mat. */}
-              <figure className="w-72 sm:w-[26rem] lg:w-[32rem] shrink-0">
-                <div className="artframe artframe-matted">
+              <figure className="w-[58%] shrink-0">
+                <div>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={HERO_AFTER.url}
@@ -376,7 +367,7 @@ export default async function LandingPage() {
                   <span className="font-display text-base italic text-accent">
                     {HERO_AFTER.name}
                   </span>
-                  <span className="text-ink-subtle"> · about a minute later</span>
+                  <span className="text-ink-subtle"> · AI portrait</span>
                 </figcaption>
               </figure>
             </div>
@@ -386,7 +377,7 @@ export default async function LandingPage() {
         {/* ================================================================
             BEFORE / AFTER — real production pipeline outputs
         ================================================================ */}
-        <section id="results" className="py-24 px-6 border-t border-rim">
+        <section id="results" className="py-10 px-6 border-t border-rim">
           <div className="max-w-7xl mx-auto">
             <div className="text-center mb-14">
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-surface border border-rim text-positive text-sm mb-4">
@@ -560,7 +551,7 @@ export default async function LandingPage() {
                 {[
                   "Full 4K digital download",
                   "No watermark",
-                  "Museum-quality prints & canvases available",
+                  "Digital delivery by email",
                   "Preview before you pay",
                 ].map((f) => (
                   <li key={f} className="flex items-start gap-2 text-sm text-ink-muted">
@@ -600,9 +591,9 @@ export default async function LandingPage() {
         ================================================================ */}
         <footer className="border-t border-rim py-16 px-6">
           <div className="max-w-6xl mx-auto">
-            <div className="grid md:grid-cols-4 gap-10 mb-12">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-10 mb-12">
               {/* Brand */}
-              <div className="md:col-span-2">
+              <div className="min-w-0 md:col-span-2">
                 <div className="mb-4">
                   <Wordmark />
                 </div>
@@ -687,4 +678,3 @@ export default async function LandingPage() {
     </>
   );
 }
-

@@ -65,7 +65,7 @@ export async function generateMetadata({
   const tags = (post.tags || []).map((t) => getTagLabel(t)).filter(Boolean);
 
   return {
-    title: `${title} | ${SITE_NAME} Blog`,
+    title,
     description,
     robots,
     alternates: { canonical },
@@ -174,13 +174,14 @@ export default async function BlogPostPage({
     author: {
       "@type": "Person",
       name: authorName,
+      ...(author?.slug ? { url: `${APP_URL}/blog/author/${author.slug}` } : {}),
     },
     publisher: {
       "@type": "Organization",
       name: SITE_NAME,
       logo: {
         "@type": "ImageObject",
-        url: `${APP_URL}/logo.png`,
+        url: `${APP_URL}/apple-touch-icon.png`,
       },
     },
     mainEntityOfPage: {
@@ -406,7 +407,7 @@ export default async function BlogPostPage({
         <div className="border-t border-rim">
           <div className="max-w-3xl mx-auto px-6 py-10 flex flex-col md:flex-row items-center justify-between gap-6">
             {/* Social sharing */}
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <span className="flex items-center gap-1.5 text-sm text-ink-subtle">
                 <Share2 className="w-4 h-4" />
                 Share:

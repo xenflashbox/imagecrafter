@@ -96,7 +96,7 @@ export default async function Image({ params }: { params: { id: string } }) {
               lineHeight: 1.35,
             }}
           >
-            <span>Your pet or your family, as a</span>
+            <span>Your pet or one person, as a</span>
             <span>museum-quality portrait. Free to try.</span>
           </div>
         </div>

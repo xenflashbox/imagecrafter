@@ -23,6 +23,7 @@ import { trackTikTokEvent } from "@/lib/services/tiktok-events";
 import { trackMetaEvent } from "@/lib/services/meta-events";
 import { captureBuyer } from "@/lib/services/mautic";
 import { requireEnv } from "@/lib/env";
+import { expirePortraitOrder } from "@/lib/services/expire-portrait-order";
 
 // Built per request, not at module scope: Next.js collects page data during the
 // build, so a module-scope client makes every build require a live payment key.
@@ -169,14 +170,8 @@ export async function POST(request: NextRequest) {
         break;
 
       case "checkout.session.expired": {
-        // Mark portrait order as failed if the session expires
         const expiredSession = event.data.object as Stripe.Checkout.Session;
-        const failedOrderId = expiredSession.metadata?.orderId;
-        if (failedOrderId) {
-          await prisma.order
-            .update({ where: { id: failedOrderId }, data: { status: "failed" } })
-            .catch((err) => console.error("Failed to mark order expired:", err));
-        }
+        await expirePortraitOrder(prisma.order, expiredSession);
         break;
       }
 
