@@ -880,7 +880,13 @@ function CreatePortraitContent() {
   }, []);
 
   // Restore session state from sessionStorage on mount
+  const restoredSession = useRef(false);
   useEffect(() => {
+    // Upload updates the portraitId query string. That is not a fresh mount:
+    // replaying restoration starts a catalog fetch that can reset an active
+    // generation back to the style step when it eventually resolves.
+    if (restoredSession.current) return;
+    restoredSession.current = true;
     const savedPortraitId = searchParams.get("portraitId") || sessionStorage.getItem("ic_portraitId");
     const savedSessionId = sessionStorage.getItem("ic_sessionId");
     const savedPreviewUrl = sessionStorage.getItem("ic_previewUrl");
