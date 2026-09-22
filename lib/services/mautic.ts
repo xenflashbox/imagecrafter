@@ -9,6 +9,7 @@
 
 import { getMauticApiUrl, requireEnv } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
+import { deliverMauticCapture, normalizeCaptureEmail } from "./mautic-delivery";
 
 const MAUTIC_USER = process.env.MAUTIC_USER || "admin";
 
@@ -129,32 +130,15 @@ export type BuyerCapture = {
  * which /api/cron/mautic-retry picks up — recorded, not swallowed.
  */
 export async function captureBuyer(capture: BuyerCapture): Promise<void> {
-  const { stripeSessionId, email, purchaseType, subjectType, style, orderId } = capture;
+  const { stripeSessionId, purchaseType, subjectType, style, orderId } = capture;
+  const email = normalizeCaptureEmail(capture.email);
   const purchasedAt = capture.purchasedAt ?? new Date();
   const dedupeKey = `stripe:${stripeSessionId}`;
 
   const existing = await prisma.mauticCapture.findUnique({ where: { dedupeKey } });
   if (existing?.status === "captured") return; // webhook replay
 
-  // Mautic upserts on email, so a previewer who buys is the same contact with
-  // ic_stage rewritten to "buyer" — the win-back segment drops them, the buyer
-  // segment picks them up. No second contact is created.
-  const subject = mauticSubject(subjectType);
-  const result = await pushContact({
-    email,
-    ...splitName(capture.name),
-    tags: ["imagecrafter", "imagecrafter-buyer", `ic-${purchaseType}`,
-      ...(subjectType ? [`ic-${subjectType}`] : [])],
-    customFields: {
-      ic_stage: "buyer",
-      ic_source: "purchase",
-      ic_purchase_type: mauticPurchaseType(purchaseType),
-      ...(subject ? { ic_subject: subject } : {}),
-      ...(style ? { ic_style: style } : {}),
-      ic_purchased_at: purchasedAt.toISOString(),
-    },
-  });
-
+  // Persist before networking so a timeout or process termination remains retryable.
   const record = {
     stage: "buyer",
     email,
@@ -163,27 +147,15 @@ export async function captureBuyer(capture: BuyerCapture): Promise<void> {
     subjectType: subjectType || null,
     style: style || null,
     orderId: orderId || null,
-    attempts: (existing?.attempts ?? 0) + 1,
-    status: result.success ? "captured" : "failed",
-    contactId: result.success ? result.contactId ?? null : null,
-    lastError: result.success ? null : result.error.slice(0, 1000),
+    status: "failed",
   };
 
-  await prisma.mauticCapture.upsert({
+  const row = await prisma.mauticCapture.upsert({
     where: { dedupeKey },
-    create: { dedupeKey, ...record },
-    update: record,
+    create: { dedupeKey, ...record, createdAt: purchasedAt },
+    update: {},
   });
-
-  if (result.success) {
-    console.log(
-      `[mautic] Captured buyer ${email} (${purchaseType}) as contact ${result.contactId} for session ${stripeSessionId}`
-    );
-  } else {
-    console.error(
-      `[mautic] Buyer capture FAILED for ${email} (session ${stripeSessionId}) — recorded for retry: ${result.error}`
-    );
-  }
+  await deliverRecordedCapture(row.id);
 }
 
 export type PreviewerCapture = {
@@ -204,27 +176,9 @@ export type PreviewerCapture = {
  * and preview URL move forward) without ever creating a second capture row.
  */
 export async function capturePreviewer(capture: PreviewerCapture): Promise<void> {
-  const { email, subjectType, style, previewUrl } = capture;
+  const { subjectType, style, previewUrl } = capture;
+  const email = normalizeCaptureEmail(capture.email);
   const dedupeKey = `preview:${email}`;
-
-  const existing = await prisma.mauticCapture.findUnique({ where: { dedupeKey } });
-
-  // Once they have bought, do not demote them back to previewer.
-  if (existing?.stage === "buyer") return;
-
-  const subject = mauticSubject(subjectType);
-  const result = await pushContact({
-    email,
-    tags: ["imagecrafter", "imagecrafter-previewer",
-      ...(subjectType ? [`ic-${subjectType}`] : [])],
-    customFields: {
-      ic_stage: "previewer",
-      ic_source: "preview",
-      ...(subject ? { ic_subject: subject } : {}),
-      ...(style ? { ic_style: style } : {}),
-      ...(previewUrl ? { ic_preview_url: previewUrl } : {}),
-    },
-  });
 
   const record = {
     stage: "previewer",
@@ -233,24 +187,25 @@ export async function capturePreviewer(capture: PreviewerCapture): Promise<void>
     subjectType: subjectType || null,
     style: style || null,
     previewUrl: previewUrl || null,
-    attempts: (existing?.attempts ?? 0) + 1,
-    status: result.success ? "captured" : "failed",
-    contactId: result.success ? result.contactId ?? null : null,
-    lastError: result.success ? null : result.error.slice(0, 1000),
+    status: "failed",
   };
 
-  await prisma.mauticCapture.upsert({
+  const row = await prisma.mauticCapture.upsert({
     where: { dedupeKey },
     create: { dedupeKey, ...record },
     update: record,
   });
 
-  if (result.success) {
-    console.log(`[mautic] Captured previewer ${email} as contact ${result.contactId}`);
-  } else {
-    console.error(
-      `[mautic] Previewer capture FAILED for ${email} — recorded for retry: ${result.error}`
-    );
+  await deliverRecordedCapture(row.id);
+}
+
+async function deliverRecordedCapture(id: string) {
+  try {
+    const status = await deliverMauticCapture(prisma, pushContact, id);
+    if (status === "failed") console.error(`[mautic] Capture ${id} failed; retained for retry`);
+  } catch (error) {
+    // The durable row remains failed if locking or transaction completion fails.
+    console.error(`[mautic] Capture ${id} delivery deferred to retry`, error);
   }
 }
 

@@ -706,7 +706,7 @@ model MauticCapture {
   stage        String   @default("buyer") // "previewer" | "buyer"
   email        String
   name         String?  // kept so a retry can replay the original push
-  status       String   // "captured" | "failed"
+  status       String   // "captured" | "failed" | "superseded" (older than a buyer event)
   contactId    Int?     // Mautic contact id once the push lands
   attempts     Int      @default(0)
   lastError    String?
