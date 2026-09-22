@@ -1,0 +1,86 @@
+import assert from 'node:assert/strict';
+import { createHash, randomBytes } from 'node:crypto';
+import { createRequire } from 'node:module';
+import { PrismaClient } from '@prisma/client';
+import { fetchVaultSecrets } from '../scripts/_infisical.mjs';
+const require = createRequire(import.meta.url);
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || '/home/xen/.npm/_npx/705bc6b22212b352/node_modules/playwright');
+const base = process.argv[2] || 'http://localhost:3101';
+const s = await fetchVaultSecrets();
+const db = new PrismaClient({ datasources: { db: { url: s.DATABASE_URL } } });
+const portraitId = '4ea7ceac54b34ee08d27ce5111cb0b0c';
+const email = 'ic-launch-preview-image-20260922@xencolabs.com';
+const headers = { Authorization: 'Basic ' + Buffer.from(`${s.MAUTIC_USER}:${s.MAUTIC_PASS}`).toString('base64') };
+const browser = await chromium.launch();
+let access;
+try {
+  const columns = await db.$queryRaw`SELECT table_name,column_name FROM information_schema.columns WHERE table_schema=${'imagecrafter'} AND table_name IN (${'ic_PortraitReturn'},${'ic_MarketingConsent'},${'ic_Portrait'})`;
+  for (const [table, column] of [['ic_PortraitReturn','tokenHash'],['ic_PortraitReturn','revokedAt'],['ic_MarketingConsent','granted'],['ic_Portrait','id']]) assert(columns.some(c=>c.table_name===table&&c.column_name===column));
+  const { contact } = await (await fetch(s.MAUTIC_API_URL+'/api/contacts/7244', { headers })).json();
+  assert.equal(contact.fields.all.email, email);
+  assert(contact.tags.some(t=>t.tag==='internal-test'));
+  const portrait = await db.portrait.findUnique({ where: { id: portraitId } });
+  assert.equal(portrait.status, 'preview');
+  const token = randomBytes(32).toString('hex');
+  const data = { tokenHash: createHash('sha256').update(token).digest('hex'), expiresAt: new Date(Date.now()+86400_000), marketingRequested: true, verifiedAt: null, revokedAt: null };
+  access = await db.portraitReturn.upsert({ where: { portraitId_email: { portraitId, email } }, create: { portraitId, email, ...data }, update: data });
+  for (const width of [390,1440]) {
+    const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+    const page = await ctx.newPage();
+    assert.equal((await ctx.request.get(`${base}/api/portraits/${portraitId}`)).status(),403);
+    const requests=[];
+    page.on('request', r=>requests.push(r.url()));
+    await page.goto(`${base}/api/portraits/return#id=${portraitId}&token=${token}`, { waitUntil:'networkidle' });
+    assert(!page.url().includes(token));
+    assert(requests.every(url=>url.startsWith(base)), 'Recovery page must not load trackers');
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await page.screenshot({ path:`/tmp/ic-return-${width}.png` });
+    await page.getByRole('button',{name:'Open my portrait',exact:true}).click();
+    await page.waitForURL(`**/portraits/${portraitId}/preview`, { timeout:60000 });
+    const read=await ctx.request.get(`${base}/api/portraits/${portraitId}`);
+    assert.equal(read.status(),200);
+    assert.equal((await read.json()).portrait.sourceImageUrl,undefined);
+    const share = await ctx.request.post(`${base}/api/portraits/${portraitId}/share-link`);
+    assert.equal(share.status(),200);
+    assert.equal(new URL((await share.json()).url).hostname,'go.imagecrafter.app');
+    assert.equal((await ctx.request.get(`${base}/api/portraits/eeadcfdf4e354582a2cdf50228ec5b02`)).status(),403);
+    assert.equal((await ctx.request.get(`${base}/api/orders/create?portraitId=eeadcfdf4e354582a2cdf50228ec5b02&type=digital`)).status(),403);
+    const cookies=await ctx.cookies();
+    assert(!cookies.some(c=>c.name==='portrait_session_id'));
+    assert(cookies.some(c=>c.name==='ic_portrait_access'&&c.httpOnly));
+    console.log(`PASS ${width}px fresh browser: scoped return, no original photo, unrelated portrait/checkout denied`);
+    await ctx.close();
+  }
+  const ctx=await browser.newContext();
+  const endpoint=base+'/api/portraits/return';
+  assert.equal((await ctx.request.post(endpoint,{headers:{Origin:'https://unrelated.example'},data:{action:'confirm',id:portraitId,token}})).status(),403);
+  assert.equal((await ctx.request.post(endpoint,{headers:{Origin:base},data:{action:'confirm',id:portraitId,token:'0'.repeat(64)}})).status(),410);
+  await db.portraitReturn.update({where:{id:access.id},data:{expiresAt:new Date(Date.now()-1000)}});
+  assert.equal((await ctx.request.post(endpoint,{headers:{Origin:base},data:{action:'confirm',id:portraitId,token}})).status(),410);
+  await db.portraitReturn.update({where:{id:access.id},data:{expiresAt:new Date(Date.now()+86400_000),revokedAt:new Date()}});
+  assert.equal((await ctx.request.post(endpoint,{headers:{Origin:base},data:{action:'confirm',id:portraitId,token}})).status(),410);
+  const consent=await db.marketingConsent.findUnique({where:{email}});
+  assert.equal(consent.granted,true);
+  const readback=await (await fetch(s.MAUTIC_API_URL+'/api/contacts/7244',{headers})).json();
+  assert(['1',1,true].includes(readback.contact.fields.all.ic_marketing_ok));
+  assert(readback.contact.tags.some(t=>t.tag==='internal-test'));
+  console.log('PASS forged origin, tampered/expired/revoked tokens, confirmed consent round-trip; test identity remains excluded');
+  const noConsentEmail='ic-launch-preview-fallback-20260922@xencolabs.com';
+  const noConsentContact=await (await fetch(s.MAUTIC_API_URL+'/api/contacts/7245',{headers})).json();
+  assert.equal(noConsentContact.contact.fields.all.email,noConsentEmail);
+  assert(noConsentContact.contact.tags.some(t=>t.tag==='internal-test'));
+  assert.equal(await db.marketingConsent.findUnique({where:{email:noConsentEmail}}),null);
+  const noConsentToken=randomBytes(32).toString('hex');
+  const noConsentData={tokenHash:createHash('sha256').update(noConsentToken).digest('hex'),expiresAt:new Date(Date.now()+86400_000),marketingRequested:false,verifiedAt:null,revokedAt:null};
+  const noConsentAccess=await db.portraitReturn.upsert({where:{portraitId_email:{portraitId,email:noConsentEmail}},create:{portraitId,email:noConsentEmail,...noConsentData},update:noConsentData});
+  try {
+    assert.equal((await ctx.request.post(endpoint,{headers:{Origin:base},data:{action:'confirm',id:portraitId,token:noConsentToken}})).status(),200);
+    assert.equal(await db.marketingConsent.findUnique({where:{email:noConsentEmail}}),null);
+    const c=await (await fetch(s.MAUTIC_API_URL+'/api/contacts/7245',{headers})).json();
+    assert(!['1',1,true].includes(c.contact.fields.all.ic_marketing_ok));
+    console.log('PASS transactional-only return does not grant marketing consent');
+  } finally {await db.portraitReturn.update({where:{id:noConsentAccess.id},data:{revokedAt:new Date()}});}
+} finally {
+  if(access) await db.portraitReturn.update({where:{id:access.id},data:{revokedAt:new Date()}});
+  await browser.close(); await db.$disconnect();
+}

@@ -21,6 +21,7 @@ import { generatePortrait } from "@/lib/services/portrait-generation";
 import { checkPreviewGate, clientIp, isNewPreviewer } from "@/lib/services/preview-gate";
 import { capturePreviewer } from "@/lib/services/mautic";
 import { publishProgress } from "@/lib/services/portrait-progress";
+import { issuePortraitReturn } from "@/lib/services/portrait-return";
 
 // The synchronous pipeline (analysis → stand-in + fidelity gate → swap →
 // acceptance gate, each leg with retries) routinely exceeds the project's
@@ -48,6 +49,7 @@ export async function POST(request: NextRequest) {
       userScene?: string;
       email?: string;
       captchaToken?: string;
+      marketingConsent?: boolean;
     };
 
     try {
@@ -213,11 +215,15 @@ export async function POST(request: NextRequest) {
     // Re-push with the finished preview so the win-back drip can re-show it.
     // Upserts on preview:<email>, so this enriches the pre-generation row.
     if (gate.email) {
+      let returnUrl: string | null = null;
+      try { returnUrl = await issuePortraitReturn(portraitId, gate.email, body.marketingConsent === true); }
+      catch (error) { console.error("[Generate] Preview ready but return email failed", error); }
       await capturePreviewer({
         email: gate.email,
         subjectType: result.subjectType ?? portrait.subjectType,
         style: portrait.stylePackSlug,
         previewUrl: result.previewImageUrl,
+        returnUrl,
       });
     }
 

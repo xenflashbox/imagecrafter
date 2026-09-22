@@ -30,6 +30,11 @@ export type MauticCustomFields = {
   ic_style?: string;
   ic_preview_url?: string;
   ic_purchased_at?: string;
+  ic_return_url?: string;
+  ic_marketing_ok?: boolean;
+  ic_captured_at?: string;
+  ic_consent_at?: string;
+  ic_return_expires_at?: string;
 };
 
 /**
@@ -163,6 +168,7 @@ export type PreviewerCapture = {
   subjectType?: string | null;
   style?: string | null;
   previewUrl?: string | null;
+  returnUrl?: string | null;
 };
 
 /**
@@ -187,6 +193,7 @@ export async function capturePreviewer(capture: PreviewerCapture): Promise<void>
     subjectType: subjectType || null,
     style: style || null,
     previewUrl: previewUrl || null,
+    ...(capture.returnUrl ? { returnUrl: capture.returnUrl } : {}),
     status: "failed",
   };
 

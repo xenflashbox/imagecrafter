@@ -7,7 +7,7 @@ function row(id: string, stage = "previewer", overrides: Partial<MauticCapture> 
   return { id, dedupeKey: stage === "buyer" ? `stripe:${id}` : "preview:qa@example.test",
     stage, email: "qa@example.test", name: null, status: "failed", contactId: null,
     attempts: 0, lastError: null, purchaseType: stage === "buyer" ? "digital" : null,
-    subjectType: "pet", style: "royal", previewUrl: null, orderId: null,
+    subjectType: "pet", style: "royal", previewUrl: null, returnUrl: null, orderId: null,
     createdAt: new Date("2026-09-22T00:00:00Z"), updatedAt: new Date("2026-09-22T00:00:00Z"), ...overrides };
 }
 
@@ -44,7 +44,7 @@ function fixture(rows: MauticCapture[]) {
     let release!: () => void;
     tail = new Promise<void>(resolve => { release = resolve; });
     await previous;
-    try { return await fn({ mauticCapture: model, $executeRaw: async () => 0 }); }
+    try { return await fn({ mauticCapture: model, marketingConsent: { findUnique: async () => null }, $executeRaw: async () => 0 }); }
     finally { release(); }
   } } as unknown as Parameters<typeof deliverMauticCapture>[0];
   return { db, records, queries };
