@@ -40,6 +40,9 @@ try {
     const read=await ctx.request.get(`${base}/api/portraits/${portraitId}`);
     assert.equal(read.status(),200);
     assert.equal((await read.json()).portrait.sourceImageUrl,undefined);
+    const share = await ctx.request.post(`${base}/api/portraits/${portraitId}/share-link`);
+    assert.equal(share.status(),200);
+    assert.equal(new URL((await share.json()).url).hostname,'go.imagecrafter.app');
     assert.equal((await ctx.request.get(`${base}/api/portraits/eeadcfdf4e354582a2cdf50228ec5b02`)).status(),403);
     assert.equal((await ctx.request.get(`${base}/api/orders/create?portraitId=eeadcfdf4e354582a2cdf50228ec5b02&type=digital`)).status(),403);
     const cookies=await ctx.cookies();
@@ -62,6 +65,21 @@ try {
   assert(['1',1,true].includes(readback.contact.fields.all.ic_marketing_ok));
   assert(readback.contact.tags.some(t=>t.tag==='internal-test'));
   console.log('PASS forged origin, tampered/expired/revoked tokens, confirmed consent round-trip; test identity remains excluded');
+  const noConsentEmail='ic-launch-preview-fallback-20260922@xencolabs.com';
+  const noConsentContact=await (await fetch(s.MAUTIC_API_URL+'/api/contacts/7245',{headers})).json();
+  assert.equal(noConsentContact.contact.fields.all.email,noConsentEmail);
+  assert(noConsentContact.contact.tags.some(t=>t.tag==='internal-test'));
+  assert.equal(await db.marketingConsent.findUnique({where:{email:noConsentEmail}}),null);
+  const noConsentToken=randomBytes(32).toString('hex');
+  const noConsentData={tokenHash:createHash('sha256').update(noConsentToken).digest('hex'),expiresAt:new Date(Date.now()+86400_000),marketingRequested:false,verifiedAt:null,revokedAt:null};
+  const noConsentAccess=await db.portraitReturn.upsert({where:{portraitId_email:{portraitId,email:noConsentEmail}},create:{portraitId,email:noConsentEmail,...noConsentData},update:noConsentData});
+  try {
+    assert.equal((await ctx.request.post(endpoint,{headers:{Origin:base},data:{action:'confirm',id:portraitId,token:noConsentToken}})).status(),200);
+    assert.equal(await db.marketingConsent.findUnique({where:{email:noConsentEmail}}),null);
+    const c=await (await fetch(s.MAUTIC_API_URL+'/api/contacts/7245',{headers})).json();
+    assert(!['1',1,true].includes(c.contact.fields.all.ic_marketing_ok));
+    console.log('PASS transactional-only return does not grant marketing consent');
+  } finally {await db.portraitReturn.update({where:{id:noConsentAccess.id},data:{revokedAt:new Date()}});}
 } finally {
   if(access) await db.portraitReturn.update({where:{id:access.id},data:{revokedAt:new Date()}});
   await browser.close(); await db.$disconnect();
