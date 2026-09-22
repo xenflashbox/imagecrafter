@@ -27,6 +27,7 @@ import { trackTikTokEvent } from "@/lib/services/tiktok-events";
 import { trackMetaEvent, fbcFromFbclid } from "@/lib/services/meta-events";
 import { requireEnv } from "@/lib/env";
 import { printCheckoutEnabled } from "@/lib/launch-flags";
+import { portraitReturnAccess } from "@/lib/services/portrait-return";
 import { getPrice, DIGITAL_SKU, PriceUnavailableError } from "@/lib/services/pricing";
 
 // Built per request, not at module scope: Next.js collects page data during the
@@ -120,7 +121,8 @@ export async function GET(request: NextRequest) {
 
   const isOwner =
     (userId && portrait.userId === userId) ||
-    (sessionId && portrait.sessionId === sessionId);
+    (sessionId && portrait.sessionId === sessionId) ||
+    await portraitReturnAccess(portraitId);
 
   if (!isOwner) {
     return NextResponse.json({ success: false, error: "Not authorized" }, { status: 403 });

@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
+import { portraitReturnAccess } from "@/lib/services/portrait-return";
 
 export async function GET(
   request: NextRequest,
@@ -70,7 +71,8 @@ export async function GET(
       (userId && portrait.userId === userId) ||
       (sessionId && portrait.sessionId === sessionId);
 
-    if (!isOwner) {
+    const returnedOwner = !isOwner && await portraitReturnAccess(portraitId);
+    if (!isOwner && !returnedOwner) {
       return NextResponse.json(
         { success: false, error: "Not authorized to view this portrait" },
         { status: 403 }
@@ -83,7 +85,7 @@ export async function GET(
         id: portrait.id,
         status: portrait.status,
         previewImageUrl: portrait.previewImageUrl,
-        sourceImageUrl: portrait.sourceImageUrl,
+        ...(isOwner ? { sourceImageUrl: portrait.sourceImageUrl } : {}),
         stylePackSlug: portrait.stylePackSlug,
         styleVariantSlug: portrait.styleVariantSlug,
         subjectType: portrait.subjectType,

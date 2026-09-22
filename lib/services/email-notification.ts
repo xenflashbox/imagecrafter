@@ -58,6 +58,16 @@ const EMAIL_FROM =
   process.env.EMAIL_FROM || "ImageCrafter <hello@imagecrafter.app>";
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
 
+export async function sendPortraitReturnEmail(to: string, url: string) {
+  const safeUrl = url.replaceAll("&", "&amp;");
+  await getTransport().sendMail({
+    from: "ImageCrafter <support@imagecrafter.app>", replyTo: "support@imagecrafter.app", to,
+    subject: "Your ImageCrafter preview is ready",
+    text: `Open your saved portrait: ${url}\n\nThis private link works for seven days. Do not share it. Public sharing is available from your preview. Opening the link does not purchase anything. If you did not request it, ignore this email.\n\nImageCrafter | support@imagecrafter.app`,
+    html: `<html><body style="font-family:Arial,sans-serif;color:#1c1714;max-width:560px;margin:32px auto;padding:24px"><h1>ImageCrafter</h1><p>Your portrait preview is ready.</p><p><a href="${safeUrl}">Open your saved portrait</a></p><p>This private link works for seven days. Do not share it. Public sharing is available from your preview.</p><p>Opening the link does not purchase anything. If you did not request it, ignore this email.</p><p>Questions? Reply to support@imagecrafter.app.</p></body></html>`,
+  });
+}
+
 // =============================================================================
 // EMAIL TEMPLATES
 // =============================================================================

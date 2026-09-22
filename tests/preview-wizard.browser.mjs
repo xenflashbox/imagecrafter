@@ -3,12 +3,14 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || '/home/xen/.npm/_npx/705bc6b22212b352/node_modules/playwright');
 const base = process.argv[2] || 'http://localhost:3100';
+const consentCase = process.argv.includes('--consent');
 const browser = await chromium.launch();
 try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const catalog = await (await context.request.get(`${base}/api/portraits/style-packs`)).json();
   let catalogCalls = 0;
   const page = await context.newPage();
+  if (process.env.DEBUG_BROWSER) page.on('pageerror', error => console.error(error.message));
   await page.route('**/api/portraits/style-packs', async route => {
     catalogCalls++;
     if (catalogCalls > 1) await new Promise(resolve => setTimeout(resolve, 1500));
@@ -22,17 +24,42 @@ try {
   await page.route('**/api/portraits/upload-complete', route => route.fulfill({ json: {
     success: true, portraitId: 'test_portrait_fixture', sessionId: 'test_session_fixture',
   } }));
+  let generationCalls = 0;
   await page.route('**/api/portraits/generate', async route => {
+    generationCalls++;
+    if (consentCase && generationCalls === 1) {
+      assert.equal(route.request().postDataJSON().marketingConsent, false);
+      return route.fulfill({ status: 403, json: { success: false, code: 'email_required', error: 'Enter your email to continue.' } });
+    }
+    if (consentCase) assert.equal(route.request().postDataJSON().marketingConsent, true);
     await new Promise(resolve => setTimeout(resolve, 2500));
     await route.fulfill({ json: { success: true, previewImageUrl: 'https://images.imagecrafter.app/gallery/v4/after/d-dog-corgi--baroque.jpg' } });
   });
   await page.route('**/api/portraits/test_portrait_fixture/share-link', route => route.fulfill({ json: { url: 'https://go.imagecrafter.app/test-fixture' } }));
   await page.goto(`${base}/portraits/create`, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(2000);
+  await page.waitForFunction(() => {
+    const input = document.querySelector('input[type=file]');
+    return input && Object.keys(input).some(key => key.startsWith('__reactProps$') && typeof input[key]?.onChange === 'function');
+  });
   const photo = await context.request.get('https://images.imagecrafter.app/gallery/v4/before/d-dog-corgi.jpg');
   await page.locator('input[type=file]').setInputFiles({ name: 'fixture.jpg', mimeType: 'image/jpeg', buffer: await photo.body() });
+  if (process.env.DEBUG_BROWSER) {
+    await page.waitForTimeout(3000);
+    console.log('Photo response', photo.status(), photo.headers()['content-type']);
+    console.log((await page.locator('body').innerText()).slice(0,1800));
+  }
   await page.getByRole('button', { name: /Continue to Style Selection/ }).click();
   await page.getByRole('button', { name: 'Generate Portrait', exact: true }).click();
+  if (consentCase) {
+    const consent = page.getByRole('checkbox');
+    await consent.waitFor();
+    assert.equal(await consent.isChecked(), false);
+    await page.locator('input[type=email]').fill('qa-consent@example.test');
+    await consent.check();
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.screenshot({ path: '/tmp/ic-consent-390.png' });
+    await page.getByRole('button', { name: 'Keep Creating' }).click();
+  }
   await page.getByRole('heading', { name: 'Your portrait is ready' }).waitFor({ timeout: 10000 });
   await page.getByRole('button', { name: 'Copy link', exact: true }).waitFor();
   await page.waitForTimeout(1800);

@@ -371,6 +371,8 @@ function PreviewGatePanel({
   message,
   email,
   onEmailChange,
+  marketingConsent,
+  onMarketingConsentChange,
   onSubmitEmail,
   onCaptchaToken,
   captchaReady,
@@ -380,6 +382,8 @@ function PreviewGatePanel({
   message: string | null;
   email: string;
   onEmailChange: (v: string) => void;
+  marketingConsent: boolean;
+  onMarketingConsentChange: (v: boolean) => void;
   onSubmitEmail: () => void;
   onCaptchaToken: (token: string | null) => void;
   captchaReady: boolean;
@@ -408,7 +412,7 @@ function PreviewGatePanel({
         </p>
         <p className="text-sm text-ink-muted">
           {isEmail
-            ? "Your first portrait was on us. Drop your email and keep going — we'll send this one to you too."
+            ? "Enter your email to continue and receive a private link to your finished preview."
             : message}
         </p>
       </div>
@@ -430,6 +434,10 @@ function PreviewGatePanel({
             placeholder="you@example.com"
             className="w-full rounded-lg border border-rim bg-surface-raised px-4 py-3 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
           />
+          <label className="flex items-start gap-3 text-sm text-ink-muted">
+            <input type="checkbox" checked={marketingConsent} onChange={e => onMarketingConsentChange(e.target.checked)} className="mt-1 size-4 shrink-0" />
+            <span>Send me portrait ideas and offers from ImageCrafter. Optional; unsubscribe anytime.</span>
+          </label>
           <PrimaryButton type="submit" className="py-2 text-sm">
             <Sparkles /> Keep Creating
           </PrimaryButton>
@@ -837,6 +845,7 @@ function CreatePortraitContent() {
   const [gateCode, setGateCode] = useState<string | null>(null);
   const [gateEmail, setGateEmail] = useState("");
   const [previewEmail, setPreviewEmail] = useState<string | null>(null);
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -1091,6 +1100,7 @@ function CreatePortraitContent() {
           sessionId,
           ...(scene ? { userScene: scene } : {}),
           ...(email ? { email } : {}),
+          marketingConsent,
           ...(token ? { captchaToken: token } : {}),
         }),
       });
@@ -1358,6 +1368,8 @@ function CreatePortraitContent() {
                 message={generationError}
                 email={gateEmail}
                 onEmailChange={setGateEmail}
+                marketingConsent={marketingConsent}
+                onMarketingConsentChange={setMarketingConsent}
                 onSubmitEmail={handleGateSubmit}
                 onCaptchaToken={setCaptchaToken}
                 captchaReady={Boolean(captchaToken)}

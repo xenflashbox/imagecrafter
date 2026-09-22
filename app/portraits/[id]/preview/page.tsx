@@ -18,6 +18,7 @@ import {
   Ticket,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { portraitReturnAccess } from "@/lib/services/portrait-return";
 import { cookies } from "next/headers";
 import { auth } from "@clerk/nextjs/server";
 import { getCreditBalance } from "@/lib/services/credits";
@@ -98,7 +99,8 @@ export default async function PortraitPreviewPage({ params }: Props) {
   // Authorization
   const isOwner =
     (userId && portrait.userId === userId) ||
-    (sessionId && portrait.sessionId === sessionId);
+    (sessionId && portrait.sessionId === sessionId) ||
+    await portraitReturnAccess(portraitId);
 
   if (!isOwner) {
     return (

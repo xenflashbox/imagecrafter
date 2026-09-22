@@ -31,6 +31,7 @@ import { buildDownloadUrl } from "@/lib/services/download-token";
 import { CreditPackCards } from "@/components/credit-pack-cards";
 import { getPackCatalog, getPrice, DIGITAL_SKU } from "@/lib/services/pricing";
 import { SiteHeader, SiteFooter } from "@/components/site-chrome";
+import { portraitReturnAccess } from "@/lib/services/portrait-return";
 
 export const metadata: Metadata = {
   title: "Order Confirmed — ImageCrafter Portrait Studio",
@@ -102,10 +103,12 @@ export default async function PortraitSuccessPage({ params, searchParams }: Prop
     notFound();
   }
 
-  // Ownership verification
+  const returnedOwner = await portraitReturnAccess(portraitId);
+  // A return link grants preview access, not another checkout email's receipt.
   const isOwner =
     (userId && order.portrait?.userId === userId) ||
-    (sessionId && order.portrait?.sessionId === sessionId);
+    (sessionId && order.portrait?.sessionId === sessionId) ||
+    (returnedOwner && returnedOwner.email === order.email.toLowerCase());
 
   if (!isOwner) {
     notFound();

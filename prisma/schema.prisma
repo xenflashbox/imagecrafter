@@ -611,6 +611,7 @@ model Portrait {
 
   user              User?     @relation(fields: [userId], references: [id])
   order             Order?
+  returnAccess      PortraitReturn[]
 
   @@index([userId])
   @@index([sessionId])
@@ -714,12 +715,43 @@ model MauticCapture {
   subjectType  String?  // "pet" | "person" | "couple" | "family" | "group"
   style        String?
   previewUrl   String?  // win-back drip beat 1 re-shows the preview
+  returnUrl    String?  // private portrait-scoped capability; never use as an image
   orderId      String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@index([status])
   @@map("ic_MauticCapture")
+}
+
+model PortraitReturn {
+  id                 String @id @default(cuid())
+  portraitId         String
+  email              String
+  tokenHash          String @unique
+  expiresAt          DateTime
+  lastSentAt         DateTime @default(now())
+  marketingRequested Boolean @default(false)
+  verifiedAt         DateTime?
+  revokedAt          DateTime?
+  portrait           Portrait @relation(fields: [portraitId], references: [id], onDelete: Cascade)
+  @@unique([portraitId, email])
+  @@map("ic_PortraitReturn")
+}
+
+model MarketingConsent {
+  email       String @id
+  granted     Boolean
+  confirmedAt DateTime
+  source      String
+  @@map("ic_MarketingConsent")
+}
+
+model RecoveryRateLimit {
+  key       String @id
+  count     Int @default(1)
+  expiresAt DateTime
+  @@map("ic_RecoveryRateLimit")
 }
 
 // One row per preview generation attempt. This is the server-side anchor for
