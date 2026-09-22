@@ -49,6 +49,16 @@ class SendGuard implements EventSubscriberInterface
         if (!in_array($id, [70, 71, 72, 73, 74, 75], true)) return;
         $lead = $event->getLead();
         $leadId = is_array($lead) ? ($lead['id'] ?? 0) : ($lead?->getId() ?? 0);
+        $event->addTextHeader('X-ImageCrafter-Email', (string) $id);
+        $event->addTextHeader('X-ImageCrafter-Contact', (string) $leadId);
+        if (!$this->allowsCurrent($id, (int) $leadId)) {
+            $event->enableSkip();
+        }
+    }
+
+    public function allowsCurrent(int $id, int $leadId): bool
+    {
+        if (!in_array($id, [70, 71, 72, 73, 74, 75], true)) return true;
         try {
             // Read current DB state, not the contact snapshot stored in a deferred queue.
             $contact = $this->db->fetchAssociative('SELECT email, ic_stage, ic_source, ic_purchase_type, ic_purchased_at, ic_marketing_ok, ic_captured_at, ic_consent_at, ic_return_url, ic_return_expires_at FROM '.MAUTIC_TABLE_PREFIX.'leads WHERE id = ?', [$leadId]);
@@ -60,8 +70,8 @@ class SendGuard implements EventSubscriberInterface
             $this->logger->error('IC send guard failed closed', ['emailId' => $id, 'leadId' => $leadId, 'errorClass' => get_class($error)]);
         }
         if (!$allowed) {
-            $event->enableSkip();
             $this->logger->notice('IC send suppressed at transport boundary', ['emailId' => $id, 'leadId' => $leadId]);
         }
+        return (bool) $allowed;
     }
 }
