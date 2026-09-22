@@ -46,7 +46,19 @@ try {
     if ($observed !== [false]) throw new RuntimeException('Eligible fixture did not reach guard as eligible: '.json_encode($observed));
     echo "PASS eligible native EmailModel send, SMTP intercepted\n";
 
+    $transport = new class { public int $calls=0; public function __invoke($message): void { ++$this->calls; } };
+    $queuedGuard = new \MauticPlugin\ImageCrafterGuardBundle\QueuedSendGuard($transport, $container->get('imagecrafter.send_guard'));
+    $mime = (new \Symfony\Component\Mime\Email())->from('support@imagecrafter.app')->to('ic-qa-rollback@example.org')->text('Rollback-only queue test');
+    $mime->getHeaders()->addTextHeader('X-ImageCrafter-Email','72');
+    $mime->getHeaders()->addTextHeader('X-ImageCrafter-Contact','7244');
+    $queued = unserialize(serialize(new \Symfony\Component\Mailer\Messenger\SendEmailMessage($mime)));
+    $queuedGuard($queued);
+    if ($transport->calls !== 1) throw new RuntimeException('Eligible serialized SMTP queue was suppressed');
+
     $db->update('leads',['ic_stage'=>'buyer','ic_source'=>'purchase','ic_purchased_at'=>gmdate('Y-m-d H:i:s')],['id'=>7244]);
+    $queuedGuard($queued);
+    if ($transport->calls !== 1) throw new RuntimeException('Serialized SMTP queue bypassed purchase check');
+    echo "PASS rendered SMTP queue rechecks purchase before invoking transport\n";
     $observed=[];
     $model->sendEmail($email, $stale, ['email_type'=>MailHelper::EMAIL_TYPE_MARKETING,'ignoreDNC'=>false]);
     if ($observed !== [true]) throw new RuntimeException('Stale failed-action retry was not suppressed: '.json_encode($observed));
@@ -61,6 +73,8 @@ try {
     if ($observed !== [true]) throw new RuntimeException('Frequency-deferred native queue send was not suppressed: '.json_encode($observed));
     echo "PASS native frequency-deferred queue suppressed after purchase\n";
     $db->update('leads',['ic_stage'=>'previewer','ic_source'=>'preview','ic_purchased_at'=>null,'ic_marketing_ok'=>0],['id'=>7244]);
+    $queuedGuard($queued);
+    if ($transport->calls !== 1) throw new RuntimeException('Serialized SMTP queue bypassed consent check');
     $observed=[];
     $message = new MessageQueue(); $message->setLead($lead); $message->setChannel('email'); $message->setChannelId(72);
     (new MessageQueueSubscriber($model))->onProcessMessageQueueBatch(new MessageQueueBatchProcessEvent([$message],'email',72));
@@ -71,6 +85,12 @@ try {
     foreach (['lead_id','date_added','reason','channel'] as $field) if (!in_array($field,$dncColumns,true)) throw new RuntimeException('DNC schema mismatch');
     $db->update('leads',['ic_marketing_ok'=>1],['id'=>7244]);
     $db->insert('lead_donotcontact',['lead_id'=>7244,'date_added'=>gmdate('Y-m-d H:i:s'),'reason'=>1,'channel'=>'email']);
+    $queuedGuard($queued);
+    if ($transport->calls !== 1) throw new RuntimeException('Serialized SMTP queue bypassed DNC check');
+    $other = (new \Symfony\Component\Mime\Email())->from('support@imagecrafter.app')->to('ic-qa-rollback@example.org')->text('Unrelated message');
+    $queuedGuard(new \Symfony\Component\Mailer\Messenger\SendEmailMessage($other));
+    if ($transport->calls !== 2) throw new RuntimeException('Guard affected an unrelated message');
+    echo "PASS rendered SMTP queue respects consent/DNC and leaves unrelated mail untouched\n";
     $observed=[];
     $message = new MessageQueue(); $message->setLead($lead); $message->setChannel('email'); $message->setChannelId(72);
     (new MessageQueueSubscriber($model))->onProcessMessageQueueBatch(new MessageQueueBatchProcessEvent([$message],'email',72));
