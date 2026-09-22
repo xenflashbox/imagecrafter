@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
   try {
     switch (event.type) {
       case "checkout.session.completed":
-        await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
+        await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session, new Date(event.created * 1000));
         break;
 
       case "customer.subscription.created":
@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+async function handleCheckoutCompleted(session: Stripe.Checkout.Session, purchasedAt: Date) {
   const orderId = session.metadata?.orderId;
 
   // -------------------------------------------------------------------------
@@ -194,7 +194,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   // Detected by presence of orderId in metadata (set by /api/orders/create)
   // -------------------------------------------------------------------------
   if (orderId) {
-    await handlePortraitCheckoutCompleted(session, orderId);
+    await handlePortraitCheckoutCompleted(session, orderId, purchasedAt);
     return;
   }
 
@@ -206,7 +206,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   // -------------------------------------------------------------------------
   const packSku = session.metadata?.packSku;
   if (packSku) {
-    await handlePackCheckoutCompleted(session, packSku);
+    await handlePackCheckoutCompleted(session, packSku, purchasedAt);
     return;
   }
 
@@ -235,7 +235,8 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
 async function handlePackCheckoutCompleted(
   session: Stripe.Checkout.Session,
-  packSku: string
+  packSku: string,
+  purchasedAt: Date
 ) {
   const userId = session.metadata?.packUserId;
   if (!userId) {
@@ -297,6 +298,7 @@ async function handlePackCheckoutCompleted(
     await captureBuyer({
       stripeSessionId: session.id,
       email,
+      purchasedAt,
       name: session.customer_details?.name,
       purchaseType: "pack",
       style: pack?.name || packSku,
@@ -337,7 +339,8 @@ async function handlePackCheckoutCompleted(
 
 async function handlePortraitCheckoutCompleted(
   session: Stripe.Checkout.Session,
-  orderId: string
+  orderId: string,
+  purchasedAt: Date
 ) {
   const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
   const MAX_DOWNLOADS = parseInt(process.env.PORTRAIT_MAX_DOWNLOADS || "5");
@@ -414,6 +417,7 @@ async function handlePortraitCheckoutCompleted(
   await captureBuyer({
     stripeSessionId: session.id,
     email: customerEmail,
+    purchasedAt,
     name: customerName,
     purchaseType: order.type === "print" ? "print" : "digital",
     subjectType: order.portrait?.subjectType,
