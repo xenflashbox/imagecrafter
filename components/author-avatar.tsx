@@ -33,6 +33,7 @@ export function AuthorAvatar({
         alt={avatar.alt}
         width={size}
         height={size}
+        loading="lazy"
         className="absolute max-w-none"
         style={{
           width: `${scale}%`,
