@@ -294,6 +294,21 @@ export default async function BlogPostPage({
               {post.title}
             </h1>
 
+            {imageUrl && (
+              <figure className="mb-6 w-full" data-article-hero>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={imageUrl}
+                  alt={typeof post.featuredImage === "object" ? post.featuredImage.alt || post.title : post.title}
+                  width={typeof post.featuredImage === "object" ? post.featuredImage.width : undefined}
+                  height={typeof post.featuredImage === "object" ? post.featuredImage.height : undefined}
+                  loading="eager"
+                  fetchPriority="high"
+                  className="block h-auto w-full rounded-lg"
+                />
+              </figure>
+            )}
+
             <div className="flex flex-wrap items-center gap-4 text-sm text-ink-subtle">
               {formattedDate && (
                 <span className="flex items-center gap-1.5">
@@ -320,32 +335,6 @@ export default async function BlogPostPage({
             </div>
           </div>
         </header>
-
-        {/* Cover image */}
-        {imageUrl && (
-          <div className="max-w-4xl mx-auto px-6 pt-8">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={imageUrl}
-              alt={
-                typeof post.featuredImage === "object"
-                  ? (post.featuredImage?.alt ?? post.title)
-                  : post.title
-              }
-              width={
-                typeof post.featuredImage === "object"
-                  ? (post.featuredImage?.width ?? undefined)
-                  : undefined
-              }
-              height={
-                typeof post.featuredImage === "object"
-                  ? (post.featuredImage?.height ?? undefined)
-                  : undefined
-              }
-              className="w-full rounded-2xl object-cover max-h-96"
-            />
-          </div>
-        )}
 
         {/* Article body */}
         <div className="max-w-3xl mx-auto px-6 py-10">
@@ -381,6 +370,16 @@ export default async function BlogPostPage({
             <p className="text-ink-muted leading-relaxed">{post.excerpt}</p>
           ) : null}
         </div>
+
+        {author?.bio && (
+          <section aria-label="About the author" className="mx-auto max-w-3xl px-6 pb-10">
+            <div className="border-t border-rim pt-6">
+              <h2 className="mb-3 text-lg font-medium">About {authorName}</h2>
+              <p className="whitespace-pre-line leading-relaxed text-ink-muted">{author.bio}</p>
+              {author.slug && <Link href={`/blog/author/${author.slug}`} className="mt-3 inline-block text-accent underline">More from {authorName}</Link>}
+            </div>
+          </section>
+        )}
 
         {/* Tags */}
         {tags.length > 0 && (
@@ -481,6 +480,9 @@ export default async function BlogPostPage({
                           <img
                             src={relImg}
                             alt={related.title}
+                            width={typeof related.featuredImage === "object" ? related.featuredImage.width : undefined}
+                            height={typeof related.featuredImage === "object" ? related.featuredImage.height : undefined}
+                            loading="lazy"
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                           />
                         </div>

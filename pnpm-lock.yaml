@@ -66,8 +66,8 @@ importers:
         specifier: ^7.0.11
         version: 7.0.11
       '@xenco/editorial-blocks':
-        specifier: 0.2.0
-        version: 0.2.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+        specifier: 0.5.0
+        version: 0.5.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -1724,12 +1724,20 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@xenco/editorial-blocks@0.2.0':
-    resolution: {integrity: sha512-tXach6aLjLiQaBRIeApBkVvBXxt8hsBqeO4WXsBW/PDtWLh3gjapliGfhFPNCI0kPOQxBBr6NVqQqVS6M5RdPA==}
+  '@xenco/editorial-blocks@0.5.0':
+    resolution: {integrity: sha512-fW8QejC7lH4jtCVcJq1gHE5N7kGzxdQyFZ4IgnhTe4lzO+fb1hY4LdHR9CSVU8piK1t78Q+U2ckMZsuTE/terg==}
     engines: {node: '>=18'}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
+
+  '@xenco/site-core@0.3.0':
+    resolution: {integrity: sha512-SoJfwIClFvlw2eZeYb1VBpQAYcC3hiMq068nKNg1d8lwAh9+qyTEk4oAkmR0dzrIinznF3vCmQJHCC9HSDc/4A==}
+    engines: {node: '>=20'}
+
+  '@xenco/site-env@0.1.0':
+    resolution: {integrity: sha512-rou++aA4mb0u3kXPX0iC5F9zOhmCSNgM2ynDTWR+VKyRsKuoKrQsIZnfiUbEM7b8VPWMQXg5SAzv1QJEFPLHkA==}
+    engines: {node: '>=20'}
 
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
@@ -5332,10 +5340,17 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.11.1':
     optional: true
 
-  '@xenco/editorial-blocks@0.2.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
+  '@xenco/editorial-blocks@0.5.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
     dependencies:
+      '@xenco/site-core': 0.3.0
       react: 19.2.3
       react-dom: 19.2.3(react@19.2.3)
+
+  '@xenco/site-core@0.3.0':
+    dependencies:
+      '@xenco/site-env': 0.1.0
+
+  '@xenco/site-env@0.1.0': {}
 
   abort-controller@3.0.0:
     dependencies:
