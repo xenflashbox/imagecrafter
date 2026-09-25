@@ -29,7 +29,7 @@ export function ShareButtons({ portraitId, imageUrl }: Props) {
     if (!navigator.canShare) return;
     const controller = new AbortController();
     setShareFile(null);
-    fetch(`/api/portraits/${portraitId}/share-image`, { signal: controller.signal })
+    fetch(`/api/portraits/${portraitId}/share-image?v=2`, { signal: controller.signal })
       .then(async response => {
         if (!response.ok) return;
         const file = new File([await response.blob()], "imagecrafter-portrait.png", { type: "image/png" });
@@ -148,7 +148,7 @@ export function ShareButtons({ portraitId, imageUrl }: Props) {
         </button>
 
         <a
-          href={`/api/portraits/${portraitId}/share-image`}
+          href={`/api/portraits/${portraitId}/share-image?v=2`}
           className="inline-flex items-center gap-2 rounded-lg border border-rim px-3 py-2 text-sm text-ink-muted transition-colors hover:border-rim-strong hover:text-ink"
         >
           <Download className="size-4" /> Save image
