@@ -10,6 +10,13 @@ try {
   const catalog = await (await context.request.get(`${base}/api/portraits/style-packs`)).json();
   let catalogCalls = 0;
   const page = await context.newPage();
+  await page.addInitScript(() => {
+    window.shareChecks = { copied: [], shared: [], intents: [] };
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async value => { window.shareChecks.copied.push(value); } } });
+    Object.defineProperty(navigator, 'share', { configurable: true, value: async data => { window.shareChecks.shared.push({ url: data.url, text: data.text, files: data.files?.length }); } });
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => true });
+    window.open = url => { window.shareChecks.intents.push(url); return null; };
+  });
   if (process.env.DEBUG_BROWSER) page.on('pageerror', error => console.error(error.message));
   await page.route('**/api/portraits/style-packs', async route => {
     catalogCalls++;
@@ -35,7 +42,12 @@ try {
     await new Promise(resolve => setTimeout(resolve, 2500));
     await route.fulfill({ json: { success: true, previewImageUrl: 'https://images.imagecrafter.app/gallery/v4/after/d-dog-corgi--baroque.jpg' } });
   });
-  await page.route('**/api/portraits/test_portrait_fixture/share-link', route => route.fulfill({ json: { url: 'https://go.imagecrafter.app/test-fixture' } }));
+  let shortenerCalls = 0;
+  await page.route('**/api/portraits/test_portrait_fixture/share-link', route => {
+    shortenerCalls++;
+    return route.fulfill({ status: 503, body: 'Shortener must not be called' });
+  });
+  await page.route('**/api/portraits/test_portrait_fixture/share-image', route => route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aGNcAAAAASUVORK5CYII=', 'base64') }));
   await page.goto(`${base}/portraits/create`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => {
     const input = document.querySelector('input[type=file]');
@@ -65,6 +77,23 @@ try {
   await page.waitForTimeout(1800);
   assert.equal(catalogCalls, 1, 'Query-string update must not reload the restore catalog');
   assert.ok(await page.getByRole('heading', { name: 'Your portrait is ready' }).isVisible());
+  const direct = 'https://imagecrafter.app/p/test_portrait_fixture';
+  await page.getByRole('button', { name: 'Copy link', exact: true }).click();
+  await page.getByRole('button', { name: 'Share', exact: true }).click();
+  await page.getByRole('button', { name: 'Share image', exact: true }).click();
+  for (const name of ['Facebook', 'X', 'Pinterest']) await page.getByRole('button', { name, exact: true }).click();
+  const checks = await page.evaluate(() => window.shareChecks);
+  assert.deepEqual(checks.copied, [direct]);
+  assert.equal(checks.shared[0].url, direct);
+  assert(checks.shared[1].text.includes(direct));
+  assert.equal(checks.shared[1].files, 1);
+  assert.equal(checks.intents.length, 3);
+  for (const intent of checks.intents) {
+    const params = new URL(intent).searchParams;
+    assert.equal(params.get('u') || params.get('url'), direct);
+  }
+  assert.equal(shortenerCalls, 0);
+  console.log('PASS: clipboard, native sharing, image caption and all social buttons use direct HTTPS; no Shlink request');
   console.log('PASS: query update does not replay restoration; completed preview and sharing remain visible');
   console.log('Network fixtures only: no database rows, uploads, or paid generations created');
 } finally { await browser.close(); }

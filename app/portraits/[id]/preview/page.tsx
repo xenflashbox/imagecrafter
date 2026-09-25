@@ -222,7 +222,6 @@ export default async function PortraitPreviewPage({ params }: Props) {
             {portrait.previewImageUrl && (
               <ShareButtons
                 portraitId={portrait.id}
-                shareUrl={`${APP_URL}/p/${portrait.id}`}
                 imageUrl={portrait.previewImageUrl}
               />
             )}

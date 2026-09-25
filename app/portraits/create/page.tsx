@@ -734,7 +734,6 @@ function PreviewSection({
 
         {portraitId && <ShareButtons
           portraitId={portraitId}
-          shareUrl={`https://imagecrafter.app/p/${portraitId}`}
           imageUrl={previewUrl}
         />}
 
