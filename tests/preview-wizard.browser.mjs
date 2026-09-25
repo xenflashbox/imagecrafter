@@ -47,7 +47,7 @@ try {
     shortenerCalls++;
     return route.fulfill({ status: 503, body: 'Shortener must not be called' });
   });
-  await page.route('**/api/portraits/test_portrait_fixture/share-image', route => route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aGNcAAAAASUVORK5CYII=', 'base64') }));
+  await page.route('**/api/portraits/test_portrait_fixture/share-image?v=2', route => route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aGNcAAAAASUVORK5CYII=', 'base64') }));
   await page.goto(`${base}/portraits/create`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => {
     const input = document.querySelector('input[type=file]');
