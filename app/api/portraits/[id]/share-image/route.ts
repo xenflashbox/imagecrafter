@@ -12,6 +12,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import sharp from "sharp";
+import { ImageResponse } from "next/og";
+import { createElement } from "react";
 
 export async function GET(
   _request: NextRequest,
@@ -44,11 +46,15 @@ export async function GET(
     .resize({ width: 900, withoutEnlargement: true }).png().toBuffer({ resolveWithObject: true });
   const width = preview.info.width;
   const footerHeight = Math.round(width * 0.16);
-  const footer = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${footerHeight}">
-    <rect width="100%" height="100%" fill="#ffffff"/>
-    <text x="50%" y="40%" text-anchor="middle" font-family="sans-serif" font-size="${Math.round(width * 0.038)}" font-weight="bold" fill="#182c29">ImageCrafter</text>
-    <text x="50%" y="75%" text-anchor="middle" font-family="sans-serif" font-size="${Math.round(width * 0.025)}" fill="#182c29">Make your own at imagecrafter.app</text>
-  </svg>`);
+  // ImageResponse bundles its font; serverless hosts may have no system fonts
+  // for Sharp's SVG text renderer, which otherwise produces missing-glyph boxes.
+  const footerResponse = new ImageResponse(createElement("div", {
+    style: { width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: Math.round(width * 0.015), background: "#ffffff", color: "#182c29" },
+  },
+  createElement("div", { style: { fontSize: Math.round(width * 0.038), fontWeight: 700 } }, "ImageCrafter"),
+  createElement("div", { style: { fontSize: Math.round(width * 0.025) } }, "Make your own at https://imagecrafter.app")),
+  { width, height: footerHeight });
+  const footer = Buffer.from(await footerResponse.arrayBuffer());
   const branded = await sharp(preview.data).extend({ bottom: footerHeight, background: "#ffffff" })
     .composite([{ input: footer, top: preview.info.height, left: 0 }]).png().toBuffer();
 
