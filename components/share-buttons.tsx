@@ -5,8 +5,6 @@ import { Check, Copy, Download, Facebook, Share2, Twitter } from "lucide-react";
 
 interface Props {
   portraitId: string;
-  /** Public /p/[id] URL — the preview route itself is owner-gated. */
-  shareUrl: string;
   /** Public R2 preview, needed by Pinterest's media param. */
   imageUrl: string;
 }
@@ -22,12 +20,10 @@ function PinterestIcon({ className }: { className?: string }) {
   );
 }
 
-export function ShareButtons({ portraitId, shareUrl, imageUrl }: Props) {
+export function ShareButtons({ portraitId, imageUrl }: Props) {
   const [copied, setCopied] = useState(false);
-  const [url, setUrl] = useState(shareUrl);
+  const url = `https://imagecrafter.app/p/${encodeURIComponent(portraitId)}`;
   const [error, setError] = useState("");
-  const [retry, setRetry] = useState(0);
-  const [linkError, setLinkError] = useState(false);
   const [shareFile, setShareFile] = useState<File | null>(null);
   useEffect(() => {
     if (!navigator.canShare) return;
@@ -43,19 +39,6 @@ export function ShareButtons({ portraitId, shareUrl, imageUrl }: Props) {
       });
     return () => controller.abort();
   }, [portraitId]);
-  useEffect(() => {
-    const controller = new AbortController();
-    setUrl(shareUrl);
-    setLinkError(false);
-    fetch(`/api/portraits/${portraitId}/share-link`, { method: "POST", signal: controller.signal })
-      .then(async response => {
-        if (!response.ok) throw new Error("Branded link unavailable");
-        const data = await response.json();
-        if (!controller.signal.aborted) setUrl(data.url);
-      }).catch(error => { if (error.name !== "AbortError") setLinkError(true); });
-    return () => controller.abort();
-  }, [portraitId, shareUrl, retry]);
-
   const openIntent = (url: string) =>
     window.open(url, "_blank", "noopener,noreferrer,width=620,height=680");
 
@@ -171,7 +154,6 @@ export function ShareButtons({ portraitId, shareUrl, imageUrl }: Props) {
           <Download className="size-4" /> Save image
         </a>
       </div>
-      {linkError && <p role="status" className="mt-3 text-sm text-ink-muted">Branded link unavailable; sharing your direct preview link. <button onClick={() => setRetry(value => value + 1)} className="underline">Retry</button></p>}
       {error && <div role="alert" className="mt-3 text-sm"><p>{error}</p><input aria-label="Preview link" readOnly value={url} onFocus={event => event.target.select()} className="mt-2 w-full min-w-0 border border-rim bg-canvas p-2" /></div>}
     </div>
   );
