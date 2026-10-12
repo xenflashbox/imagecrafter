@@ -1,7 +1,9 @@
 /**
- * Prodigi Print Fulfillment Service
+ * Print Fulfillment Service
  *
- * Handles all communication with the Prodigi Print-on-Demand API (v4.0).
+ * Gelato is the primary print-on-demand provider. Prodigi remains as the hot
+ * fallback for legacy SKUs and temporary Gelato failures.
+ *
  * Reference: https://www.prodigi.com/print-api/docs/reference/
  *
  * Sandbox vs Production is controlled by USE_PRODIGI_SANDBOX env var.
@@ -33,6 +35,12 @@ const PRODIGI_API_KEY = USE_SANDBOX
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app";
 const WEBHOOK_SECRET = process.env.PRODIGI_WEBHOOK_SECRET || "";
+const GELATO_API_KEY = process.env.GELATO_API_KEY || "";
+const GELATO_STORE_ID = process.env.GELATO_STORE_ID || "";
+const GELATO_ORDERS_URL =
+  process.env.GELATO_ORDERS_URL || "https://order.gelatoapis.com/v4";
+const USE_GELATO_PRIMARY = process.env.USE_GELATO_PRIMARY !== "false";
+const GELATO_FALLBACK_TO_PRODIGI = process.env.GELATO_FALLBACK_TO_PRODIGI !== "false";
 
 // =============================================================================
 // PRINT PRODUCT CATALOG
@@ -49,6 +57,8 @@ export type CanvasWrap = "ImageWrap" | "Black" | "White";
 export interface PrintProduct {
   sku: string;                // Our internal SKU (stored in Order.printProductSku)
   prodigiSku: string;         // Prodigi product SKU
+  gelatoProductUid?: string;  // Gelato productUid for products with no options
+  gelatoProductUids?: Partial<Record<FrameColor, string>>;
   name: string;
   format: PrintFormat;
   size: string;               // Human-readable (e.g. "8×10"")
@@ -61,24 +71,24 @@ export interface PrintProduct {
 
 export const PRINT_CATALOG: PrintProduct[] = [
   // --- ART PRINTS (Fine Art Paper) ---
-  { sku: "ART-8x10",   prodigiSku: "GLOBAL-FAP-8X10",   name: '8×10" Art Print',   format: "art_print",      size: '8×10"',   dimensionsIn: "8X10" },
-  { sku: "ART-12x16",  prodigiSku: "GLOBAL-FAP-12X16",  name: '12×16" Art Print',  format: "art_print",      size: '12×16"',  dimensionsIn: "12X16" },
-  { sku: "ART-16x20",  prodigiSku: "GLOBAL-FAP-16X20",  name: '16×20" Art Print',  format: "art_print",      size: '16×20"',  dimensionsIn: "16X20" },
-  { sku: "ART-24x36",  prodigiSku: "GLOBAL-FAP-24X36",  name: '24×36" Art Print',  format: "art_print",      size: '24×36"',  dimensionsIn: "24X36" },
+  { sku: "ART-8x10",   prodigiSku: "GLOBAL-FAP-8X10",   gelatoProductUid: "fine_arts_poster_geo_simplified_product_12-0_ver_200x250-mm-8x10-inch_200-gsm-80lb-enhanced-uncoated", name: '8×10" Art Print',   format: "art_print",      size: '8×10"',   dimensionsIn: "8X10" },
+  { sku: "ART-12x16",  prodigiSku: "GLOBAL-FAP-12X16",  gelatoProductUid: "fine_arts_poster_geo_simplified_product_12-0_ver_300x400-mm-12x16-inch_200-gsm-80lb-enhanced-uncoated", name: '12×16" Art Print',  format: "art_print",      size: '12×16"',  dimensionsIn: "12X16" },
+  { sku: "ART-16x20",  prodigiSku: "GLOBAL-FAP-16X20",  gelatoProductUid: "fine_arts_poster_geo_simplified_product_12-0_ver_400x500-mm-16x20-inch_200-gsm-80lb-enhanced-uncoated", name: '16×20" Art Print',  format: "art_print",      size: '16×20"',  dimensionsIn: "16X20" },
+  { sku: "ART-24x36",  prodigiSku: "GLOBAL-FAP-24X36",  gelatoProductUid: "fine_arts_poster_geo_simplified_product_12-0_ver_600x900-mm-24x36-inch_200-gsm-80lb-enhanced-uncoated", name: '24×36" Art Print',  format: "art_print",      size: '24×36"',  dimensionsIn: "24X36" },
 
-  // --- FRAMED PRINTS (Classic Framed Metal) ---
-  { sku: "FRAME-8x10",  prodigiSku: "GLOBAL-CFPM-8X10",  name: '8×10" Framed Print',  format: "framed_print", size: '8×10"',  dimensionsIn: "8X10",  frameOptions: ["black","white","natural","gold","silver"], defaultFrame: "black" },
-  { sku: "FRAME-12x16", prodigiSku: "GLOBAL-CFPM-12X16", name: '12×16" Framed Print', format: "framed_print", size: '12×16"', dimensionsIn: "12X16", frameOptions: ["black","white","natural","gold","silver"], defaultFrame: "black" },
-  { sku: "FRAME-16x20", prodigiSku: "GLOBAL-CFPM-16X20", name: '16×20" Framed Print', format: "framed_print", size: '16×20"', dimensionsIn: "16X20", frameOptions: ["black","white","natural","gold","silver"], defaultFrame: "black" },
+  // --- FRAMED PRINTS (Gelato activated vertical fine-art framed posters) ---
+  { sku: "FRAME-8x10",  prodigiSku: "GLOBAL-CFPM-8X10",  name: '8×10" Framed Print',  format: "framed_print", size: '8×10"',  dimensionsIn: "8X10",  frameOptions: ["black"], defaultFrame: "black", gelatoProductUids: { black: "framed_fine_arts_poster_geo_simplified_product_12-0_black_aluminum_w10xt22-mm_plexiglass_ver_200x250-mm-8x10-inch_200x250-mm-8x10-inch_200-gsm-80lb-enhanced-uncoated" } },
+  { sku: "FRAME-12x16", prodigiSku: "GLOBAL-CFPM-12X16", name: '12×16" Framed Print', format: "framed_print", size: '12×16"', dimensionsIn: "12X16", frameOptions: ["black"], defaultFrame: "black", gelatoProductUids: { black: "framed_fine_arts_poster_geo_simplified_product_12-0_black_aluminum_w10xt22-mm_plexiglass_ver_300x400-mm-12x16-inch_300x400-mm-12x16-inch_200-gsm-80lb-enhanced-uncoated" } },
+  { sku: "FRAME-16x20", prodigiSku: "GLOBAL-CFPM-16X20", name: '16×20" Framed Print', format: "framed_print", size: '16×20"', dimensionsIn: "16X20", frameOptions: ["black"], defaultFrame: "black", gelatoProductUids: { black: "framed_fine_arts_poster_geo_simplified_product_12-0_black_aluminum_w10xt22-mm_plexiglass_ver_400x500-mm-16x20-inch_400x500-mm-16x20-inch_200-gsm-80lb-enhanced-uncoated" } },
 
   // --- CANVAS (Stretched) ---
-  { sku: "CANVAS-12x12", prodigiSku: "GLOBAL-CAN-12X12", name: '12×12" Canvas',    format: "canvas", size: '12×12"', dimensionsIn: "12X12", wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
-  { sku: "CANVAS-16x20", prodigiSku: "GLOBAL-CAN-16X20", name: '16×20" Canvas',    format: "canvas", size: '16×20"', dimensionsIn: "16X20", wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
-  { sku: "CANVAS-24x36", prodigiSku: "GLOBAL-CAN-24X36", name: '24×36" Canvas',    format: "canvas", size: '24×36"', dimensionsIn: "24X36", wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
+  { sku: "CANVAS-12x12", prodigiSku: "GLOBAL-CAN-12X12", gelatoProductUid: "canvas_300x300-mm-12x12-inch_canvas_wood-fsc-slim_4-0_ver", name: '12×12" Canvas',    format: "canvas", size: '12×12"', dimensionsIn: "12X12", wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
+  { sku: "CANVAS-16x20", prodigiSku: "GLOBAL-CAN-16X20", gelatoProductUid: "canvas_400x500-mm-16x20-inch_canvas_wood-fsc-slim_4-0_ver", name: '16×20" Canvas',    format: "canvas", size: '16×20"', dimensionsIn: "16X20", wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
+  { sku: "CANVAS-24x36", prodigiSku: "GLOBAL-CAN-24X36", gelatoProductUid: "canvas_600x900-mm-24x36-inch_canvas_wood-fsc-slim_4-0_ver", name: '24×36" Canvas',    format: "canvas", size: '24×36"', dimensionsIn: "24X36", wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
 
   // --- FRAMED CANVAS ---
-  { sku: "FCANVAS-16x20", prodigiSku: "GLOBAL-FRA-CAN-16X20", name: '16×20" Framed Canvas', format: "framed_canvas", size: '16×20"', dimensionsIn: "16X20", frameOptions: ["black","white","natural","gold"], defaultFrame: "black", wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
-  { sku: "FCANVAS-24x36", prodigiSku: "GLOBAL-FRA-CAN-24X36", name: '24×36" Framed Canvas', format: "framed_canvas", size: '24×36"', dimensionsIn: "24X36", frameOptions: ["black","white","natural","gold"], defaultFrame: "black", wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap" },
+  { sku: "FCANVAS-16x20", prodigiSku: "GLOBAL-FRA-CAN-16X20", name: '16×20" Framed Canvas', format: "framed_canvas", size: '16×20"', dimensionsIn: "16X20", frameOptions: ["black"], defaultFrame: "black", wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap", gelatoProductUids: { black: "framed_canvas_geo_simplified_400x500-mm-16x20-inch_black_452x552-mm-18x22-inch_wood-fsc-slim_ver_wood_w14xt42-mm_canvas_4-0" } },
+  { sku: "FCANVAS-24x36", prodigiSku: "GLOBAL-FRA-CAN-24X36", name: '24×36" Framed Canvas', format: "framed_canvas", size: '24×36"', dimensionsIn: "24X36", frameOptions: ["black"], defaultFrame: "black", wrapOptions: ["ImageWrap","Black","White"], defaultWrap: "ImageWrap", gelatoProductUids: { black: "framed_canvas_geo_simplified_600x900-mm-24x36-inch_black_652x952-mm-26x38-inch_wood-fsc-slim_ver_wood_w14xt42-mm_canvas_4-0" } },
 ];
 
 // Legacy Phase 3 SKU aliases → new catalog (backward compatible)
@@ -132,6 +142,38 @@ interface ProdigiOrderRequest {
   items: ProdigiItem[];
   callbackUrl?: string;
   metadata?: Record<string, unknown>;
+}
+
+interface GelatoOrderRequest {
+  orderType: "order";
+  orderReferenceId: string;
+  customerReferenceId: string;
+  currency: "USD";
+  shipmentMethodUid: "normal" | "standard" | "express";
+  items: Array<{
+    itemReferenceId: string;
+    productUid: string;
+    files: Array<{ type: "default"; url: string }>;
+    quantity: number;
+  }>;
+  shippingAddress: {
+    firstName: string;
+    lastName: string;
+    addressLine1: string;
+    addressLine2?: string;
+    state?: string;
+    city: string;
+    postCode: string;
+    country: string;
+    email: string;
+  };
+  metadata: Array<{ key: string; value: string }>;
+}
+
+interface GelatoOrderResponse {
+  id: string;
+  fulfillmentStatus?: string;
+  financialStatus?: string;
 }
 
 export interface ProdigiShipment {
@@ -209,6 +251,33 @@ async function prodigiRequest<T>(
   return JSON.parse(text) as T;
 }
 
+async function gelatoRequest<T>(
+  method: "GET" | "POST",
+  path: string,
+  body?: unknown
+): Promise<T> {
+  if (!GELATO_API_KEY) {
+    throw new Error("GELATO_API_KEY is not configured");
+  }
+  const res = await fetch(`${GELATO_ORDERS_URL}${path}`, {
+    method,
+    headers: {
+      "X-API-KEY": GELATO_API_KEY,
+      "Content-Type": "application/json",
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(
+      `Gelato API error ${res.status} for ${method} ${path}: ${text}`
+    );
+  }
+
+  return JSON.parse(text) as T;
+}
+
 // =============================================================================
 // CORE SERVICE FUNCTIONS
 // =============================================================================
@@ -232,6 +301,97 @@ export interface CreateProdigiOrderParams {
   };
 }
 
+function splitName(name: string): { firstName: string; lastName: string } {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: "Customer", lastName: "ImageCrafter" };
+  if (parts.length === 1) return { firstName: parts[0], lastName: "Customer" };
+  return { firstName: parts.slice(0, -1).join(" "), lastName: parts.at(-1)! };
+}
+
+function resolveGelatoProductUid(
+  product: PrintProduct,
+  frame?: string
+): string | null {
+  if (product.gelatoProductUid) return product.gelatoProductUid;
+  const color = (frame || product.defaultFrame || "black") as FrameColor;
+  return product.gelatoProductUids?.[color] || null;
+}
+
+async function createGelatoOrder(
+  params: CreateProdigiOrderParams
+): Promise<{ prodigiOrderId: string; stage: string }> {
+  const product = resolveSku(params.sku);
+  if (!product) {
+    throw new Error(`Unknown print SKU: ${params.sku}`);
+  }
+  if (!GELATO_STORE_ID) {
+    throw new Error("GELATO_STORE_ID is not configured");
+  }
+  const productUid = resolveGelatoProductUid(product, params.frame);
+  if (!productUid) {
+    throw new Error(
+      `No Gelato productUid for ${product.sku} frame=${params.frame || product.defaultFrame || "none"}`
+    );
+  }
+  if (!params.recipient.email) {
+    throw new Error("Gelato print orders require a recipient email");
+  }
+
+  const { firstName, lastName } = splitName(params.recipient.name);
+  const requestBody: GelatoOrderRequest = {
+    orderType: "order",
+    orderReferenceId: params.orderId,
+    customerReferenceId: params.portraitId,
+    currency: "USD",
+    shipmentMethodUid: "normal",
+    items: [
+      {
+        itemReferenceId: `${params.orderId}-item-1`,
+        productUid,
+        files: [{ type: "default", url: params.hiResImageUrl }],
+        quantity: 1,
+      },
+    ],
+    shippingAddress: {
+      firstName,
+      lastName,
+      addressLine1: params.recipient.line1,
+      addressLine2: params.recipient.line2 || undefined,
+      city: params.recipient.city,
+      state: params.recipient.state || undefined,
+      postCode: params.recipient.zip,
+      country: params.recipient.country,
+      email: params.recipient.email,
+    },
+    metadata: [
+      { key: "provider", value: "gelato" },
+      { key: "storeId", value: GELATO_STORE_ID },
+      { key: "orderId", value: params.orderId },
+      { key: "portraitId", value: params.portraitId },
+      { key: "sku", value: product.sku },
+    ],
+  };
+
+  const response = await gelatoRequest<GelatoOrderResponse>(
+    "POST",
+    "/orders",
+    requestBody
+  );
+  if (!response.id) {
+    throw new Error("Gelato returned success but no order id");
+  }
+
+  const stage = `gelato:${response.fulfillmentStatus || "created"}`;
+  console.log(
+    `[print-fulfillment] Gelato order ${response.id} accepted (status=${stage}) for Order ${params.orderId}`
+  );
+
+  return {
+    prodigiOrderId: response.id,
+    stage,
+  };
+}
+
 /**
  * Submit a print order to Prodigi after payment is confirmed.
  * Returns the Prodigi order ID to store in Order.prodigiOrderId.
@@ -239,6 +399,20 @@ export interface CreateProdigiOrderParams {
 export async function createProdigiOrder(
   params: CreateProdigiOrderParams
 ): Promise<{ prodigiOrderId: string; stage: string }> {
+  if (USE_GELATO_PRIMARY && GELATO_API_KEY && GELATO_STORE_ID) {
+    try {
+      return await createGelatoOrder(params);
+    } catch (gelatoError) {
+      if (!GELATO_FALLBACK_TO_PRODIGI) {
+        throw gelatoError;
+      }
+      console.error(
+        `[print-fulfillment] Gelato submission failed for Order ${params.orderId}; falling back to Prodigi:`,
+        gelatoError
+      );
+    }
+  }
+
   const product = resolveSku(params.sku);
   if (!product) {
     throw new Error(`Unknown print SKU: ${params.sku}`);

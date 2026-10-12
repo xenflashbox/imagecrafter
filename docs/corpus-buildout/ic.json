@@ -1,0 +1,34 @@
+{
+  "property": "ic",
+  "site_domain": "imagecrafter.app",
+  "niche": "Custom pet and family portraits from a photo: the art-historical styles they imitate, the animals they depict, and the print media they are delivered on",
+  "archetype": "knowledge",
+  "r2_bucket": "imagecrafter",
+  "r2_public_domain": "media.imagecrafter.app",
+  "notes": "This property publishes two very different kinds of claim under one byline and only one of them is currently sourced. The portrait-style half (Baroque, Victorian, Renaissance, Regal) is art history: a claim about what Baroque lighting is, or what a Van Dyck pose looked like, is checkable against a museum catalogue and must be. The other half is animal cognition - 'Do Dogs and Cats Know When They Are Loved', 'Can Cats Watch TV' - and those are YMYL-adjacent scientific claims about a reader's pet that were written with the site profile set to citation_required=false and 'user testimonials' listed as a preferred source type. A testimonial is not evidence about feline vision. The third entity is the product itself: canvas, giclee, archival rating, sizing and turnaround are factual and are what a buyer complains about when wrong, so a print claim needs the manufacturer's or standards body's own specification, never a marketing page. Where the honest answer is that the research does not settle a question - most claims about what a pet feels - the corpus should carry the uncertainty rather than a confident chunk, because the article will otherwise assert it.",
+  "extra_citation_tiers": ["museum_or_archive", "peer_reviewed", "veterinary_body",
+                           "manufacturer_spec", "standards_body"],
+  "entities": [
+    {
+      "name": "art_style",
+      "description": "A period or school a portrait imitates: Baroque, Renaissance, Victorian, Rococo, Dutch Golden Age, Regency, Neoclassical, Pop Art. A chunk is a sourced statement of what the style actually did - its lighting, palette, pose conventions, costume, framing - attributable to a named work, painter or museum catalogue entry.",
+      "chunk_types": ["style_convention", "period_attribution", "named_work_reference",
+                      "technique_description", "costume_or_regalia_fact",
+                      "art_historical_correction"]
+    },
+    {
+      "name": "animal",
+      "description": "A species or breed the site depicts and writes about: dogs, cats, horses, birds, small mammals. Chunks cover anatomy relevant to depiction (coat, eye, conformation) and - separately and more strictly - behaviour and cognition, which require a peer-reviewed study or a veterinary body and must carry the study's limits.",
+      "chunk_types": ["breed_standard", "anatomy_fact", "behaviour_finding",
+                      "cognition_study", "welfare_guidance", "veterinary_position",
+                      "uncertainty_note", "myth_correction"]
+    },
+    {
+      "name": "print_medium",
+      "description": "What the finished portrait is delivered on and how it behaves over time: stretched canvas, giclee on cotton rag, framed print, acrylic, metal. Chunks are specifications - substrate weight, ink set, archival/lightfastness rating, colour gamut, standard sizes, mounting and care - taken from the manufacturer's or a standards body's own documentation.",
+      "chunk_types": ["substrate_spec", "ink_or_pigment_spec", "archival_rating",
+                      "colour_management_fact", "size_or_format_standard",
+                      "framing_or_mounting_spec", "care_instruction"]
+    }
+  ]
+}

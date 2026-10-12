@@ -534,8 +534,9 @@ async function handlePortraitCheckoutCompleted(
       console.log(`[stripe-webhook] Print order ${orderId} paid — confirmation email sent to ${customerEmail}`);
     }
 
-    // --- PRODIGI FULFILLMENT (Phase 4) ---
-    // Submit to Prodigi immediately after payment confirmed.
+    // --- PRINT FULFILLMENT ---
+    // Submit to Gelato immediately after payment confirmed; Prodigi remains a
+    // fallback inside the fulfillment service.
     // Failures are logged but do NOT block the webhook response —
     // the order can be re-submitted manually via /api/print/order.
     const hiResUrl = order.portrait?.hiResImageUrl;
@@ -576,16 +577,16 @@ async function handlePortraitCheckoutCompleted(
         });
 
         console.log(
-          `[stripe-webhook] Prodigi order ${prodigiOrderId} created for print order ${orderId}`
+          `[stripe-webhook] Print fulfillment order ${prodigiOrderId} created for print order ${orderId} (stage=${stage})`
         );
-      } catch (prodigiError) {
+      } catch (fulfillmentError) {
         // Don't fail the webhook (payment already settled), but PERSIST the
         // failure — a log line alone left paid-but-unfulfilled orders
         // invisible (fail-open audit, fix directive P1#3). Re-submit
         // manually via /api/print/order.
         console.error(
-          `[stripe-webhook] Prodigi submission failed for order ${orderId}:`,
-          prodigiError
+          `[stripe-webhook] Print fulfillment submission failed for order ${orderId}:`,
+          fulfillmentError
         );
         await prisma.order.update({
           where: { id: orderId },
@@ -594,7 +595,7 @@ async function handlePortraitCheckoutCompleted(
       }
     } else {
       console.warn(
-        `[stripe-webhook] Skipping Prodigi submission for order ${orderId}: missing hi-res URL or shipping address`
+        `[stripe-webhook] Skipping print fulfillment submission for order ${orderId}: missing hi-res URL or shipping address`
       );
       await prisma.order.update({
         where: { id: orderId },

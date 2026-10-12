@@ -2,7 +2,7 @@
  * GET /api/print/products
  *
  * Returns the complete print product catalog with pricing, sizes,
- * frame/wrap options, and Prodigi SKU mapping.
+ * frame/wrap options, and fulfillment SKU mapping.
  *
  * PUBLIC — no authentication required.
  * The catalog itself is static; the amounts come from Stripe, so the client
@@ -44,6 +44,7 @@ export async function GET(_request: NextRequest) {
 
   return NextResponse.json({
     success: true,
+    provider: process.env.GELATO_API_KEY && process.env.GELATO_STORE_ID ? "gelato" : "prodigi",
     sandbox: isProdigiSandbox(),
     products: priced,
     grouped,

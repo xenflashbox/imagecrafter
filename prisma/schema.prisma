@@ -637,10 +637,10 @@ model Order {
   // Print fulfillment (Prodigi)
   printProductSku   String?   // Prodigi product SKU
   printSize         String?   // "8x10", "12x16", "16x20", "24x36"
-  printFrame        String?   // "none", "black", "white", "natural", "gold", "silver"
+  printFrame        String?   // "none", "black", "white", "natural", "gold", "silver" (Gelato primary currently exposes black only)
   printFormat       String?   // "canvas", "framed_print", "art_print"
-  prodigiOrderId    String?   // Prodigi's order reference
-  prodigiStatus     String?   // Prodigi fulfillment status
+  prodigiOrderId    String?   // Fulfillment provider order reference (legacy column name)
+  prodigiStatus     String?   // Fulfillment status, prefixed when provider is not Prodigi
   trackingNumber    String?   // shipping tracking
   trackingUrl       String?   // carrier tracking URL
 
