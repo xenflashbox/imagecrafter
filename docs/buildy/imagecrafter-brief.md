@@ -283,4 +283,4 @@ TikTok and Meta pixels + server-side CAPI events are live on the site (`PageView
 
 | Date | Change |
 |---|---|
-| 2026-10-12 | Brief created. Prices read live from Stripe. Gelato store `f36dfb88…` created, replaces Prodigi as primary; Prodigi stays as fallback. Frame colours drop silver/gold with the Gelato cutover — now black/white/natural only. |
+| 2026-10-12 | Brief created. Prices read live from Stripe. Gelato store `f36dfb88…` created, replaces Prodigi as primary; Prodigi stays as fallback. Frame colours are black only with the Gelato cutover. |
