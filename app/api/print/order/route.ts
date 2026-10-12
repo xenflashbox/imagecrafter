@@ -1,12 +1,12 @@
 /**
  * POST /api/print/order
  *
- * Internal route: manually triggers Prodigi order creation for an existing
+ * Internal route: manually triggers print order creation for an existing
  * paid print Order. Used for:
- *  - Admin re-submission after a failed Prodigi call
+ *  - Admin re-submission after a failed fulfillment call
  *  - Manual retry from the dashboard
  *
- * Normally Prodigi is called automatically from the Stripe webhook.
+ * Normally fulfillment is called automatically from the Stripe webhook.
  * This endpoint exists for operational resilience.
  *
  * Auth: requires Clerk session (subscribers/admins only).
@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
       printFrame: true,
       printFormat: true,
       prodigiOrderId: true,
+      email: true,
       shippingName: true,
       shippingLine1: true,
       shippingLine2: true,
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest) {
 
   if (order.prodigiOrderId) {
     return NextResponse.json(
-      { success: false, error: `Prodigi order already exists: ${order.prodigiOrderId}` },
+      { success: false, error: `Print fulfillment order already exists: ${order.prodigiOrderId}` },
       { status: 409 }
     );
   }
@@ -106,6 +107,7 @@ export async function POST(request: NextRequest) {
     wrap: undefined,
     recipient: {
       name: order.shippingName || "Customer",
+      email: order.email,
       line1: order.shippingLine1,
       line2: order.shippingLine2 || undefined,
       city: order.shippingCity,
@@ -124,5 +126,5 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  return NextResponse.json({ success: true, prodigiOrderId, stage });
+  return NextResponse.json({ success: true, fulfillmentOrderId: prodigiOrderId, prodigiOrderId, stage });
 }
