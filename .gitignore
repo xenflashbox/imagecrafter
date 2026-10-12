@@ -49,6 +49,10 @@ imagecrafter.zip
 docs/*
 # except the brand system, which every design sprint is required to cite
 !docs/brand-system-v1.md
+!docs/buildy/
+!docs/buildy/**
+!docs/corpus-buildout/
+!docs/corpus-buildout/**
 
 # Architect direction artifacts (operational, not source)
 ASSESSMENT-DIRECTIVE-*.md
