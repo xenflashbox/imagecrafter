@@ -6,7 +6,7 @@
 
 ## How this is different from Prodigi
 
-Prodigi order submission uses a static SKU string like `GLOBAL-FAP-8X10` plus a size attribute. Gelato's `productUid` encodes **everything** — paper type, orientation, size, frame material, canvas thickness, finish — in one slug. Below are the resolved slugs. These are what IC's `lib/services/gelato-fulfillment.ts` (not yet written) will call Gelato with. The ImageCrafter store in Gelato Studio **does not need storefront products** to receive orders this way — orders go through the Order API, not the Ecommerce API.
+Prodigi order submission uses a static SKU string like `GLOBAL-FAP-8X10` plus a size attribute. Gelato's `productUid` encodes **everything** — paper type, orientation, size, frame material, canvas thickness, finish — in one slug. Below are the resolved slugs. These are what IC's `lib/services/print-fulfillment.ts` calls Gelato with. The ImageCrafter store in Gelato Studio **does not need storefront products** to receive orders this way — orders go through the Order API, not the Ecommerce API.
 
 ## Mapping table
 
