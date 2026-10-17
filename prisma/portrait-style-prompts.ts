@@ -1,0 +1,15 @@
+export const DISCO_PROMPT = `A photograph taken inside a real Brooklyn discotheque in 1977: a waist-up, three-quarter portrait of {{subject}}, with the face large and clearly readable, never a distant full-body stage shot. A person wears authentic late-1970s evening clothes in one committed color: a wide-lapel suit over an open-collar patterned shirt, a wrap dress, a satin halter dress, or a wide-legged jumpsuit. An animal wears a fitted miniature wide-lapel jacket and patterned shirtfront around the torso only; never trousers, platform shoes, or clothing wrapped around all four legs. Hair and grooming are period appropriate. {{style_modifiers}}. Behind the subject is a real, slightly crowded room thrown out of focus: a dance floor lit from below, leather banquettes, a working bar, a mirror ball, and patrons dancing. The room light is warm and practical, not a graphic stage set. No neon shapes, lasers, LED wash, purple cast, cartoon scenery, theatrical backdrop, feather boa, or novelty costume. No lettering, signage, logos, or brand names. Shot on Ektachrome with direct on-camera flash, natural photographic depth, blown highlights, warm film grain, and motion blur behind the subject.`;
+
+export const DISCO_MODIFIERS = {
+  mood: "alive, confident, candid, a real night out",
+  palette: "warm amber, red and orange room light against natural saturated clothing colors",
+  lighting: "direct on-camera flash, tungsten practicals, mirror-ball scatter, and a floor lit from below",
+};
+
+export const EGYPTIAN_PROMPT = `A museum-quality New Kingdom royal portrait of {{subject}}, shown front-facing with the head level and the face centered on the vertical axis. Preserve a lifelike, naturally proportioned face. The subject wears a broad, fitted gold and lapis lazuli collar and finely embroidered linen royal garments. {{style_modifiers}}. Regalia must conform to the subject's real anatomy and cast natural contact shadows. For a human subject, use a symmetrical, properly fitted nemes whose center stripe aligns exactly with the nose and forehead. For an animal subject, keep both ears fully visible, natural, and uncompressed. Use a low fitted circlet or a small centered forehead ornament between the ears only when it can sit naturally on the skull. For floppy-eared or unsuitable head shapes, omit the head ornament entirely and let the collar and garments carry the royal styling. Never force a human headdress over animal ears. No floating, pasted-on, tilted, off-center, oversized, clipping, or asymmetrical headwear. Hieroglyphic cartouches and sacred symbols frame the composition, with temple columns and the Nile at sunset behind the subject. Rich New Kingdom-inspired painting with precise gold leaf accents in gold, lapis blue, terracotta, and papyrus cream.`;
+
+export const EGYPTIAN_MODIFIERS = {
+  mood: "divine authority, eternal, sacred",
+  palette: "gold, lapis lazuli blue, terracotta, black kohl, papyrus cream",
+  lighting: "warm desert sunset with soft frontal fill and realistic contact shadows",
+};
