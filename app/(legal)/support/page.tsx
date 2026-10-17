@@ -84,8 +84,9 @@ export default function SupportPage() {
         <p>
           Email us from the address you generated it with and it comes down, no
           questions asked. Buying a portrait also ends the gallery licence
-          automatically. We never publish your original photograph, your name or
-          your email address — see the{" "}
+          automatically. For unpaid pet previews, the gallery may show the
+          uploaded pet photo beside the generated portrait. We do not publish
+          your name or email address — see the{" "}
           <Link href="/privacy">privacy policy</Link>.
         </p>
 

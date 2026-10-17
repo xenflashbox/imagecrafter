@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { createPortraitShareLink } from "@/lib/services/portrait-sharing";
 import { portraitReturnAccess } from "@/lib/services/portrait-return";
+import { attributionFromRequest, clientIp, logAnalyticsEvent } from "@/lib/services/analytics";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -21,6 +22,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
   try {
     const url = await createPortraitShareLink(id);
+    const attribution = attributionFromRequest(request);
+    await logAnalyticsEvent({
+      eventName: "share_link_created",
+      sessionId: sessionId || null,
+      userId,
+      portraitId: id,
+      ...attribution,
+      metadata: { shareUrl: url },
+      ip: clientIp(request.headers),
+      userAgent: request.headers.get("user-agent"),
+    });
     return NextResponse.json({ url }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     console.error("[portrait-share] Branded link unavailable", error);

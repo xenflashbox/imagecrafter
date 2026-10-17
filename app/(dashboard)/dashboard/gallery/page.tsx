@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * /gallery — Subscriber Image Gallery (Phase 5 Redesign)
+ * /dashboard/gallery — Subscriber Image Gallery (Phase 5 Redesign)
  *
  * Shows two tabs:
  *   • AI Images    — generated images from /api/images (real data)

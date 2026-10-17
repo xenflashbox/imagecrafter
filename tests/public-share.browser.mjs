@@ -1,0 +1,68 @@
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || '/home/xen/.npm/_npx/705bc6b22212b352/node_modules/playwright');
+const shortUrl = process.argv[2] || 'https://go.imagecrafter.app/p-2a3c4e71b682b776b463';
+const browser = await chromium.launch();
+try {
+  for (const width of [390, 1440]) {
+    const context = await browser.newContext({ viewport: { width, height: 900 } });
+    const page = await context.newPage();
+    await page.route('**/api/analytics/events', route => route.fulfill({ json: { success: true } }));
+    await page.addInitScript(() => {
+      window.shareChecks = { copied: [], shared: [], intents: [] };
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async value => window.shareChecks.copied.push(value) } });
+      Object.defineProperty(navigator, 'share', { configurable: true, value: async data => window.shareChecks.shared.push(data) });
+      Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => false });
+      window.open = url => { window.shareChecks.intents.push(url); return null; };
+    });
+    const response = await page.goto(shortUrl, { waitUntil: 'networkidle' });
+    assert.equal(response.status(), 200);
+    const destination = new URL(page.url());
+    const requested = new URL(shortUrl);
+    assert.equal(destination.hostname, requested.hostname.startsWith('go.') ? 'imagecrafter.app' : requested.hostname);
+    assert.match(destination.pathname, /^\/p\/[^/]+$/);
+    const portraitId = destination.pathname.split('/').pop();
+    const publicUrl = `https://imagecrafter.app/p/${portraitId}`;
+    const portrait = page.locator('figure img');
+    await portrait.scrollIntoViewIfNeeded();
+    await portrait.evaluate(img => img.decode());
+    assert(await portrait.evaluate(img => img.naturalWidth > 100 && img.naturalHeight > 100));
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    const shareHeading = page.getByRole('heading', { name: 'Share this portrait' });
+    await shareHeading.scrollIntoViewIfNeeded();
+    assert(await shareHeading.isVisible());
+    assert(await page.getByRole('button', { name: 'Copy link', exact: true }).isVisible());
+    assert(await page.getByRole('button', { name: 'Facebook', exact: true }).isVisible());
+    assert((await portrait.boundingBox()).y < (await shareHeading.boundingBox()).y);
+    await page.getByRole('button', { name: 'Copy link', exact: true }).click();
+    await page.getByRole('button', { name: 'Share', exact: true }).click();
+    await page.getByRole('button', { name: 'Facebook', exact: true }).click();
+    const shareChecks = await page.evaluate(() => window.shareChecks);
+    assert.deepEqual(shareChecks.copied, [publicUrl]);
+    assert.equal(shareChecks.shared[0].url, publicUrl);
+    assert.equal(new URL(shareChecks.intents[0]).searchParams.get('u'), publicUrl);
+    const cta = page.getByRole('link', { name: 'Make your own', exact: true }).last();
+    await cta.scrollIntoViewIfNeeded();
+    assert(await cta.isVisible());
+    assert((await portrait.boundingBox()).y < (await cta.boundingBox()).y);
+    const og = await page.locator('meta[property="og:image"]').first().getAttribute('content');
+    assert(og);
+    const image = await context.request.get(new URL(og, page.url()).href);
+    assert.equal(image.status(), 200);
+    assert.match(image.headers()['content-type'], /^image\//);
+    assert((await image.body()).length > 10000);
+    assert.match(await page.locator('meta[name="robots"]').getAttribute('content'), /noindex/);
+    await page.screenshot({ path: `/tmp/ic-public-share-${width}.png`, fullPage: true });
+    await cta.click();
+    await page.waitForURL('**/portraits/create?**');
+    const create = new URL(page.url());
+    assert.equal(create.searchParams.get('ref'), portraitId);
+    assert.equal(create.searchParams.get('utm_source'), 'portrait_share');
+    assert.equal(create.searchParams.get('utm_medium'), 'referral');
+    assert(create.searchParams.get('pack'));
+    await page.locator('input[type="file"]').waitFor({ state: 'attached' });
+    console.log(`PASS ${width}px: fresh visitor -> portrait -> reshare controls -> bottom CTA -> attributed upload flow`);
+    await context.close();
+  }
+} finally { await browser.close(); }

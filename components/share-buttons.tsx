@@ -2,14 +2,44 @@
 
 import { useEffect, useState } from "react";
 import { Check, Copy, Download, Facebook, Share2, Twitter } from "lucide-react";
+import { trackEvent } from "@/lib/analytics-client";
 
 interface Props {
   portraitId: string;
   /** Public R2 preview, needed by Pinterest's media param. */
   imageUrl: string;
+  heading?: string;
+  description?: string;
+  prominent?: boolean;
+  caption?: string;
 }
 
 const CAPTION = "I turned one photo into this.";
+
+declare global {
+  interface Window {
+    fbq?: (...args: unknown[]) => void;
+    ttq?: { track?: (event: string, properties?: Record<string, unknown>) => void };
+  }
+}
+
+function trackShareClick(channel: string, portraitId: string) {
+  const eventId = `share_${portraitId}_${channel}_${Date.now()}`;
+  trackEvent("share_button_clicked", {
+    portraitId,
+    metadata: { channel, eventId },
+  });
+  window.fbq?.("trackCustom", "Share", {
+    content_ids: [portraitId],
+    content_name: channel,
+  }, { eventID: eventId });
+  window.ttq?.track?.("Share", {
+    event_id: eventId,
+    content_id: portraitId,
+    content_name: channel,
+    content_type: "product",
+  });
+}
 
 /** Pinterest has no lucide glyph and it is a real channel for portrait art. */
 function PinterestIcon({ className }: { className?: string }) {
@@ -20,7 +50,14 @@ function PinterestIcon({ className }: { className?: string }) {
   );
 }
 
-export function ShareButtons({ portraitId, imageUrl }: Props) {
+export function ShareButtons({
+  portraitId,
+  imageUrl,
+  heading = "Show someone",
+  description,
+  prominent = false,
+  caption = CAPTION,
+}: Props) {
   const [copied, setCopied] = useState(false);
   const url = `https://imagecrafter.app/p/${encodeURIComponent(portraitId)}`;
   const [error, setError] = useState("");
@@ -43,7 +80,7 @@ export function ShareButtons({ portraitId, imageUrl }: Props) {
     window.open(url, "_blank", "noopener,noreferrer,width=620,height=680");
 
   const encodedUrl = encodeURIComponent(url);
-  const encodedText = encodeURIComponent(CAPTION);
+  const encodedText = encodeURIComponent(caption);
 
   const copyLink = async () => {
     try {
@@ -58,7 +95,8 @@ export function ShareButtons({ portraitId, imageUrl }: Props) {
   // branch — it is simply the best available surface when the browser has one.
   const nativeShare = async () => {
     try {
-      await navigator.share({ title: "ImageCrafter", text: CAPTION, url });
+      trackShareClick("native_link", portraitId);
+      await navigator.share({ title: "ImageCrafter", text: caption, url });
       setError("");
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "AbortError")) setError("Sharing failed. Try copying the link instead.");
@@ -73,23 +111,13 @@ export function ShareButtons({ portraitId, imageUrl }: Props) {
   }, []);
 
   return (
-    <div className="border-t border-rim py-5">
-      <h3 className="mb-1 flex items-center gap-2 font-semibold">
-        <Share2 className="size-4 text-accent" /> Show someone
+    <div className={prominent ? "border-y border-rim py-4" : "border-t border-rim py-5"}>
+      <h3 className="flex items-center gap-2 font-semibold text-ink">
+        <Share2 className="size-4 text-accent" /> {heading}
       </h3>
+      {description && <p className="mt-1 text-sm text-ink-muted">{description}</p>}
 
-      <div className="flex flex-wrap gap-2">
-        {shareFile && <button
-          onClick={async () => {
-            try {
-              await navigator.share({ files: [shareFile], title: "ImageCrafter", text: `${CAPTION} ${url}` });
-              setError("");
-            } catch (error) {
-              if (!(error instanceof DOMException && error.name === "AbortError")) setError("Could not share the image. Try Save image or Copy link.");
-            }
-          }}
-          className="inline-flex items-center gap-2 rounded-lg border border-rim px-3 py-2 text-sm"
-        ><Share2 className="size-4" /> Share image</button>}
+      <div className="mt-3 flex flex-wrap gap-2">
         {hasNativeShare && (
           <button
             onClick={nativeShare}
@@ -100,40 +128,10 @@ export function ShareButtons({ portraitId, imageUrl }: Props) {
         )}
 
         <button
-          onClick={() =>
-            openIntent(`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`)
-          }
-          className="inline-flex items-center gap-2 rounded-lg border border-rim px-3 py-2 text-sm text-ink-muted transition-colors hover:border-rim-strong hover:text-ink"
-        >
-          <Facebook className="size-4" /> Facebook
-        </button>
-
-        <button
-          onClick={() =>
-            openIntent(
-              `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedText}`,
-            )
-          }
-          className="inline-flex items-center gap-2 rounded-lg border border-rim px-3 py-2 text-sm text-ink-muted transition-colors hover:border-rim-strong hover:text-ink"
-        >
-          <Twitter className="size-4" /> X
-        </button>
-
-        <button
-          onClick={() =>
-            openIntent(
-              `https://pinterest.com/pin/create/button/?url=${encodedUrl}&media=${encodeURIComponent(
-                imageUrl,
-              )}&description=${encodedText}`,
-            )
-          }
-          className="inline-flex items-center gap-2 rounded-lg border border-rim px-3 py-2 text-sm text-ink-muted transition-colors hover:border-rim-strong hover:text-ink"
-        >
-          <PinterestIcon className="size-4" /> Pinterest
-        </button>
-
-        <button
-          onClick={copyLink}
+          onClick={() => {
+            trackShareClick("copy_link", portraitId);
+            void copyLink();
+          }}
           className="inline-flex items-center gap-2 rounded-lg border border-rim px-3 py-2 text-sm text-ink-muted transition-colors hover:border-rim-strong hover:text-ink"
         >
           {copied ? (
@@ -148,11 +146,62 @@ export function ShareButtons({ portraitId, imageUrl }: Props) {
         </button>
 
         <a
-          href={`/api/portraits/${portraitId}/share-image?v=2`}
+          href={`/api/portraits/${portraitId}/share-image?v=2&intent=download`}
+          onClick={() => trackShareClick("save_image", portraitId)}
           className="inline-flex items-center gap-2 rounded-lg border border-rim px-3 py-2 text-sm text-ink-muted transition-colors hover:border-rim-strong hover:text-ink"
         >
           <Download className="size-4" /> Save image
         </a>
+
+        {shareFile && <button
+          onClick={async () => {
+            try {
+              trackShareClick("native_image", portraitId);
+              await navigator.share({ files: [shareFile], title: "ImageCrafter", text: `${caption} ${url}` });
+              setError("");
+            } catch (error) {
+              if (!(error instanceof DOMException && error.name === "AbortError")) setError("Could not share the image. Try Save image or Copy link.");
+            }
+          }}
+          className="inline-flex items-center gap-2 rounded-lg border border-rim px-3 py-2 text-sm"
+        ><Share2 className="size-4" /> Share image</button>}
+
+        <button
+          onClick={() => {
+            trackShareClick("facebook", portraitId);
+            openIntent(`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`);
+          }}
+          className="inline-flex items-center gap-2 rounded-lg border border-rim px-3 py-2 text-sm text-ink-muted transition-colors hover:border-rim-strong hover:text-ink"
+        >
+          <Facebook className="size-4" /> Facebook
+        </button>
+
+        <button
+          onClick={() => {
+            trackShareClick("x", portraitId);
+            openIntent(
+              `https://twitter.com/intent/tweet?url=${encodedUrl}&text=${encodedText}`,
+            );
+          }}
+          className="inline-flex items-center gap-2 rounded-lg border border-rim px-3 py-2 text-sm text-ink-muted transition-colors hover:border-rim-strong hover:text-ink"
+        >
+          <Twitter className="size-4" /> X
+        </button>
+
+        <button
+          onClick={() => {
+            trackShareClick("pinterest", portraitId);
+            openIntent(
+              `https://pinterest.com/pin/create/button/?url=${encodedUrl}&media=${encodeURIComponent(
+                imageUrl,
+              )}&description=${encodedText}`,
+            );
+          }}
+          className="inline-flex items-center gap-2 rounded-lg border border-rim px-3 py-2 text-sm text-ink-muted transition-colors hover:border-rim-strong hover:text-ink"
+        >
+          <PinterestIcon className="size-4" /> Pinterest
+        </button>
+
       </div>
       {error && <div role="alert" className="mt-3 text-sm"><p>{error}</p><input aria-label="Preview link" readOnly value={url} onFocus={event => event.target.select()} className="mt-2 w-full min-w-0 border border-rim bg-canvas p-2" /></div>}
     </div>

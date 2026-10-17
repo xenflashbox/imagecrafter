@@ -19,9 +19,11 @@ const ENDPOINT = "https://business-api.tiktok.com/open_api/v1.3/event/track/";
 
 export type TikTokEventName =
   | "CompleteRegistration"
+  | "CustomizeProduct"
   | "InitiateCheckout"
   | "Purchase"
   | "PlaceAnOrder"
+  | "Share"
   | "ViewContent";
 
 export interface TikTokEventInput {

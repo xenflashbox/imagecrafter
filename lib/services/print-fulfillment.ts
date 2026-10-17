@@ -282,10 +282,18 @@ async function gelatoRequest<T>(
 // CORE SERVICE FUNCTIONS
 // =============================================================================
 
-export interface CreateProdigiOrderParams {
+export type FulfillmentProvider = "gelato" | "prodigi";
+
+export interface PrintFulfillmentResult {
+  provider: FulfillmentProvider;
+  fulfillmentOrderId: string;
+  fulfillmentStatus: string;
+}
+
+export interface CreatePrintFulfillmentOrderParams {
   orderId: string;           // Our Order.id (used as merchantReference)
   portraitId: string;
-  hiResImageUrl: string;     // Publicly accessible URL for Prodigi to download
+  hiResImageUrl: string;     // Publicly accessible URL for the fulfiller to download
   sku: string;               // Our internal SKU
   frame?: string;            // Frame color (for framed prints)
   wrap?: string;             // Canvas wrap style
@@ -318,8 +326,8 @@ function resolveGelatoProductUid(
 }
 
 async function createGelatoOrder(
-  params: CreateProdigiOrderParams
-): Promise<{ prodigiOrderId: string; stage: string }> {
+  params: CreatePrintFulfillmentOrderParams
+): Promise<PrintFulfillmentResult> {
   const product = resolveSku(params.sku);
   if (!product) {
     throw new Error(`Unknown print SKU: ${params.sku}`);
@@ -387,18 +395,19 @@ async function createGelatoOrder(
   );
 
   return {
-    prodigiOrderId: response.id,
-    stage,
+    provider: "gelato",
+    fulfillmentOrderId: response.id,
+    fulfillmentStatus: stage,
   };
 }
 
 /**
- * Submit a print order to Prodigi after payment is confirmed.
- * Returns the Prodigi order ID to store in Order.prodigiOrderId.
+ * Submit a print order after payment is confirmed.
+ * Gelato is primary; Prodigi can be used as a product/incident fallback.
  */
-export async function createProdigiOrder(
-  params: CreateProdigiOrderParams
-): Promise<{ prodigiOrderId: string; stage: string }> {
+export async function createPrintFulfillmentOrder(
+  params: CreatePrintFulfillmentOrderParams
+): Promise<PrintFulfillmentResult> {
   if (USE_GELATO_PRIMARY && GELATO_API_KEY && GELATO_STORE_ID) {
     try {
       return await createGelatoOrder(params);
@@ -509,8 +518,23 @@ export async function createProdigiOrder(
   );
 
   return {
-    prodigiOrderId: response.order.id,
-    stage,
+    provider: "prodigi",
+    fulfillmentOrderId: response.order.id,
+    fulfillmentStatus: stage,
+  };
+}
+
+/**
+ * Backward-compatible export for older smoke scripts. New code should call
+ * createPrintFulfillmentOrder().
+ */
+export async function createProdigiOrder(
+  params: CreatePrintFulfillmentOrderParams
+): Promise<{ prodigiOrderId: string; stage: string }> {
+  const result = await createPrintFulfillmentOrder(params);
+  return {
+    prodigiOrderId: result.fulfillmentOrderId,
+    stage: result.fulfillmentStatus,
   };
 }
 

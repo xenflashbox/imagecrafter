@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Guardrails-wrapped deploy entrypoint for ImageCrafter.
-# Runs preflight then delegates to the full deploy-imagecrafter.sh script.
+# Guardrails-wrapped Vercel deploy entrypoint for ImageCrafter.
 set -euo pipefail
 
 FORCE="${1:-}"
@@ -11,10 +10,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 cd "${REPO_ROOT}"
 
-# ── Preflight ─────────────────────────────────────────────────────────────────
 ./scripts/preflight.sh "${FORCE}"
 
-# ── Read meta ─────────────────────────────────────────────────────────────────
 DEPLOY_TYPE="$(python3 - <<'PY'
 import json
 d=json.load(open(".xenco/meta.json"))
@@ -22,46 +19,45 @@ print(d.get("deploy",{}).get("type","none"))
 PY
 )"
 
-if [[ "${DEPLOY_TYPE}" == "none" ]]; then
-  echo "ℹ️  deploy.type=none. This repo is not deployable. Exiting."
-  exit 0
-fi
-
-IMAGE="$(python3 - <<'PY'
-import json
-d=json.load(open(".xenco/meta.json"))
-print(d["deploy"]["docker_image"])
-PY
-)"
-
-SERVICE="$(python3 - <<'PY'
-import json
-d=json.load(open(".xenco/meta.json"))
-print(d["deploy"]["swarm_service"])
-PY
-)"
-
-echo ""
-echo "🚀 Deploying ImageCrafter"
-echo "   image:   ${IMAGE}"
-echo "   service: ${SERVICE}"
-echo ""
-
-# ── Delegate to the full deploy script ───────────────────────────────────────
-if [[ -x "./deploy-imagecrafter.sh" ]]; then
-  if [[ -n "${TAG}" ]]; then
-    ./deploy-imagecrafter.sh "${TAG}"
-  else
-    ./deploy-imagecrafter.sh
-  fi
-else
-  echo "❌ deploy-imagecrafter.sh not found or not executable." >&2
+if [[ "${DEPLOY_TYPE}" != "vercel" ]]; then
+  echo "deploy.type=${DEPLOY_TYPE}; expected vercel." >&2
   exit 1
 fi
 
-# ── Post-deploy verify ────────────────────────────────────────────────────────
+PROJECT="$(python3 - <<'PY'
+import json
+d=json.load(open(".xenco/meta.json"))
+print(d["deploy"].get("project_name","imagecrafter"))
+PY
+)"
+
+if [[ -z "${VERCEL_ORG_ID:-}" && -f ".vercel/project.json" ]]; then
+  export VERCEL_ORG_ID="$(python3 - <<'PY'
+import json
+d=json.load(open(".vercel/project.json"))
+print(d.get("orgId",""))
+PY
+)"
+fi
+
+echo ""
+echo "Deploying ImageCrafter"
+echo "  target:  Vercel production"
+echo "  project: ${PROJECT}"
+echo ""
+
+if [[ -n "${TAG}" ]]; then
+  echo "Ignoring legacy tag argument '${TAG}'; Vercel deployments are identified by deployment URL/id."
+fi
+
+if [[ "${FORCE}" == "--force" ]]; then
+  vercel deploy --prod --yes --force
+else
+  vercel deploy --prod --yes
+fi
+
 echo ""
 echo "Running post-deploy verification..."
 ./scripts/verify.sh || true
 
-echo "✅ Deploy done."
+echo "Deploy done."

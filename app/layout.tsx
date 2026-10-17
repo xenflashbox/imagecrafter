@@ -3,6 +3,8 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { Manrope, Fraunces } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
+import { AnalyticsTracker } from "@/components/analytics-tracker";
+import { ClarityAnalytics } from "@/components/clarity-analytics";
 
 // Body: a quiet geometric sans. Display: an editorial serif — this product
 // sells museum prints, so headings should read gallery, not dashboard.
@@ -186,6 +188,8 @@ export default function RootLayout({
         <body
           className={`${manrope.variable} ${fraunces.variable} font-sans antialiased`}
         >
+          <AnalyticsTracker />
+          <ClarityAnalytics />
           {children}
 
           {/* Google Analytics */}

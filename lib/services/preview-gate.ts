@@ -6,8 +6,8 @@
  * BEFORE generatePortrait() is called: a refusal here costs nothing. A gate that
  * sits between generation and viewing protects the image, not the wallet.
  *
- *   Layer 1  first preview free, every one after it needs an email.
- *   Layer 2  a loose per-IP and per-email daily backstop — a runaway-abuse net,
+ *   Layer 1  first preview free, every one after it needs a verified account.
+ *   Layer 2  a loose per-IP and per-account daily backstop — a runaway-abuse net,
  *            deliberately far above any real session so exploring never walls.
  *   Layer 3  captcha once the velocity signal says this is not a human. This is
  *            the actual lock: rapid-fire is what separates a bot from a buyer.
@@ -26,7 +26,7 @@ function envInt(name: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-/** Previews allowed before an email is required. */
+/** Previews allowed before a verified Clerk account is required. */
 export const FREE_PREVIEWS = envInt("PREVIEW_FREE_LIMIT", 1);
 
 /**
@@ -57,7 +57,7 @@ export type GateDecision =
     };
 
 export type GateRefusal =
-  | "email_required"
+  | "account_required"
   | "captcha_required"
   | "captcha_failed"
   | "rate_limited"
@@ -98,15 +98,11 @@ export async function checkPreviewGate(params: {
   portraitId: string;
   /** Signed-in address. Present means Layer 1 is already satisfied. */
   accountEmail?: string | null;
-  /** Address supplied by the gate prompt on this request. */
-  submittedEmail?: string | null;
   captchaToken?: string | null;
 }): Promise<GateDecision> {
   const { sessionId, ip, portraitId, captchaToken } = params;
 
   const accountEmail = normalizeEmail(params.accountEmail);
-  const submittedEmail = normalizeEmail(params.submittedEmail);
-
   const since = new Date(Date.now() - DAY_MS);
   const velocitySince = new Date(Date.now() - VELOCITY_WINDOW_MIN * 60 * 1000);
 
@@ -114,7 +110,6 @@ export async function checkPreviewGate(params: {
   // returning visitor is not asked for their email a second time.
   const knownEmail =
     accountEmail ??
-    submittedEmail ??
     (
       await prisma.previewUsage.findFirst({
         where: {
@@ -190,11 +185,15 @@ export async function checkPreviewGate(params: {
     );
   }
 
-  // --- Layer 1: the email gate ---
+  // --- Layer 1: verified-account gate ---
+  //
+  // Never accept an arbitrary submitted address here. It proves neither
+  // ownership nor reachability and allowed anyone to bypass the preview gate
+  // with invented data. Clerk supplies accountEmail only after authentication.
   if (used > FREE_PREVIEWS && !knownEmail) {
     return refuse(
-      "email_required",
-      "Enter your email to keep creating previews.",
+      "account_required",
+      "Sign in with Google or Facebook to keep creating previews.",
       used - 1
     );
   }

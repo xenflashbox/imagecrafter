@@ -11,6 +11,7 @@
 import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { BarChart3, FileText, LockKeyhole } from "lucide-react";
 
 const ADMIN_USER_IDS = (process.env.ADMIN_USER_IDS || "").split(",").filter(Boolean);
 
@@ -18,14 +19,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const { userId } = await auth();
 
   if (!userId) {
-    redirect("/sign-in?redirect_url=/admin/blog");
+    redirect("/sign-in?redirect_url=/admin/analytics");
   }
 
   if (!ADMIN_USER_IDS.includes(userId)) {
     return (
       <div className="noir min-h-screen bg-[#08080c] flex items-center justify-center">
         <div className="text-center max-w-sm px-6">
-          <div className="text-6xl mb-4">🔒</div>
+          <LockKeyhole className="mx-auto mb-4 size-12 text-white/45" />
           <h1 className="text-2xl font-light text-white mb-2">Access Denied</h1>
           <p className="text-white/50 mb-6">
             This area is restricted to ImageCrafter administrators.
@@ -47,13 +48,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <div className="border-b border-white/10 bg-[#0d0d14]">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-6">
-            <span className="text-xs text-violet-400 font-semibold uppercase tracking-wider">Admin</span>
-            <Link href="/admin/blog" className="text-sm text-white/60 hover:text-white transition-colors">
-              Blog Posts
+            <span className="text-xs font-semibold uppercase text-violet-400">Admin</span>
+            <Link href="/admin/analytics" className="flex items-center gap-2 text-sm text-white/60 transition-colors hover:text-white">
+              <BarChart3 className="size-4" /> Analytics
+            </Link>
+            <Link href="/admin/blog" className="flex items-center gap-2 text-sm text-white/60 transition-colors hover:text-white">
+              <FileText className="size-4" /> Blog Posts
             </Link>
           </div>
-          <Link href="/dashboard" className="text-xs text-white/40 hover:text-white transition-colors">
-            ← Back to App
+          <Link href="/dashboard" className="text-xs text-white/40 transition-colors hover:text-white">
+            Back to app
           </Link>
         </div>
       </div>

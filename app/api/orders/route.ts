@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
       downloadCount: true,
       maxDownloads: true,
       downloadExpiresAt: true,
-      prodigiStatus: true,
+      fulfillmentStatus: true,
       printSize: true,
       portrait: {
         select: {

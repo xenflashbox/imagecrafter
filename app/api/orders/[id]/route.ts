@@ -52,7 +52,7 @@ export async function GET(
       printSize: true,
       printProductSku: true,
       printFormat: true,
-      prodigiStatus: true,
+      fulfillmentStatus: true,
       trackingNumber: true,
       trackingUrl: true,
       shippingName: true,
@@ -120,7 +120,7 @@ export async function GET(
       downloadExpiresAt: order.downloadExpiresAt,
       // Print
       printSize: order.printSize,
-      prodigiStatus: order.prodigiStatus,
+      fulfillmentStatus: order.fulfillmentStatus,
       trackingNumber: order.trackingNumber,
       trackingUrl: order.trackingUrl,
       // Portrait preview

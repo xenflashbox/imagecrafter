@@ -25,23 +25,24 @@ print("  kind:         ", d.get("kind"))
 print("  service_id:   ", d.get("service_id"))
 print("  repo_id:      ", d.get("repo_id"))
 print("  deploy.type:  ", d.get("deploy",{}).get("type"))
-print("  manager_host: ", d.get("deploy",{}).get("manager_host"))
-print("  docker_image: ", d.get("deploy",{}).get("docker_image"))
-print("  swarm_service:", d.get("deploy",{}).get("swarm_service"))
+print("  project_name: ", d.get("deploy",{}).get("project_name"))
+print("  project_id:   ", d.get("deploy",{}).get("project_id"))
+print("  team_id:      ", d.get("deploy",{}).get("team_id"))
 print("  health_url:   ", d.get("deploy",{}).get("health_url"))
 PY
 else
   echo "META: (missing .xenco/meta.json)"
 fi
 
-if command -v docker >/dev/null 2>&1; then
-  echo ""
-  echo "SWARM NODE STATUS:"
-  docker node ls 2>/dev/null | head -8 || echo "  (not a swarm manager or docker unavailable)"
-  echo ""
-  echo "SERVICE STATUS:"
-  SERVICE="$(python3 -c "import json; d=json.load(open('.xenco/meta.json')); print(d['deploy']['swarm_service'])" 2>/dev/null || echo '')"
-  if [[ -n "$SERVICE" ]]; then
-    docker service ps "$SERVICE" --format "table {{.Name}}\t{{.Node}}\t{{.CurrentState}}" 2>/dev/null | head -6 || echo "  (service not found or not on manager)"
-  fi
+if [[ -f ".vercel/project.json" ]]; then
+  echo "VERCEL:"
+  python3 - <<'PY'
+import json
+d=json.load(open(".vercel/project.json"))
+print("  project_id:", d.get("projectId"))
+print("  org_id:    ", d.get("orgId"))
+print("  name:      ", d.get("projectName"))
+PY
+else
+  echo "VERCEL: (missing .vercel/project.json)"
 fi

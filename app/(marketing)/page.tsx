@@ -100,7 +100,7 @@ function offersSchema(digital: CatalogPrice, packs: PackPrice[]) {
       priceCurrency: "USD",
       description: p.credits
         ? `${p.credits} portrait credits — never expire`
-        : "One portrait — full 4K digital download, no watermark",
+        : "One portrait — high-resolution digital download, no watermark",
     })),
   };
 }
@@ -536,7 +536,7 @@ export default async function LandingPage() {
               </h2>
               <p className="text-ink-subtle max-w-xl mx-auto">
                 No subscription. Create your portrait free, preview it, and pay only if
-                you love it — full 4K digital download, no watermark.
+                you love it — high-resolution digital download, no watermark.
               </p>
             </div>
 
@@ -549,7 +549,7 @@ export default async function LandingPage() {
               <h3 className="text-lg font-medium mb-4">Single Portrait</h3>
               <ul className="space-y-2.5 mb-8 max-w-xs mx-auto text-left">
                 {[
-                  "Full 4K digital download",
+                  "High-resolution digital download",
                   "No watermark",
                   "Digital delivery by email",
                   "Preview before you pay",
@@ -580,7 +580,7 @@ export default async function LandingPage() {
                
               />
               <p className="text-center text-ink-faint text-sm mt-6">
-                Credits never expire · Each credit unlocks one full 4K portrait download
+                Credits never expire · Each credit unlocks one high-resolution portrait download
               </p>
             </div>
           </div>

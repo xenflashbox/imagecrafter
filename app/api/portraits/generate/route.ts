@@ -14,14 +14,17 @@
  *   - Subscriber: userId must match portrait.userId (or portrait.userId is null and sessionId matches)
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { generatePortrait } from "@/lib/services/portrait-generation";
 import { checkPreviewGate, clientIp, isNewPreviewer } from "@/lib/services/preview-gate";
 import { capturePreviewer } from "@/lib/services/mautic";
+import { trackMetaEvent, fbcFromFbclid } from "@/lib/services/meta-events";
 import { publishProgress } from "@/lib/services/portrait-progress";
 import { issuePortraitReturn } from "@/lib/services/portrait-return";
+import { trackTikTokEvent } from "@/lib/services/tiktok-events";
+import { attributionFromRequest, clientIp as analyticsClientIp, logAnalyticsEvent } from "@/lib/services/analytics";
 
 // The synchronous pipeline (analysis → stand-in + fidelity gate → swap →
 // acceptance gate, each leg with retries) routinely exceeds the project's
@@ -61,8 +64,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { portraitId, stylePackSlug, styleVariantSlug, sessionId, userScene } = body;
-    const submittedEmail = body.email;
+    const { portraitId, stylePackSlug, styleVariantSlug, userScene } = body;
+    const sessionId =
+      request.cookies.get("portrait_session_id")?.value || body.sessionId;
     const captchaToken = body.captchaToken;
 
     if (!portraitId || !stylePackSlug || !styleVariantSlug) {
@@ -111,9 +115,17 @@ export async function POST(request: NextRequest) {
     }
 
     // --- Check portrait is in a generatable state ---
-    if (portrait.status === "generating" || portrait.status === "analyzing") {
+    const processing = ["queued", "analyzing", "generating"].includes(portrait.status);
+    const processingIsFresh =
+      processing && Date.now() - portrait.updatedAt.getTime() < 15 * 60_000;
+    if (processingIsFresh) {
       return NextResponse.json(
-        { success: false, error: "Portrait is already being processed" },
+        {
+          success: false,
+          error: "Portrait is already being processed",
+          code: "already_processing",
+          portraitId,
+        },
         { status: 409 }
       );
     }
@@ -147,11 +159,26 @@ export async function POST(request: NextRequest) {
       ip: clientIp(request.headers),
       portraitId,
       accountEmail,
-      submittedEmail,
       captchaToken,
     });
 
     if (!gate.allowed) {
+      const attribution = attributionFromRequest(request);
+      await logAnalyticsEvent({
+        eventName: "generation_blocked",
+        sessionId: portrait.sessionId,
+        userId,
+        portraitId,
+        ...attribution,
+        metadata: {
+          code: gate.code,
+          previewsUsed: gate.previewsUsed,
+          stylePackSlug,
+          styleVariantSlug,
+        },
+        ip: analyticsClientIp(request.headers),
+        userAgent: request.headers.get("user-agent"),
+      });
       return NextResponse.json(
         {
           success: false,
@@ -166,9 +193,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Capture the address before generating: an ~80s pipeline that dies must not
-    // also lose the email the visitor just handed over. The post-generation push
-    // below upserts on the same key to enrich it with the preview URL.
+    // Capture the verified account address before generating. The
+    // post-generation push below enriches the same row with the preview URL.
     if (gate.email && (await isNewPreviewer(gate.email))) {
       await capturePreviewer({
         email: gate.email,
@@ -177,62 +203,156 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // --- Run generation pipeline ---
-    const result = await generatePortrait({
-      portraitId,
-      stylePackSlug,
-      styleVariantSlug,
-      userId,
-      userScene,
+    // Snapshot request-scoped values before the response closes. The generation
+    // itself runs in Next's after() lifecycle, so a sleeping phone or closed tab
+    // cannot cancel the server-owned job.
+    const visitorIp =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
+    const visitorUa = request.headers.get("user-agent");
+    const url = new URL(request.url);
+    const ttclid =
+      url.searchParams.get("ttclid") || request.cookies.get("ttclid")?.value || null;
+    const ttp = request.cookies.get("_ttp")?.value || null;
+    const fbclid = url.searchParams.get("fbclid");
+    const fbc =
+      request.cookies.get("_fbc")?.value || (fbclid ? fbcFromFbclid(fbclid) : null);
+    const fbp = request.cookies.get("_fbp")?.value || null;
+    const eventEmail = gate.email || accountEmail || null;
+    const contentName = `${stylePackSlug} ${styleVariantSlug}`.trim();
+    const attribution = attributionFromRequest(request);
+    const analyticsIp = analyticsClientIp(request.headers);
+
+    await prisma.portrait.update({
+      where: { id: portraitId },
+      data: {
+        status: "queued",
+        stylePackSlug,
+        styleVariantSlug,
+        errorMessage: null,
+        updatedAt: new Date(),
+      },
     });
 
-    if (!result.success) {
-      // One terminal event for every failure branch in the pipeline. The HTTP
-      // response already carries the message; this only stops the wizard's
-      // stage list from sitting on a step that will never finish.
-      await publishProgress(portraitId, {
-        stage: "failed",
-        label: result.error ?? "Generation failed.",
-      });
+    after(async () => {
+      try {
+        const result = await generatePortrait({
+          portraitId,
+          stylePackSlug,
+          styleVariantSlug,
+          userId,
+          userScene,
+        });
 
-      const status =
-        result.errorType === "quality"
-          ? 422
-          : result.errorType === "notfound"
-          ? 404
-          : 500;
+        if (!result.success) {
+          await logAnalyticsEvent({
+            eventName: "generation_failed",
+            sessionId: portrait.sessionId,
+            userId,
+            portraitId,
+            ...attribution,
+            metadata: {
+              error: result.error,
+              errorType: result.errorType,
+              stylePackSlug,
+              styleVariantSlug,
+            },
+            ip: analyticsIp,
+            userAgent: visitorUa,
+          });
+          await publishProgress(portraitId, {
+            stage: "failed",
+            label: result.error ?? "Generation failed.",
+          });
+          return;
+        }
 
-      return NextResponse.json(
-        {
-          success: false,
-          error: result.error,
-          ...(result.qualityIssues && { qualityIssues: result.qualityIssues }),
-        },
-        { status }
-      );
-    }
+        if (gate.email) {
+          let returnUrl: string | null = null;
+          try {
+            returnUrl = await issuePortraitReturn(
+              portraitId,
+              gate.email,
+              body.marketingConsent === true
+            );
+          } catch (error) {
+            console.error("[Generate] Preview ready but return email failed", error);
+          }
+          await capturePreviewer({
+            email: gate.email,
+            subjectType: result.subjectType ?? portrait.subjectType,
+            style: stylePackSlug,
+            previewUrl: result.previewImageUrl,
+            returnUrl,
+          });
+        }
 
-    // Re-push with the finished preview so the win-back drip can re-show it.
-    // Upserts on preview:<email>, so this enriches the pre-generation row.
-    if (gate.email) {
-      let returnUrl: string | null = null;
-      try { returnUrl = await issuePortraitReturn(portraitId, gate.email, body.marketingConsent === true); }
-      catch (error) { console.error("[Generate] Preview ready but return email failed", error); }
-      await capturePreviewer({
-        email: gate.email,
-        subjectType: result.subjectType ?? portrait.subjectType,
-        style: portrait.stylePackSlug,
-        previewUrl: result.previewImageUrl,
-        returnUrl,
-      });
-    }
+        const previewPageUrl =
+          `${process.env.NEXT_PUBLIC_APP_URL || "https://imagecrafter.app"}/portraits/${portraitId}/preview`;
+        await trackTikTokEvent({
+          event: "CustomizeProduct",
+          eventId: `image_created_${portraitId}`,
+          url: previewPageUrl,
+          email: eventEmail,
+          externalId: userId,
+          ip: visitorIp,
+          userAgent: visitorUa,
+          ttclid,
+          ttp,
+          contentId: portraitId,
+          contentName,
+        });
+        await trackMetaEvent({
+          event: "CustomizeProduct",
+          eventId: `image_created_${portraitId}`,
+          url: previewPageUrl,
+          email: eventEmail,
+          externalId: userId,
+          ip: visitorIp,
+          userAgent: visitorUa,
+          fbc,
+          fbp,
+          contentId: portraitId,
+          contentName,
+        });
+        await logAnalyticsEvent({
+          eventName: "preview_created",
+          sessionId: portrait.sessionId,
+          userId,
+          portraitId,
+          ...attribution,
+          metadata: {
+            stylePackSlug,
+            styleVariantSlug,
+            subjectType: result.subjectType ?? portrait.subjectType,
+            previewImageUrl: result.previewImageUrl,
+          },
+          ip: analyticsIp,
+          userAgent: visitorUa,
+        });
+      } catch (error) {
+        console.error("[Generate] Background generation failed:", error);
+        await prisma.portrait.update({
+          where: { id: portraitId },
+          data: {
+            status: portrait.previewImageUrl ? "preview" : "failed",
+            errorMessage: portrait.previewImageUrl
+              ? null
+              : "Generation stopped unexpectedly. Please try again.",
+          },
+        });
+        await publishProgress(portraitId, {
+          stage: "failed",
+          label: "Generation stopped unexpectedly.",
+        });
+      }
+    });
 
     return NextResponse.json({
       success: true,
+      accepted: true,
       portraitId,
-      previewImageUrl: result.previewImageUrl,
-      subjectType: result.subjectType,
-    });
+      status: "queued",
+    }, { status: 202 });
   } catch (error) {
     console.error("[Generate] Unexpected error:", error);
     return NextResponse.json(

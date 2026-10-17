@@ -35,6 +35,8 @@ import {
 } from "@/lib/services/pricing";
 import { resolveSku } from "@/lib/services/print-fulfillment";
 import { printCheckoutEnabled } from "@/lib/launch-flags";
+import { PortraitViewEvent } from "@/components/portrait-analytics-events";
+import { PortraitStatusRefresh } from "@/components/portrait-status-refresh";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -120,17 +122,17 @@ export default async function PortraitPreviewPage({ params }: Props) {
     );
   }
 
-  if (portrait.status === "generating" || portrait.status === "analyzing") {
+  if (["queued", "generating", "analyzing"].includes(portrait.status)) {
     return (
       <Standalone>
+        <PortraitStatusRefresh />
         <div className="mx-auto mb-6 size-14 animate-spin rounded-full border-4 border-rim border-t-accent" />
         <h1 className="font-display mb-2 text-2xl font-light">
           Your portrait is being created…
         </h1>
         <p className="text-ink-muted">
-          Good portraits take 3–4 minutes. We paint a scene around you, then work
-          your face into it by hand — that&rsquo;s the part that makes it look like
-          you. Refresh this page in a few minutes.
+          Most portraits take 4–6 minutes. You can lock your phone or leave this
+          page; the job continues on our servers and this page will update itself.
         </p>
       </Standalone>
     );
@@ -166,6 +168,16 @@ export default async function PortraitPreviewPage({ params }: Props) {
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas text-ink">
+      <PortraitViewEvent
+        eventName="preview_viewed"
+        portraitId={portrait.id}
+        metadata={{
+          status: portrait.status,
+          stylePackSlug: portrait.stylePackSlug,
+          styleVariantSlug: portrait.styleVariantSlug,
+          subjectType: portrait.subjectType,
+        }}
+      />
       <SiteHeader
         links={false}
         cta={
@@ -294,7 +306,7 @@ export default async function PortraitPreviewPage({ params }: Props) {
                     </div>
                     <ul className="mb-4 flex flex-col gap-1 text-sm text-ink-muted">
                       {[
-                        "Full 4K resolution, no watermark",
+                        "High-resolution file, no watermark",
                         "Instant delivery to your email",
                         "Download up to 5 times (72 hours)",
                         "No account required",

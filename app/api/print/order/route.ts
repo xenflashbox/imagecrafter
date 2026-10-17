@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import {
-  createProdigiOrder,
+  createPrintFulfillmentOrder,
 } from "@/lib/services/print-fulfillment";
 
 export async function POST(request: NextRequest) {
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       printProductSku: true,
       printFrame: true,
       printFormat: true,
-      prodigiOrderId: true,
+      fulfillmentOrderId: true,
       email: true,
       shippingName: true,
       shippingLine1: true,
@@ -78,14 +78,14 @@ export async function POST(request: NextRequest) {
 
   if (order.status !== "paid" && order.status !== "fulfilled") {
     return NextResponse.json(
-      { success: false, error: "Order must be paid before Prodigi submission" },
+      { success: false, error: "Order must be paid before print fulfillment submission" },
       { status: 422 }
     );
   }
 
-  if (order.prodigiOrderId) {
+  if (order.fulfillmentOrderId) {
     return NextResponse.json(
-      { success: false, error: `Print fulfillment order already exists: ${order.prodigiOrderId}` },
+      { success: false, error: `Print fulfillment order already exists: ${order.fulfillmentOrderId}` },
       { status: 409 }
     );
   }
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: "Shipping address incomplete" }, { status: 422 });
   }
 
-  const { prodigiOrderId, stage } = await createProdigiOrder({
+  const { provider, fulfillmentOrderId, fulfillmentStatus } = await createPrintFulfillmentOrder({
     orderId: order.id,
     portraitId: order.portrait.id,
     hiResImageUrl: order.portrait.hiResImageUrl,
@@ -120,11 +120,17 @@ export async function POST(request: NextRequest) {
   await prisma.order.update({
     where: { id: order.id },
     data: {
-      prodigiOrderId,
-      prodigiStatus: stage,
+      fulfillmentOrderId,
+      fulfillmentProvider: provider,
+      fulfillmentStatus,
       status: "fulfilled",
     },
   });
 
-  return NextResponse.json({ success: true, fulfillmentOrderId: prodigiOrderId, prodigiOrderId, stage });
+  return NextResponse.json({
+    success: true,
+    provider,
+    fulfillmentOrderId,
+    fulfillmentStatus,
+  });
 }

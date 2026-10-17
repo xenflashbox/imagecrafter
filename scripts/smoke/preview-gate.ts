@@ -4,7 +4,7 @@
  * Run with: DATABASE_URL=<smoke branch> npx tsx scripts/smoke/preview-gate.ts
  *
  * Proves the four claims the gate exists to make:
- *   1. Preview #1 is ungated; #2 is refused for email — and the refusal lands
+ *   1. Preview #1 is ungated; #2 requires a verified account — and the refusal lands
  *      BEFORE any provider call (asserted against the real route handler:
  *      generatePortrait() writes status="analyzing" before Claude Vision, so a
  *      portrait still "pending" after a POST proves nothing was spent).
@@ -70,7 +70,7 @@ async function attempt(
     sessionId,
     ip,
     portraitId,
-    submittedEmail: opts.email ?? null,
+    accountEmail: opts.email ?? null,
     captchaToken: opts.captchaToken ?? null,
   });
   return { gate, portraitId };
@@ -95,8 +95,8 @@ async function main() {
     'falls back to "unknown" rather than granting a fresh free preview'
   );
 
-  // --- Layer 1: one free, then email ---------------------------------------
-  console.log("\nLayer 1 — email gate");
+  // --- Layer 1: one free, then verified account ----------------------------
+  console.log("\nLayer 1 — account gate");
   const ipA = `198.51.100.${Math.floor(Math.random() * 250) + 1}`;
   const sessA = `${RUN}-sessA`;
 
@@ -109,14 +109,14 @@ async function main() {
 
   const second = await attempt(sessA, ipA);
   check(
-    "preview #2 is refused for an email",
-    second.gate.allowed === false && second.gate.code === "email_required",
+    "preview #2 requires a verified account",
+    second.gate.allowed === false && second.gate.code === "account_required",
     second.gate.allowed ? "ALLOWED — gate is open" : `code=${second.gate.code}`
   );
 
   const withEmail = await attempt(sessA, ipA, { email: `${RUN}@example.invalid` });
   check(
-    "preview #2 proceeds once the email is given",
+    "preview #2 proceeds for a verified account",
     withEmail.gate.allowed === true,
     withEmail.gate.allowed ? "allowed" : `still refused: ${withEmail.gate.code}`
   );
@@ -146,7 +146,7 @@ async function main() {
   const f2 = await attempt(freshVisitor, freshIp);
   check(
     "a genuinely new visitor still gets one free",
-    f1.gate.allowed === true && f2.gate.allowed === false && f2.gate.code === "email_required",
+    f1.gate.allowed === true && f2.gate.allowed === false && f2.gate.code === "account_required",
     "first allowed, second gated — the anchor is per-identity, not global"
   );
 
@@ -178,8 +178,8 @@ async function main() {
   });
 
   check(
-    "the route refuses an un-emailed second preview",
-    res.status === 403 && body.code === "email_required",
+    "the route refuses an anonymous second preview",
+    res.status === 403 && body.code === "account_required",
     `HTTP ${res.status} code=${body.code}`
   );
   check(

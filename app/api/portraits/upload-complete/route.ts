@@ -23,6 +23,7 @@ import {
   discardStoredObject,
   portraitSourceKey,
 } from "@/lib/services/file-storage";
+import { attributionFromRequest, clientIp, logAnalyticsEvent } from "@/lib/services/analytics";
 
 const SESSION_COOKIE = "portrait_session_id";
 const PUBLIC_URL = process.env.R2_PUBLIC_URL || "";
@@ -108,6 +109,22 @@ export async function POST(request: NextRequest) {
         status: "pending",
         updatedAt: new Date(),
       },
+    });
+
+    const attribution = attributionFromRequest(request);
+    await logAnalyticsEvent({
+      eventName: "upload_confirmed",
+      sessionId: portrait.sessionId,
+      userId,
+      portraitId: portrait.id,
+      ...attribution,
+      metadata: {
+        contentType,
+        sizeBytes: stored.sizeBytes ?? null,
+        sourceImageKey: key,
+      },
+      ip: clientIp(request.headers),
+      userAgent: request.headers.get("user-agent"),
     });
 
     return NextResponse.json({

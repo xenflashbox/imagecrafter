@@ -4,7 +4,9 @@ import { LEGAL_LINKS } from "@/lib/legal";
 const isPublicRoute = createRouteMatcher([
   // Marketing & auth
   "/",
+  "/gallery",
   "/memorial",
+  "/pet-portraits",
   "/sign-in(.*)",
   "/sign-up(.*)",
 
@@ -52,6 +54,12 @@ const isPublicRoute = createRouteMatcher([
   // before they ever sign in.
   "/api/pricing",
 
+  // First-party analytics and public gallery interactions are intentionally
+  // anonymous. Their handlers validate event names, portrait eligibility and
+  // one-vote-per-browser identity themselves.
+  "/api/analytics/(.*)",
+  "/api/gallery(.*)",
+
   // Credit packs — routes enforce their own auth policy (guest balance=0,
   // guest checkout → sign-in redirect). auth.protect() would 404 guests.
   "/api/credits",
@@ -87,7 +95,7 @@ export default clerkMiddleware(async (auth, request) => {
 
 export const config = {
   matcher: [
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|mp4|webm|mov|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
     "/(api|trpc)(.*)",
   ],
 };

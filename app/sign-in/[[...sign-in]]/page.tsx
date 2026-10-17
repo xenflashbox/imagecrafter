@@ -4,7 +4,7 @@ export default function SignInPage() {
   return (
     <div className="min-h-screen bg-canvas flex items-center justify-center">
       <SignIn
-        afterSignInUrl="/dashboard"
+        fallbackRedirectUrl="/dashboard"
         appearance={{
           elements: {
             rootBox: "mx-auto",

@@ -13,7 +13,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { ensureUser } from "@/lib/ensure-user";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,18 @@ export async function GET(request: NextRequest) {
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 });
+  }
+
+  // Claim every guest portrait created by this browser before loading the
+  // dashboard. This makes signing in after a free preview behave like a
+  // continuation of the same session, including jobs still in progress.
+  const sessionId = (await cookies()).get("portrait_session_id")?.value;
+  if (sessionId) {
+    await ensureUser(userId);
+    await prisma.portrait.updateMany({
+      where: { sessionId, userId: null },
+      data: { userId },
+    });
   }
 
   const { searchParams } = new URL(request.url);

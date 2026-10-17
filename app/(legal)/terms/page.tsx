@@ -55,7 +55,9 @@ export default function TermsPage() {
           royalty-free, worldwide licence to display, reproduce and promote
           portraits you generate but <strong>do not purchase</strong> — in our
           public gallery, on this website, and in our marketing — with no
-          attribution and no payment to you.
+          attribution and no payment to you. For pet previews, that licence
+          includes the uploaded pet photo and the generated portrait as a
+          before-and-after example.
         </p>
         <p>
           <strong>Buying the portrait ends that licence.</strong> When you
@@ -64,10 +66,11 @@ export default function TermsPage() {
           buy privacy; free is public.
         </p>
         <p>
-          Two limits we hold ourselves to. We only publish what we have chosen
-          by hand — nothing appears automatically. And we never publish your
-          original photograph, your name, or your email address; only the
-          generated portrait.
+          Two limits we hold ourselves to. Purchased portraits are private, and
+          we do not publish your name or email address. For human portraits, we
+          do not publish the original uploaded photograph; for pet previews, the
+          original pet photo may appear with the generated result as a
+          before-and-after example.
         </p>
         <p>
           If you would rather a free preview never appeared, email{" "}

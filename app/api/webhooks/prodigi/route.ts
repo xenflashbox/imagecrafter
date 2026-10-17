@@ -7,10 +7,10 @@
  * The secret is embedded in the callbackUrl when creating Prodigi orders.
  *
  * Events handled:
- *   com.prodigi.order.status.stage.changed#InProgress   → update prodigiStatus
+ *   com.prodigi.order.status.stage.changed#InProgress   → update fulfillmentStatus
  *   com.prodigi.order.status.stage.changed#Complete     → update status + tracking, send shipping email
- *   com.prodigi.order.status.stage.changed#Cancelled    → update prodigiStatus
- *   com.prodigi.order.status.stage.changed#Error        → update prodigiStatus, log issues
+ *   com.prodigi.order.status.stage.changed#Cancelled    → update fulfillmentStatus
+ *   com.prodigi.order.status.stage.changed#Error        → update fulfillmentStatus, log issues
  *
  * Idempotent: repeated delivery of the same event is safe (upsert-style update).
  */
@@ -53,32 +53,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true }); // Ack to prevent retries
   }
 
-  const prodigiOrderId = prodigiOrder.id;
+  const fulfillmentOrderId = prodigiOrder.id;
   const ourOrderId = prodigiOrder.merchantReference;
   const stage = prodigiOrder.status?.stage;
 
-  console.log(`[prodigi-webhook] Event: ${type} | Prodigi: ${prodigiOrderId} | Our: ${ourOrderId} | Stage: ${stage}`);
+  console.log(`[prodigi-webhook] Event: ${type} | Prodigi: ${fulfillmentOrderId} | Our: ${ourOrderId} | Stage: ${stage}`);
 
   // --- Load our Order ---
   const order = await prisma.order.findFirst({
     where: {
       OR: [
         { id: ourOrderId },
-        { prodigiOrderId },
+        { fulfillmentOrderId },
       ],
     },
     select: {
       id: true,
       email: true,
       name: true,
-      prodigiOrderId: true,
-      prodigiStatus: true,
+      fulfillmentOrderId: true,
+      fulfillmentStatus: true,
     },
   });
 
   if (!order) {
     // May be a sandbox test order or already deleted — ack and move on
-    console.warn(`[prodigi-webhook] Order not found for prodigiOrderId: ${prodigiOrderId}, merchantRef: ${ourOrderId}`);
+    console.warn(`[prodigi-webhook] Order not found for fulfillmentOrderId: ${fulfillmentOrderId}, merchantRef: ${ourOrderId}`);
     return NextResponse.json({ received: true });
   }
 
@@ -89,8 +89,9 @@ export async function POST(request: NextRequest) {
       await prisma.order.update({
         where: { id: order.id },
         data: {
-          prodigiOrderId,
-          prodigiStatus: "InProgress",
+          fulfillmentProvider: "prodigi",
+          fulfillmentOrderId,
+          fulfillmentStatus: "InProgress",
         },
       });
       break;
@@ -105,8 +106,9 @@ export async function POST(request: NextRequest) {
       await prisma.order.update({
         where: { id: order.id },
         data: {
-          prodigiOrderId,
-          prodigiStatus: "Complete",
+          fulfillmentProvider: "prodigi",
+          fulfillmentOrderId,
+          fulfillmentStatus: "Complete",
           status: "shipped",
           trackingNumber: trackingNumber || null,
           trackingUrl: trackingUrl || null,
@@ -138,11 +140,12 @@ export async function POST(request: NextRequest) {
       await prisma.order.update({
         where: { id: order.id },
         data: {
-          prodigiOrderId,
-          prodigiStatus: "Cancelled",
+          fulfillmentProvider: "prodigi",
+          fulfillmentOrderId,
+          fulfillmentStatus: "Cancelled",
         },
       });
-      console.warn(`[prodigi-webhook] Prodigi order ${prodigiOrderId} cancelled for our order ${order.id}`);
+      console.warn(`[prodigi-webhook] Prodigi order ${fulfillmentOrderId} cancelled for our order ${order.id}`);
       break;
     }
 
@@ -151,12 +154,13 @@ export async function POST(request: NextRequest) {
       await prisma.order.update({
         where: { id: order.id },
         data: {
-          prodigiOrderId,
-          prodigiStatus: "Error",
+          fulfillmentProvider: "prodigi",
+          fulfillmentOrderId,
+          fulfillmentStatus: "Error",
         },
       });
       console.error(
-        `[prodigi-webhook] Prodigi order ${prodigiOrderId} ERROR for our order ${order.id}:`,
+        `[prodigi-webhook] Prodigi order ${fulfillmentOrderId} ERROR for our order ${order.id}:`,
         JSON.stringify(issues)
       );
       break;

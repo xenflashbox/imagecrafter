@@ -3,7 +3,6 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || '/home/xen/.npm/_npx/705bc6b22212b352/node_modules/playwright');
 const base = process.argv[2] || 'http://localhost:3100';
-const consentCase = process.argv.includes('--consent');
 const browser = await chromium.launch();
 try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
@@ -23,6 +22,7 @@ try {
     if (catalogCalls > 1) await new Promise(resolve => setTimeout(resolve, 1500));
     await route.fulfill({ json: catalog });
   });
+  await page.route('**/api/analytics/events', route => route.fulfill({ json: { success: true } }));
   await page.route('**/api/portraits/upload-url', route => route.fulfill({ json: {
     success: true, portraitId: 'test_portrait_fixture', sessionId: 'test_session_fixture',
     key: 'test/upload.jpg', uploadUrl: `${base}/__test-upload`,
@@ -30,17 +30,24 @@ try {
   await page.route('**/__test-upload', route => route.fulfill({ status: 200, body: '' }));
   await page.route('**/api/portraits/upload-complete', route => route.fulfill({ json: {
     success: true, portraitId: 'test_portrait_fixture', sessionId: 'test_session_fixture',
+    sourceImageUrl: 'https://images.imagecrafter.app/gallery/v4/before/d-dog-corgi.jpg',
   } }));
-  let generationCalls = 0;
-  await page.route('**/api/portraits/generate', async route => {
-    generationCalls++;
-    if (consentCase && generationCalls === 1) {
-      assert.equal(route.request().postDataJSON().marketingConsent, false);
-      return route.fulfill({ status: 403, json: { success: false, code: 'email_required', error: 'Enter your email to continue.' } });
-    }
-    if (consentCase) assert.equal(route.request().postDataJSON().marketingConsent, true);
-    await new Promise(resolve => setTimeout(resolve, 2500));
-    await route.fulfill({ json: { success: true, previewImageUrl: 'https://images.imagecrafter.app/gallery/v4/after/d-dog-corgi--baroque.jpg' } });
+  await page.route('**/api/portraits/generate', route => route.fulfill({ status: 202, json: {
+    success: true, accepted: true, portraitId: 'test_portrait_fixture', status: 'queued',
+  } }));
+  let statusCalls = 0;
+  await page.route('**/api/portraits/test_portrait_fixture', route => {
+    statusCalls++;
+    const ready = statusCalls >= 3;
+    return route.fulfill({ json: { success: true, portrait: {
+      id: 'test_portrait_fixture',
+      status: ready ? 'preview' : 'generating',
+      previewImageUrl: ready ? 'https://images.imagecrafter.app/gallery/v4/after/d-dog-corgi--baroque.jpg' : null,
+      sourceImageUrl: 'https://images.imagecrafter.app/gallery/v4/before/d-dog-corgi.jpg',
+      stylePackSlug: catalog.stylePacks[0].slug,
+      styleVariantSlug: catalog.stylePacks[0].variants[0].slug,
+      errorMessage: null,
+    } } });
   });
   let shortenerCalls = 0;
   await page.route('**/api/portraits/test_portrait_fixture/share-link', route => {
@@ -61,22 +68,29 @@ try {
     console.log((await page.locator('body').innerText()).slice(0,1800));
   }
   await page.getByRole('button', { name: /Continue to Style Selection/ }).click();
+  await page.getByText('Protect this portrait before it starts', { exact: true }).waitFor();
+  assert(await page.getByRole('link', { name: 'Sign in and protect it', exact: true }).isVisible());
   await page.getByRole('button', { name: 'Generate Portrait', exact: true }).click();
-  if (consentCase) {
-    const consent = page.getByRole('checkbox');
-    await consent.waitFor();
-    assert.equal(await consent.isChecked(), false);
-    await page.locator('input[type=email]').fill('qa-consent@example.test');
-    await consent.check();
-    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-    await page.screenshot({ path: '/tmp/ic-consent-390.png' });
-    await page.getByRole('button', { name: 'Keep Creating' }).click();
-  }
-  await page.getByRole('heading', { name: 'Your portrait is ready' }).waitFor({ timeout: 10000 });
+  await page.getByText(/lock your phone/i).waitFor();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: 'Your portrait is ready' }).waitFor({ timeout: 15000 });
+  await page.getByRole('heading', { name: 'Share or save your preview' }).waitFor();
+  await page.getByRole('heading', { name: "Don't lose this portrait" }).waitFor();
+  assert(await page.getByRole('button', { name: 'Sign in and save it', exact: true }).isVisible());
   await page.getByRole('button', { name: 'Copy link', exact: true }).waitFor();
   await page.waitForTimeout(1800);
-  assert.equal(catalogCalls, 1, 'Query-string update must not reload the restore catalog');
+  const shareY = (await page.getByRole('heading', { name: 'Share or save your preview' }).boundingBox())?.y;
+  const saveY = (await page.getByRole('button', { name: 'Sign in and save it', exact: true }).boundingBox())?.y;
+  const regenerateY = (await page.getByRole('button', { name: 'Regenerate', exact: true }).boundingBox())?.y;
+  assert.ok(shareY !== undefined && regenerateY !== undefined && shareY < regenerateY, 'Sharing must appear before regeneration');
+  assert.ok(saveY !== undefined && regenerateY !== undefined && saveY < regenerateY, 'Account protection must appear before regeneration');
+  await page.screenshot({ path: '/tmp/ic-preview-result-mobile.png', fullPage: true });
+  assert.equal(catalogCalls, 2, 'Only the deliberate full-page reload may reload the catalog');
   assert.ok(await page.getByRole('heading', { name: 'Your portrait is ready' }).isVisible());
+  assert.match(
+    await page.getByRole('link', { name: 'Save image', exact: true }).getAttribute('href'),
+    /[?&]intent=download(?:&|$)/,
+  );
   const direct = 'https://imagecrafter.app/p/test_portrait_fixture';
   await page.getByRole('button', { name: 'Copy link', exact: true }).click();
   await page.getByRole('button', { name: 'Share', exact: true }).click();
@@ -94,6 +108,8 @@ try {
   }
   assert.equal(shortenerCalls, 0);
   console.log('PASS: clipboard, native sharing, image caption and all social buttons use direct HTTPS; no Shlink request');
-  console.log('PASS: query update does not replay restoration; completed preview and sharing remain visible');
+  console.log('PASS: query update does not replay restoration; the deliberate reload restores the completed preview');
+  console.log('PASS: an accepted background job survives a mobile-sized page reload and restores from server status');
+  console.log('PASS: mobile result prioritizes sharing and account protection before regeneration controls');
   console.log('Network fixtures only: no database rows, uploads, or paid generations created');
 } finally { await browser.close(); }

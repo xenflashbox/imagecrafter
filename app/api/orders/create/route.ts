@@ -29,6 +29,7 @@ import { requireEnv } from "@/lib/env";
 import { printCheckoutEnabled } from "@/lib/launch-flags";
 import { portraitReturnAccess } from "@/lib/services/portrait-return";
 import { getPrice, DIGITAL_SKU, PriceUnavailableError } from "@/lib/services/pricing";
+import { attributionFromRequest, clientIp as analyticsClientIp, logAnalyticsEvent } from "@/lib/services/analytics";
 
 // Built per request, not at module scope: Next.js collects page data during the
 // build, so a module-scope client makes every build require a live payment key.
@@ -231,6 +232,25 @@ export async function GET(request: NextRequest) {
   const visitorIp =
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
   const visitorUa = request.headers.get("user-agent");
+  const attribution = attributionFromRequest(request);
+
+  await logAnalyticsEvent({
+    eventName: "checkout_started",
+    sessionId,
+    userId,
+    portraitId: portrait.id,
+    orderId: order.id,
+    ...attribution,
+    metadata: {
+      type,
+      sku: type === "print" ? (catalogProduct?.sku || sku) : DIGITAL_SKU,
+      amountCents,
+      stylePackSlug: portrait.stylePackSlug,
+      styleVariantSlug: portrait.styleVariantSlug,
+    },
+    ip: analyticsClientIp(request.headers),
+    userAgent: visitorUa,
+  });
 
   // --- Build Stripe Checkout Session ---
   const sessionConfig: Stripe.Checkout.SessionCreateParams = {
@@ -290,6 +310,24 @@ export async function GET(request: NextRequest) {
   await prisma.order.update({
     where: { id: order.id },
     data: { stripeSessionId: checkoutSession.id },
+  });
+
+  await logAnalyticsEvent({
+    eventName: "stripe_checkout_session_created",
+    sessionId,
+    userId,
+    portraitId: portrait.id,
+    orderId: order.id,
+    stripeSessionId: checkoutSession.id,
+    ...attribution,
+    metadata: {
+      type,
+      amountCents,
+      stripeStatus: checkoutSession.status,
+      paymentStatus: checkoutSession.payment_status,
+    },
+    ip: analyticsClientIp(request.headers),
+    userAgent: visitorUa,
   });
 
   await trackTikTokEvent({

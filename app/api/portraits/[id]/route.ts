@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { portraitReturnAccess } from "@/lib/services/portrait-return";
+import { ensureUser } from "@/lib/ensure-user";
 
 export async function GET(
   request: NextRequest,
@@ -40,7 +41,7 @@ export async function GET(
     const sessionId = request.cookies.get("portrait_session_id")?.value;
 
     // --- Load portrait ---
-    const portrait = await prisma.portrait.findUnique({
+    let portrait = await prisma.portrait.findUnique({
       where: { id: portraitId },
       select: {
         id: true,
@@ -64,6 +65,32 @@ export async function GET(
         { success: false, error: "Portrait not found" },
         { status: 404 }
       );
+    }
+
+    // OAuth redirects preserve the signed portrait-session cookie. Claim a
+    // guest portrait automatically when that same browser returns signed in;
+    // otherwise the finished result exists but remains invisible in the
+    // account dashboard until the user happens to press a separate save button.
+    if (userId && !portrait.userId && sessionId === portrait.sessionId) {
+      await ensureUser(userId);
+      portrait = await prisma.portrait.update({
+        where: { id: portraitId },
+        data: { userId },
+        select: {
+          id: true,
+          userId: true,
+          sessionId: true,
+          sourceImageUrl: true,
+          previewImageUrl: true,
+          stylePackSlug: true,
+          styleVariantSlug: true,
+          subjectType: true,
+          status: true,
+          errorMessage: true,
+          generationTimeMs: true,
+          createdAt: true,
+        },
+      });
     }
 
     // --- Authorization: must be owner ---
@@ -93,6 +120,7 @@ export async function GET(
         generationTimeMs: portrait.generationTimeMs,
         createdAt: portrait.createdAt,
         isOwner: true,
+        isSavedToAccount: Boolean(userId && portrait.userId === userId),
       },
     });
   } catch (error) {

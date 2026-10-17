@@ -31,10 +31,10 @@ export default function DataDeletionPage() {
         </p>
         <p>
           Two things survive on purpose: the payment records our accountant and
-          the card networks require us to keep, and any portrait you gave us
-          written permission to show in the public gallery. Tell us in the same
-          email if you want that gallery permission withdrawn and we will pull
-          the image down.
+          the card networks require us to keep, and unpaid preview examples that
+          were already eligible for the public gallery. Tell us in the same
+          email if you want a gallery example withdrawn and we will pull it
+          down.
         </p>
         <p>
           Deleting is not reversible. If you have bought a full-resolution

@@ -15,6 +15,7 @@ import { LEGAL_LINKS } from "@/lib/legal";
 const NAV_LINKS: NavLink[] = [
   { href: "/#styles", label: "Styles" },
   { href: "/#results", label: "Results" },
+  { href: "/gallery", label: "Gallery" },
   { href: "/memorial", label: "Memorial" },
   { href: "/#pricing", label: "Pricing" },
   { href: "/blog", label: "Blog" },
@@ -83,6 +84,9 @@ export function SiteFooter() {
         <div className="flex flex-wrap items-center justify-center gap-5">
           <Link href="/#styles" className="hover:text-ink-muted transition-colors">
             Styles
+          </Link>
+          <Link href="/gallery" className="hover:text-ink-muted transition-colors">
+            Gallery
           </Link>
           <Link href="/blog" className="hover:text-ink-muted transition-colors">Blog</Link>
           <Link href="/memorial" className="hover:text-ink-muted transition-colors">

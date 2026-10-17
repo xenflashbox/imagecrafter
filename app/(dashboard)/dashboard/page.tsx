@@ -34,7 +34,7 @@ interface Order {
   createdAt: string;
   downloadCount: number;
   maxDownloads: number;
-  prodigiStatus: string | null;
+  fulfillmentStatus: string | null;
   printSize: string | null;
   downloadable: boolean;
   portrait: {
@@ -53,7 +53,7 @@ interface LedgerEntry {
   createdAt: string;
 }
 
-const IN_PROGRESS = ["pending", "analyzing", "generating"];
+const IN_PROGRESS = ["pending", "queued", "analyzing", "generating"];
 
 function formatMoney(cents: number, currency: string) {
   return new Intl.NumberFormat("en-US", {
@@ -344,7 +344,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="mt-1 text-xs" style={{ color: "var(--ink-subtle)" }}>
                       {formatDate(o.createdAt)} · {formatMoney(o.amount, o.currency)}
-                      {o.type === "print" && o.prodigiStatus ? ` · ${o.prodigiStatus}` : ""}
+                      {o.type === "print" && o.fulfillmentStatus ? ` · ${o.fulfillmentStatus}` : ""}
                       {o.status === "refunded" ? " · refunded" : ""}
                       {o.type === "digital" && o.status !== "refunded"
                         ? ` · ${o.maxDownloads - o.downloadCount} of ${o.maxDownloads} downloads left`

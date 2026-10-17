@@ -8,26 +8,23 @@
 |--------|---------|
 | Identify repo & service | `./scripts/whoami.sh` |
 | Preflight checks | `./scripts/preflight.sh` |
-| Deploy (build → push → update) | `./scripts/deploy.sh` |
+| Deploy to production | `./scripts/deploy.sh` |
 | Emergency deploy (dirty tree) | `./scripts/deploy.sh --force` |
 | Verify health | `./scripts/verify.sh` |
-| Full deploy with tag | `./deploy-imagecrafter.sh v20260228-120000` |
 
 ## Deployment Flow
 
 ```
 ./scripts/deploy.sh
-  └── ./scripts/preflight.sh   ← hard blocks on: wrong dir, dirty git, wrong branch, bad subnet
-  └── ./deploy-imagecrafter.sh ← builds Docker image with build args, pushes, swarm update
-  └── ./scripts/verify.sh      ← checks health_url + version_url + swarm replica status
+  └── ./scripts/preflight.sh   ← hard blocks on: wrong dir, dirty git, wrong branch
+  └── vercel deploy --prod --yes
+  └── ./scripts/verify.sh      ← checks health_url + version_url
 ```
 
 ## Stack Info
 
 - **App URL**: https://imagecrafter.app
-- **Swarm service**: `imagecrafter_imagecrafter` (2 replicas)
-- **Docker image**: `registry.xencolabs.com/imagecrafter`
-- **Swarm manager**: 10.8.8.15 (xenco3 — Leader)
+- **Hosting**: Vercel project `imagecrafter`
 - **Database**: Shared Blogcraft Neon PostgreSQL (`ic_` prefix)
 
 ## Health Endpoints
@@ -39,15 +36,12 @@
 
 | File | Purpose |
 |------|---------|
-| `CRITICAL.md` | Network, nodes, DB rules — read first |
+| `CRITICAL.md` | Deployment and DB rules — read first |
 | `.xenco/meta.json` | Machine-readable service identity + deploy config |
-| `scripts/whoami.sh` | Orientation: pwd, git, meta, swarm status |
+| `scripts/whoami.sh` | Orientation: pwd, git, meta, Vercel project |
 | `scripts/preflight.sh` | Hard blocks before deploy |
-| `scripts/deploy.sh` | Guardrails-wrapped deploy entrypoint |
+| `scripts/deploy.sh` | Guardrails-wrapped Vercel deploy entrypoint |
 | `scripts/verify.sh` | Post-deploy health verification |
-| `deploy-imagecrafter.sh` | Full deploy script (build args, push, service update) |
-| `docker-compose.yml` | Swarm stack definition |
-| `Dockerfile` | Multi-stage Next.js build |
 | `prisma/schema.prisma` | Database schema (`@@map("ic_*")` prefixes) |
 
 ## Emergency Procedure

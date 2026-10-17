@@ -21,7 +21,6 @@ import {
   Loader2,
   Lock,
   LogIn,
-  Mail,
   Palette,
   RefreshCw,
   ShieldCheck,
@@ -34,6 +33,7 @@ import { ShareButtons } from "@/components/share-buttons";
 import { Turnstile } from "@/components/turnstile";
 import { PORTRAIT_STAGES, STAGE_LABELS, type PortraitStage } from "@/lib/portrait-stages";
 import { subscribeToProgress } from "@/lib/portrait-progress-client";
+import { trackEvent } from "@/lib/analytics-client";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -53,6 +53,22 @@ interface StylePack {
   thumbnailUrl: string;
   variants: StyleVariant[];
 }
+
+interface PortraitStatus {
+  id: string;
+  status: string;
+  previewImageUrl: string | null;
+  sourceImageUrl?: string;
+  stylePackSlug: string;
+  styleVariantSlug: string;
+  errorMessage: string | null;
+  isSavedToAccount?: boolean;
+}
+
+const PORTRAIT_ID_KEY = "ic_portraitId";
+const PREVIEW_URL_KEY = "ic_previewUrl";
+const SOURCE_URL_KEY = "ic_sourceUrl";
+const PROCESSING_STATUSES = new Set(["queued", "analyzing", "generating"]);
 
 type Step = "upload" | "style" | "generate";
 
@@ -369,34 +385,29 @@ function StylePackSelector({
 function PreviewGatePanel({
   code,
   message,
-  email,
-  onEmailChange,
-  marketingConsent,
-  onMarketingConsentChange,
-  onSubmitEmail,
+  portraitId,
+  onSubmitCaptcha,
   onCaptchaToken,
   captchaReady,
   onChangeStyle,
 }: {
   code: string;
   message: string | null;
-  email: string;
-  onEmailChange: (v: string) => void;
-  marketingConsent: boolean;
-  onMarketingConsentChange: (v: boolean) => void;
-  onSubmitEmail: () => void;
+  portraitId: string | null;
+  onSubmitCaptcha: () => void;
   onCaptchaToken: (token: string | null) => void;
   captchaReady: boolean;
   onChangeStyle?: () => void;
 }) {
-  const isEmail = code === "email_required";
+  const isAccount = code === "account_required";
   const isCaptcha = code === "captcha_required" || code === "captcha_failed";
+  const returnTo = `/portraits/create${portraitId ? `?portraitId=${portraitId}` : ""}`;
 
   return (
     <div className="flex min-h-[400px] flex-col items-center justify-center gap-5">
       <div className="flex size-12 items-center justify-center rounded-full border border-rim">
-        {isEmail ? (
-          <Mail className="size-5 text-accent" />
+        {isAccount ? (
+          <LogIn className="size-5 text-accent" />
         ) : (
           <ShieldCheck className="size-5 text-accent" />
         )}
@@ -404,51 +415,33 @@ function PreviewGatePanel({
 
       <div className="max-w-sm text-center">
         <p className="mb-2 font-display text-xl text-ink">
-          {isEmail
-            ? "One more? Just your email."
+          {isAccount
+            ? "Save your work and keep creating"
             : isCaptcha
             ? "Quick check"
             : "That's the limit for today"}
         </p>
         <p className="text-sm text-ink-muted">
-          {isEmail
-            ? "Enter your email to continue and receive a private link to your finished preview."
+          {isAccount
+            ? "Sign in with Google or Facebook so every finished portrait and in-progress job follows you to your account."
             : message}
         </p>
       </div>
 
-      {isEmail && (
-        <form
-          className="flex w-full max-w-sm flex-col gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            onSubmitEmail();
-          }}
+      {isAccount && (
+        <Link
+          href={`/sign-in?redirect_url=${encodeURIComponent(returnTo)}`}
+          className="inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-3 text-sm font-semibold text-canvas transition-opacity hover:opacity-90"
         >
-          <input
-            type="email"
-            required
-            autoFocus
-            value={email}
-            onChange={(e) => onEmailChange(e.target.value)}
-            placeholder="you@example.com"
-            className="w-full rounded-lg border border-rim bg-surface-raised px-4 py-3 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
-          />
-          <label className="flex items-start gap-3 text-sm text-ink-muted">
-            <input type="checkbox" checked={marketingConsent} onChange={e => onMarketingConsentChange(e.target.checked)} className="mt-1 size-4 shrink-0" />
-            <span>Send me portrait ideas and offers from ImageCrafter. Optional; unsubscribe anytime.</span>
-          </label>
-          <PrimaryButton type="submit" className="py-2 text-sm">
-            <Sparkles /> Keep Creating
-          </PrimaryButton>
-        </form>
+          <LogIn className="size-4" /> Continue with an account
+        </Link>
       )}
 
       {isCaptcha && (
         <div className="flex flex-col items-center gap-3">
           <Turnstile onToken={onCaptchaToken} />
           <PrimaryButton
-            onClick={onSubmitEmail}
+            onClick={onSubmitCaptcha}
             disabled={!captchaReady}
             className="py-2 text-sm"
           >
@@ -457,7 +450,7 @@ function PreviewGatePanel({
         </div>
       )}
 
-      {!isEmail && !isCaptcha && (
+      {!isAccount && !isCaptcha && (
         <div className="flex flex-wrap justify-center gap-2">
           <Link href="/portraits">
             <QuietButton className="py-2 text-sm">
@@ -521,9 +514,15 @@ function GenerationProgress({
       <div className="max-w-sm text-center">
         <p className="mb-1 font-display text-xl text-ink">Creating your portrait…</p>
         <p className="text-sm leading-relaxed text-ink-muted">
-          Most take 4–6 minutes. Some take longer, and some fail — either way
-          this screen will tell you. Please keep this tab open.
+          Most take 4–6 minutes. You can lock your phone, switch apps, or leave
+          this page. Your portrait keeps running and will be restored when you return.
         </p>
+        <Link
+          href="/gallery"
+          className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline"
+        >
+          <Palette className="size-4" /> Browse the gallery while you wait
+        </Link>
       </div>
 
       {currentIdx === -1 ? (
@@ -688,59 +687,62 @@ function PreviewSection({
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex flex-wrap justify-center gap-2">
-          {onRegenerate && (
-            <QuietButton onClick={onRegenerate} className="py-2 text-sm">
-              <RefreshCw /> Regenerate
-            </QuietButton>
-          )}
-          {onChangeStyle && (
-            <QuietButton onClick={onChangeStyle} className="py-2 text-sm">
-              <Palette /> Change Style
-            </QuietButton>
-          )}
-          {onNewPhoto && (
-            <QuietButton onClick={onNewPhoto} className="py-2 text-sm">
-              <Camera /> New Photo
-            </QuietButton>
-          )}
-          {onSaveToAccount && (
-            <QuietButton
+        {portraitId && <ShareButtons
+          portraitId={portraitId}
+          imageUrl={previewUrl}
+          heading="Share or save your preview"
+          description="Send the link or save the watermarked image while it is in front of you."
+          prominent
+        />}
+
+        {onSaveToAccount && !isSaved && (
+          <div className="border-y border-rim bg-surface px-4 py-5 sm:px-5">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="mt-0.5 size-5 flex-none text-accent" />
+              <div>
+                <h3 className="font-display text-lg text-ink">
+                  {isAuthenticated ? "Save this portrait to your account" : "Don't lose this portrait"}
+                </h3>
+                <p className="mt-1 text-sm leading-relaxed text-ink-muted">
+                  {isAuthenticated
+                    ? "Save it to My Portraits so you can return to it from any device."
+                    : "Your image is safe on our server, but it is not saved to an account. Sign in now to put it in My Portraits. Without that, there is no account history to return to if you lose this page or switch devices."}
+                </p>
+              </div>
+            </div>
+            <PrimaryButton
               onClick={onSaveToAccount}
-              disabled={isSaved || isSaving}
-              className={`py-2 text-sm ${isSaved ? "!text-positive" : ""}`}
+              disabled={isSaving}
+              className="mt-4 min-h-12 w-full text-sm sm:w-auto"
             >
               {isSaving ? (
-                <><Loader2 className="animate-spin" /> Saving…</>
-              ) : isSaved ? (
-                <><Check /> Saved</>
+                <><Loader2 className="animate-spin" /> Saving...</>
               ) : isAuthenticated ? (
-                <><Download /> Save to Account</>
+                <><Download /> Save to My Portraits</>
               ) : (
-                <><LogIn /> Sign In to Save</>
+                <><LogIn /> Sign in and save it</>
               )}
-            </QuietButton>
-          )}
-        </div>
+            </PrimaryButton>
+          </div>
+        )}
+
+        {isSaved && (
+          <div className="flex items-start gap-3 border-y border-positive/40 bg-positive/5 px-4 py-4 text-sm text-ink-muted sm:px-5">
+            <Check className="mt-0.5 size-4 flex-none text-positive" />
+            <p><strong className="text-ink">Saved to My Portraits.</strong> You can return to it from any device after signing in.</p>
+          </div>
+        )}
+
         {saveError && (
           <Notice tone="danger" icon={<AlertTriangle />}>
             {saveError}
           </Notice>
         )}
-        <p className="text-center text-xs text-ink-faint">
-          Regenerate for a different version · Change style or photo to start fresh
-        </p>
-
-        {portraitId && <ShareButtons
-          portraitId={portraitId}
-          imageUrl={previewUrl}
-        />}
 
         <div className="rounded-2xl border border-accent-rim bg-surface p-6">
           <h3 className="mb-1 font-display text-xl text-ink">Love your portrait?</h3>
           <p className="mb-4 text-sm text-ink-muted">
-            Purchase to remove the watermark and get full 4K resolution — delivered
+            Purchase to remove the watermark and get the high-resolution file — delivered
             instantly to your email.
           </p>
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -762,6 +764,29 @@ function PreviewSection({
           <p className="mt-3 text-center text-xs text-ink-faint">
             No account required · Secure checkout · Instant delivery
           </p>
+        </div>
+
+        <div className="border-t border-rim pt-5">
+          <h3 className="mb-3 text-center text-sm font-semibold text-ink-muted">
+            Try another version
+          </h3>
+          <div className="flex flex-wrap justify-center gap-2">
+            {onRegenerate && (
+              <QuietButton onClick={onRegenerate} className="py-2 text-sm">
+                <RefreshCw /> Regenerate
+              </QuietButton>
+            )}
+            {onChangeStyle && (
+              <QuietButton onClick={onChangeStyle} className="py-2 text-sm">
+                <Palette /> Change Style
+              </QuietButton>
+            )}
+            {onNewPhoto && (
+              <QuietButton onClick={onNewPhoto} className="py-2 text-sm">
+                <Camera /> New Photo
+              </QuietButton>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -836,15 +861,12 @@ function CreatePortraitContent() {
     stageAtMs: 0,
   });
   const unsubscribeProgress = useRef<(() => void) | null>(null);
+  const generationStartedAt = useRef(Date.now());
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [generationError, setGenerationError] = useState<string | null>(null);
-  // Preview gate. gateCode decides which prompt to show; previewEmail is the
-  // address the visitor has already given, replayed on every later generation
-  // so they are asked exactly once.
+  // Preview gate. The first guest preview is free; later previews require a
+  // verified Clerk account rather than an arbitrary typed email address.
   const [gateCode, setGateCode] = useState<string | null>(null);
-  const [gateEmail, setGateEmail] = useState("");
-  const [previewEmail, setPreviewEmail] = useState<string | null>(null);
-  const [marketingConsent, setMarketingConsent] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -870,24 +892,27 @@ function CreatePortraitContent() {
         setPacksError(
           packsData.error || `We couldn't load the style catalog (HTTP ${packsRes.status}).`
         );
-        return;
+        return null;
       }
       if (!packsData.stylePacks?.length) {
         setPacksError("No styles are available right now. Please try again shortly.");
-        return;
+        return null;
       }
 
       setStylePacks(packsData.stylePacks);
       setSelectedPack(packsData.stylePacks[0]);
       setSelectedVariant(packsData.stylePacks[0].variants[0] || null);
+      return packsData.stylePacks as StylePack[];
     } catch {
       setPacksError("Network error loading styles. Please check your connection and try again.");
+      return null;
     } finally {
       setPacksLoading(false);
     }
   }, []);
 
-  // Restore session state from sessionStorage on mount
+  // Restore the server-owned job on mount. localStorage survives OAuth,
+  // mobile tab eviction, and browser restarts; sessionStorage does not.
   const restoredSession = useRef(false);
   useEffect(() => {
     // Upload updates the portraitId query string. That is not a fresh mount:
@@ -895,36 +920,101 @@ function CreatePortraitContent() {
     // generation back to the style step when it eventually resolves.
     if (restoredSession.current) return;
     restoredSession.current = true;
-    const savedPortraitId = searchParams.get("portraitId") || sessionStorage.getItem("ic_portraitId");
-    const savedSessionId = sessionStorage.getItem("ic_sessionId");
-    const savedPreviewUrl = sessionStorage.getItem("ic_previewUrl");
-    const savedSourceUrl = sessionStorage.getItem("ic_sourceUrl");
+    const legacyId = sessionStorage.getItem(PORTRAIT_ID_KEY);
+    const savedPortraitId =
+      searchParams.get("portraitId") ||
+      localStorage.getItem(PORTRAIT_ID_KEY) ||
+      legacyId;
+    const savedPreviewUrl =
+      localStorage.getItem(PREVIEW_URL_KEY) ||
+      sessionStorage.getItem(PREVIEW_URL_KEY);
+    const savedSourceUrl =
+      localStorage.getItem(SOURCE_URL_KEY) ||
+      sessionStorage.getItem(SOURCE_URL_KEY);
 
-    setPreviewEmail(sessionStorage.getItem("ic_previewEmail"));
-
-    if (savedPortraitId && savedPreviewUrl) {
-      setPortraitId(savedPortraitId);
-      setSessionId(savedSessionId);
-      setPreviewUrl(savedPreviewUrl);
+    if (!savedPortraitId) return;
+    localStorage.setItem(PORTRAIT_ID_KEY, savedPortraitId);
+    setPortraitId(savedPortraitId);
+    if (savedSourceUrl && !savedSourceUrl.startsWith("blob:")) {
       setPhotoPreview(savedSourceUrl);
-      setStep("generate");
-      // Restoring straight to the preview still needs the catalog: "Change Style"
-      // and "Regenerate" both read from it.
-      loadStylePacks();
-    } else if (savedPortraitId && savedSourceUrl) {
-      setPortraitId(savedPortraitId);
-      setSessionId(savedSessionId);
-      setPhotoPreview(savedSourceUrl);
-      loadStylePacks().then(() => setStep("style"));
     }
+
+    (async () => {
+      const packs = await loadStylePacks();
+      try {
+        const res = await fetch(`/api/portraits/${savedPortraitId}`, {
+          cache: "no-store",
+        });
+        const data: { success?: boolean; error?: string; portrait?: PortraitStatus } =
+          await res.json().catch(() => ({}));
+        if (!res.ok || !data.portrait) {
+          throw new Error(data.error || `HTTP ${res.status}`);
+        }
+
+        const current = data.portrait;
+        setIsSaved(Boolean(current.isSavedToAccount));
+        if (current.sourceImageUrl) {
+          setPhotoPreview(current.sourceImageUrl);
+          localStorage.setItem(SOURCE_URL_KEY, current.sourceImageUrl);
+        }
+        const pack = packs?.find((item) => item.slug === current.stylePackSlug);
+        const variant = pack?.variants.find(
+          (item) => item.slug === current.styleVariantSlug
+        );
+        if (pack) setSelectedPack(pack);
+        if (variant) setSelectedVariant(variant);
+
+        if (PROCESSING_STATUSES.has(current.status)) {
+          generationStartedAt.current = Date.now();
+          setGenerationElapsedMs(0);
+          setGenerationError(null);
+          setIsGenerating(true);
+          setStep("generate");
+          return;
+        }
+        if (
+          current.previewImageUrl &&
+          (current.status === "preview" || current.status === "purchased")
+        ) {
+          setPreviewUrl(current.previewImageUrl);
+          localStorage.setItem(PREVIEW_URL_KEY, current.previewImageUrl);
+          setGenerationError(null);
+          setIsGenerating(false);
+          setStep("generate");
+          return;
+        }
+        if (current.status === "failed") {
+          setGenerationError(
+            current.errorMessage || "Generation failed. Please try another photo or style."
+          );
+          setIsGenerating(false);
+          setStep("generate");
+          return;
+        }
+        setStep("style");
+      } catch (error) {
+        console.error("[portrait recovery] status lookup failed:", error);
+        if (savedPreviewUrl) {
+          setPreviewUrl(savedPreviewUrl);
+          setStep("generate");
+        } else {
+          setGenerationError(
+            "We couldn't check your portrait yet. Reopen this page when your connection returns."
+          );
+          setStep("generate");
+        }
+      }
+    })();
   }, [searchParams, loadStylePacks]);
 
-  // Save session state to sessionStorage when it changes
+  // Persist only durable URLs. Blob URLs stop working as soon as a mobile tab
+  // is evicted, which was another reason restored uploads appeared missing.
   useEffect(() => {
-    if (portraitId) sessionStorage.setItem("ic_portraitId", portraitId);
-    if (sessionId) sessionStorage.setItem("ic_sessionId", sessionId);
-    if (previewUrl) sessionStorage.setItem("ic_previewUrl", previewUrl);
-    if (photoPreview) sessionStorage.setItem("ic_sourceUrl", photoPreview);
+    if (portraitId) localStorage.setItem(PORTRAIT_ID_KEY, portraitId);
+    if (previewUrl) localStorage.setItem(PREVIEW_URL_KEY, previewUrl);
+    if (photoPreview && !photoPreview.startsWith("blob:")) {
+      localStorage.setItem(SOURCE_URL_KEY, photoPreview);
+    }
   }, [portraitId, sessionId, previewUrl, photoPreview]);
 
   // Handle retry/change style - go back to style selection, keep the uploaded photo
@@ -934,7 +1024,8 @@ function CreatePortraitContent() {
     setGateCode(null);
     setPreviewUrl(null);
     setIsSaved(false);
-    sessionStorage.removeItem("ic_previewUrl");
+    localStorage.removeItem(PREVIEW_URL_KEY);
+    sessionStorage.removeItem(PREVIEW_URL_KEY);
     setStep("style");
     if (stylePacks.length === 0) {
       loadStylePacks();
@@ -947,12 +1038,12 @@ function CreatePortraitContent() {
 
   // Clear all session data and start fresh
   const handleStartOver = () => {
-    // Clear sessionStorage FIRST
-    sessionStorage.removeItem("ic_portraitId");
+    // Clear durable recovery pointers before starting a new portrait.
+    for (const key of [PORTRAIT_ID_KEY, PREVIEW_URL_KEY, SOURCE_URL_KEY]) {
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    }
     sessionStorage.removeItem("ic_sessionId");
-    sessionStorage.removeItem("ic_previewUrl");
-    sessionStorage.removeItem("ic_sourceUrl");
-    sessionStorage.removeItem("ic_previewEmail");
 
     // Replace URL immediately (before state changes trigger re-renders)
     // Using window.location for a clean navigation that won't restore state
@@ -974,6 +1065,9 @@ function CreatePortraitContent() {
     setPhotoFile(f);
     setUploadError(null);
     setPhotoPreview(URL.createObjectURL(f));
+    trackEvent("upload_started", {
+      metadata: { contentType: f.type, sizeBytes: f.size },
+    });
   };
 
   // Upload photo and proceed to style selection
@@ -1026,7 +1120,13 @@ function CreatePortraitContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ portraitId: ticket.portraitId, key: ticket.key }),
       });
-      const data: { success?: boolean; error?: string; portraitId?: string; sessionId?: string } =
+      const data: {
+        success?: boolean;
+        error?: string;
+        portraitId?: string;
+        sessionId?: string;
+        sourceImageUrl?: string;
+      } =
         await confirmRes.json().catch(() => ({}));
 
       if (!confirmRes.ok || !data.success) {
@@ -1041,6 +1141,14 @@ function CreatePortraitContent() {
       }
       setPortraitId(data.portraitId);
       setSessionId(data.sessionId);
+      if (data.sourceImageUrl) {
+        setPhotoPreview(data.sourceImageUrl);
+        localStorage.setItem(SOURCE_URL_KEY, data.sourceImageUrl);
+      }
+      trackEvent("upload_completed", {
+        portraitId: data.portraitId,
+        metadata: { contentType: upload.type, sizeBytes: upload.size },
+      });
 
       // Update URL with portraitId for session persistence
       router.replace(`/portraits/create?portraitId=${data.portraitId}`, { scroll: false });
@@ -1049,32 +1157,142 @@ function CreatePortraitContent() {
       await loadStylePacks();
       setStep("style");
     } catch {
+      trackEvent("upload_failed", {
+        metadata: { reason: "network_error" },
+      });
       setUploadError("Network error. Please check your connection and try again.");
     } finally {
       setIsUploading(false);
     }
   };
 
-  // Generate portrait.
-  //
-  // The gate credentials are passed explicitly rather than read from state:
-  // the email form calls this in the same tick it accepts the address, and a
-  // setState is not visible synchronously.
-  const handleGenerate = async (gate?: { email?: string | null; captchaToken?: string | null }) => {
+  // Keep the elapsed clock tied to the server job rather than the initiating
+  // fetch. The fetch now returns immediately while generation continues.
+  useEffect(() => {
+    if (!isGenerating) return;
+    const tick = () =>
+      setGenerationElapsedMs(Date.now() - generationStartedAt.current);
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [isGenerating]);
+
+  // Polling is the durable source of truth. Mobile browsers throttle timers in
+  // the background, then this check runs immediately on focus/visibility and
+  // restores either the finished preview or the real server error.
+  useEffect(() => {
+    if (!isGenerating || !portraitId) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const finish = () => {
+      unsubscribeProgress.current?.();
+      unsubscribeProgress.current = null;
+      setIsGenerating(false);
+    };
+
+    const check = async () => {
+      if (stopped) return;
+      try {
+        const res = await fetch(`/api/portraits/${portraitId}`, {
+          cache: "no-store",
+        });
+        const data: { portrait?: PortraitStatus } = await res.json();
+        const current = data.portrait;
+        if (!res.ok || !current) throw new Error(`HTTP ${res.status}`);
+        setIsSaved(Boolean(current.isSavedToAccount));
+
+        if (PROCESSING_STATUSES.has(current.status)) {
+          timer = setTimeout(check, 4000);
+          return;
+        }
+        if (
+          current.previewImageUrl &&
+          (current.status === "preview" || current.status === "purchased")
+        ) {
+          setPreviewUrl(current.previewImageUrl);
+          localStorage.setItem(PREVIEW_URL_KEY, current.previewImageUrl);
+          setGenerationError(null);
+          setGateCode(null);
+          trackEvent("generation_succeeded", {
+            portraitId,
+            metadata: { elapsedMs: Date.now() - generationStartedAt.current },
+          });
+          finish();
+          return;
+        }
+        if (current.status === "failed") {
+          setGenerationError(
+            current.errorMessage ||
+              "Generation failed. Please try another photo or style."
+          );
+          trackEvent("generation_failed", {
+            portraitId,
+            metadata: { error: current.errorMessage || "server_failed" },
+          });
+          finish();
+          return;
+        }
+        timer = setTimeout(check, 4000);
+      } catch {
+        // A temporary offline period is not a failed generation. Check again
+        // when connectivity returns or on the next polling interval.
+        setProgress((current) => ({
+          ...current,
+          note: "Your portrait is still running safely. Reconnecting…",
+        }));
+        timer = setTimeout(check, 5000);
+      }
+    };
+
+    const checkNow = () => {
+      if (document.visibilityState === "visible") {
+        if (timer) clearTimeout(timer);
+        timer = null;
+        void check();
+      }
+    };
+    void check();
+    window.addEventListener("focus", checkNow);
+    window.addEventListener("online", checkNow);
+    document.addEventListener("visibilitychange", checkNow);
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      window.removeEventListener("focus", checkNow);
+      window.removeEventListener("online", checkNow);
+      document.removeEventListener("visibilitychange", checkNow);
+    };
+  }, [isGenerating, portraitId]);
+
+  const handleGenerate = async (gate?: { captchaToken?: string | null }) => {
     if (!portraitId || !selectedPack || !selectedVariant) return;
     const scene = userScene.trim();
     if (selectedPack.slug === "custom-scene" && !scene) return;
-    const email = gate?.email ?? previewEmail;
     const token = gate?.captchaToken ?? captchaToken;
+    trackEvent("style_selected", {
+      portraitId,
+      metadata: {
+        stylePackSlug: selectedPack.slug,
+        styleVariantSlug: selectedVariant.slug,
+      },
+    });
+    trackEvent("generation_started", {
+      portraitId,
+      metadata: {
+        stylePackSlug: selectedPack.slug,
+        styleVariantSlug: selectedVariant.slug,
+      },
+    });
     setIsGenerating(true);
     setGenerationError(null);
     setGateCode(null);
     setStep("generate");
 
     const startedAt = Date.now();
+    generationStartedAt.current = startedAt;
     setGenerationElapsedMs(0);
     setProgress({ stage: null, note: null, stageAtMs: 0 });
-    const interval = setInterval(() => setGenerationElapsedMs(Date.now() - startedAt), 1000);
 
     // Subscribed before the request goes out, so the first boundary the
     // pipeline crosses cannot land before anyone is listening.
@@ -1096,57 +1314,70 @@ function CreatePortraitContent() {
           portraitId,
           stylePackSlug: selectedPack.slug,
           styleVariantSlug: selectedVariant.slug,
-          sessionId,
           ...(scene ? { userScene: scene } : {}),
-          ...(email ? { email } : {}),
-          marketingConsent,
           ...(token ? { captchaToken: token } : {}),
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        setGenerationError(data.error || "Generation failed. Please try with a different photo or style.");
+        trackEvent("generation_failed", {
+          portraitId,
+          metadata: {
+            status: res.status,
+            code: data.code || null,
+            error: data.error || null,
+            stylePackSlug: selectedPack.slug,
+            styleVariantSlug: selectedVariant.slug,
+          },
+        });
+        if (res.status === 409 && data.code === "already_processing") {
+          setGenerationError(null);
+          setProgress((current) => ({
+            ...current,
+            note: "Your existing generation is still running. Reconnected.",
+          }));
+          return;
+        }
+        setGenerationError(
+          data.error || "Generation failed. Please try with a different photo or style."
+        );
         if (data.code) setGateCode(data.code);
         // A Turnstile token is single-use — a rejected one must not be replayed.
         if (data.code === "captcha_failed" || data.code === "captcha_required") {
           setCaptchaToken(null);
         }
+        unsubscribeProgress.current?.();
+        unsubscribeProgress.current = null;
+        setIsGenerating(false);
         return;
       }
-      setPreviewUrl(data.previewImageUrl);
+      setProgress((current) => ({
+        ...current,
+        note: "You can leave this page. We will keep working and restore the result when you return.",
+      }));
     } catch {
-      setGenerationError("Network error during generation. Please try again.");
-    } finally {
-      clearInterval(interval);
-      unsubscribeProgress.current?.();
-      unsubscribeProgress.current = null;
-      setIsGenerating(false);
+      // The server owns the job once submitted. A browser disconnect is not
+      // evidence that generation failed; the polling effect will reconcile it.
+      setProgress((current) => ({
+        ...current,
+        note: "Connection changed, but your portrait keeps running. Reconnecting…",
+      }));
     }
   };
 
   // A navigation mid-generation must not leave the socket reconnecting forever.
   useEffect(() => () => unsubscribeProgress.current?.(), []);
 
-  // Retry the refused generation with whatever the gate asked for.
+  // Retry a captcha refusal with the single-use token.
   const handleGateSubmit = async () => {
-    const email = gateEmail.trim().toLowerCase();
-    if (gateCode === "email_required") {
-      if (!email) return;
-      setPreviewEmail(email);
-      sessionStorage.setItem("ic_previewEmail", email);
-      await handleGenerate({ email });
-      return;
-    }
     await handleGenerate({ captchaToken });
   };
 
   // Regenerate - same style, new generation
   const handleRegenerate = async () => {
     if (!portraitId || !selectedPack || !selectedVariant) return;
-    // Clear preview and regenerate
-    setPreviewUrl(null);
+    // Keep the last successful preview recoverable until its replacement wins.
     setIsSaved(false);
-    sessionStorage.removeItem("ic_previewUrl");
     await handleGenerate();
   };
 
@@ -1244,8 +1475,9 @@ function CreatePortraitContent() {
             {/* The gallery licence has to be visible where the photo is handed
                 over, not only in the terms, or it is not a fair bargain. */}
             <p className="text-center text-xs leading-relaxed text-ink-faint">
-              Free previews may be shown in our public gallery as examples.
-              Buying the portrait makes it private. See our{" "}
+              Unpaid pet previews may be shown in our public gallery with the
+              uploaded pet photo and generated portrait. Buying the portrait
+              makes it private. See our{" "}
               <Link href="/terms" className="underline underline-offset-2 hover:text-ink-muted">
                 terms
               </Link>{" "}
@@ -1326,6 +1558,28 @@ function CreatePortraitContent() {
               </div>
             )}
 
+            {!isSignedIn && portraitId && (
+              <div className="flex flex-col gap-4 border-y border-rim py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-start gap-3">
+                  <ShieldCheck className="mt-0.5 size-5 shrink-0 text-accent" />
+                  <div>
+                    <p className="font-semibold text-ink">Protect this portrait before it starts</p>
+                    <p className="mt-1 text-sm leading-relaxed text-ink-muted">
+                      Sign in with Google or Facebook and we will save the in-progress job to
+                      your account and email you when it is ready. Guest portraits stay tied
+                      to this browser and cannot be recovered on another device.
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href={`/sign-in?redirect_url=${encodeURIComponent(`/portraits/create?portraitId=${portraitId}`)}`}
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-canvas transition-opacity hover:opacity-85"
+                >
+                  <LogIn className="size-4" /> Sign in and protect it
+                </Link>
+              </div>
+            )}
+
             <div className="flex gap-3">
               <QuietButton onClick={() => setStep("upload")} className="flex-1 py-3 text-sm">
                 <ArrowLeft /> Change Photo
@@ -1343,7 +1597,7 @@ function CreatePortraitContent() {
               </PrimaryButton>
             </div>
             <p className="text-center text-xs text-ink-faint">
-              Free watermarked preview. Purchase to unlock full resolution.
+              Free watermarked preview. No account required. Purchase to unlock full resolution.
             </p>
           </div>
         )}
@@ -1365,11 +1619,8 @@ function CreatePortraitContent() {
               <PreviewGatePanel
                 code={gateCode}
                 message={generationError}
-                email={gateEmail}
-                onEmailChange={setGateEmail}
-                marketingConsent={marketingConsent}
-                onMarketingConsentChange={setMarketingConsent}
-                onSubmitEmail={handleGateSubmit}
+                portraitId={portraitId}
+                onSubmitCaptcha={handleGateSubmit}
                 onCaptchaToken={setCaptchaToken}
                 captchaReady={Boolean(captchaToken)}
                 onChangeStyle={handleRetry}

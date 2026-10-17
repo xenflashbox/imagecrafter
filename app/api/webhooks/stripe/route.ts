@@ -16,7 +16,7 @@ import {
   sendPackPurchaseEmail,
   sendPrintPurchaseEmail,
 } from "@/lib/services/email-notification";
-import { createProdigiOrder } from "@/lib/services/print-fulfillment";
+import { createPrintFulfillmentOrder } from "@/lib/services/print-fulfillment";
 import { grantPackCredits, getCreditBalance } from "@/lib/services/credits";
 import { resolvePackPrice } from "@/lib/services/pricing";
 import { trackTikTokEvent } from "@/lib/services/tiktok-events";
@@ -24,6 +24,7 @@ import { trackMetaEvent } from "@/lib/services/meta-events";
 import { captureBuyer } from "@/lib/services/mautic";
 import { requireEnv } from "@/lib/env";
 import { expirePortraitOrder } from "@/lib/services/expire-portrait-order";
+import { logAnalyticsEvent, logStripeEvent } from "@/lib/services/analytics";
 
 // Built per request, not at module scope: Next.js collects page data during the
 // build, so a module-scope client makes every build require a live payment key.
@@ -143,6 +144,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    await recordStripeEvent(event);
+
     switch (event.type) {
       case "checkout.session.completed":
         await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session, new Date(event.created * 1000));
@@ -165,6 +168,14 @@ export async function POST(request: NextRequest) {
         await handleInvoiceFailed(event.data.object as Stripe.Invoice);
         break;
 
+      case "payment_intent.payment_failed":
+        await handlePaymentIntentFailed(event.data.object as Stripe.PaymentIntent);
+        break;
+
+      case "checkout.session.async_payment_failed":
+        await handleCheckoutAsyncPaymentFailed(event.data.object as Stripe.Checkout.Session);
+        break;
+
       case "charge.refunded":
         await handleChargeRefunded(event.data.object as Stripe.Charge);
         break;
@@ -172,6 +183,18 @@ export async function POST(request: NextRequest) {
       case "checkout.session.expired": {
         const expiredSession = event.data.object as Stripe.Checkout.Session;
         await expirePortraitOrder(prisma.order, expiredSession);
+        await logAnalyticsEvent({
+          eventName: "checkout_expired",
+          orderId: expiredSession.metadata?.orderId || null,
+          portraitId: expiredSession.metadata?.portraitId || null,
+          stripeSessionId: expiredSession.id,
+          metadata: {
+            status: expiredSession.status,
+            paymentStatus: expiredSession.payment_status,
+            amount: expiredSession.amount_total,
+            currency: expiredSession.currency,
+          },
+        });
         break;
       }
 
@@ -184,6 +207,94 @@ export async function POST(request: NextRequest) {
     console.error("Webhook handler error:", error);
     return NextResponse.json({ error: "Webhook handler failed" }, { status: 500 });
   }
+}
+
+function paymentIntentIdOf(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && "id" in value && typeof value.id === "string") return value.id;
+  return null;
+}
+
+async function recordStripeEvent(event: Stripe.Event) {
+  const object = event.data.object as unknown as Record<string, unknown>;
+  const metadata = (object.metadata || {}) as Record<string, string>;
+  const stripeSessionId = typeof object.id === "string" && object.id.startsWith("cs_")
+    ? object.id
+    : typeof metadata.stripeSessionId === "string"
+      ? metadata.stripeSessionId
+      : null;
+  const paymentIntentId =
+    paymentIntentIdOf(object.payment_intent) ||
+    (typeof object.id === "string" && object.id.startsWith("pi_") ? object.id : null);
+
+  await logStripeEvent({
+    stripeEventId: event.id,
+    eventType: event.type,
+    orderId: metadata.orderId || null,
+    portraitId: metadata.portraitId || null,
+    stripeSessionId,
+    paymentIntentId,
+    status: typeof object.status === "string" ? object.status : null,
+    amount:
+      typeof object.amount_total === "number"
+        ? object.amount_total
+        : typeof object.amount === "number"
+          ? object.amount
+          : null,
+    currency: typeof object.currency === "string" ? object.currency : null,
+    summary: {
+      created: event.created,
+      livemode: event.livemode,
+      paymentStatus: typeof object.payment_status === "string" ? object.payment_status : null,
+      lastPaymentError:
+        typeof object.last_payment_error === "object" &&
+        object.last_payment_error &&
+        "message" in object.last_payment_error
+          ? object.last_payment_error.message
+          : null,
+    },
+  });
+}
+
+async function handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent) {
+  const sessions = await getStripe().checkout.sessions.list({
+    payment_intent: paymentIntent.id,
+    limit: 1,
+  });
+  const session = sessions.data[0];
+  const orderId = session?.metadata?.orderId || paymentIntent.metadata?.orderId || null;
+  const portraitId = session?.metadata?.portraitId || paymentIntent.metadata?.portraitId || null;
+
+  await logAnalyticsEvent({
+    eventName: "payment_failed",
+    orderId,
+    portraitId,
+    stripeSessionId: session?.id || null,
+    metadata: {
+      paymentIntentId: paymentIntent.id,
+      status: paymentIntent.status,
+      lastPaymentError: paymentIntent.last_payment_error?.message || null,
+      amount: paymentIntent.amount,
+      currency: paymentIntent.currency,
+    },
+  });
+}
+
+async function handleCheckoutAsyncPaymentFailed(session: Stripe.Checkout.Session) {
+  const orderId = session.metadata?.orderId || null;
+  await logAnalyticsEvent({
+    eventName: "checkout_async_payment_failed",
+    orderId,
+    portraitId: session.metadata?.portraitId || null,
+    stripeSessionId: session.id,
+    metadata: {
+      status: session.status,
+      paymentStatus: session.payment_status,
+      amount: session.amount_total,
+      currency: session.currency,
+    },
+  });
 }
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session, purchasedAt: Date) {
@@ -549,7 +660,7 @@ async function handlePortraitCheckoutCompleted(
       shippingAddress.country
     ) {
       try {
-        const { prodigiOrderId, stage } = await createProdigiOrder({
+        const { provider, fulfillmentOrderId, fulfillmentStatus } = await createPrintFulfillmentOrder({
           orderId,
           portraitId: order.portraitId,
           hiResImageUrl: hiResUrl,
@@ -570,14 +681,15 @@ async function handlePortraitCheckoutCompleted(
         await prisma.order.update({
           where: { id: orderId },
           data: {
-            prodigiOrderId,
-            prodigiStatus: stage,
+            fulfillmentOrderId,
+            fulfillmentProvider: provider,
+            fulfillmentStatus,
             status: "fulfilled",
           },
         });
 
         console.log(
-          `[stripe-webhook] Print fulfillment order ${prodigiOrderId} created for print order ${orderId} (stage=${stage})`
+          `[stripe-webhook] Print fulfillment order ${fulfillmentOrderId} created via ${provider} for print order ${orderId} (status=${fulfillmentStatus})`
         );
       } catch (fulfillmentError) {
         // Don't fail the webhook (payment already settled), but PERSIST the
@@ -590,7 +702,7 @@ async function handlePortraitCheckoutCompleted(
         );
         await prisma.order.update({
           where: { id: orderId },
-          data: { prodigiStatus: "submission_failed" },
+          data: { fulfillmentStatus: "submission_failed" },
         });
       }
     } else {
@@ -599,7 +711,7 @@ async function handlePortraitCheckoutCompleted(
       );
       await prisma.order.update({
         where: { id: orderId },
-        data: { prodigiStatus: "submission_blocked_missing_data" },
+        data: { fulfillmentStatus: "submission_blocked_missing_data" },
       });
     }
   }
@@ -639,8 +751,8 @@ async function handleChargeRefunded(charge: Stripe.Charge) {
       status: true,
       email: true,
       portraitId: true,
-      prodigiOrderId: true,
-      prodigiStatus: true,
+      fulfillmentOrderId: true,
+      fulfillmentStatus: true,
     },
   });
 
@@ -676,8 +788,8 @@ async function refundPortraitOrder(
     status: string;
     email: string;
     portraitId: string;
-    prodigiOrderId: string | null;
-    prodigiStatus: string | null;
+    fulfillmentOrderId: string | null;
+    fulfillmentStatus: string | null;
   },
   charge: Stripe.Charge,
   isFullRefund: boolean
@@ -708,11 +820,11 @@ async function refundPortraitOrder(
     data: { status: "preview" },
   });
 
-  if (order.type === "print" && order.prodigiOrderId) {
-    // Prodigi has already been paid and the print may be in the post. Nothing
+  if (order.type === "print" && order.fulfillmentOrderId) {
+    // The fulfiller has already been paid and the print may be in the post. Nothing
     // here can recall it — this is a real cost that a human has to see.
     console.error(
-      `[stripe-webhook] Order ${order.id} refunded but print ${order.prodigiOrderId} was already sent to Prodigi (${order.prodigiStatus ?? "unknown"}) — COST NOT RECOVERABLE, cancel with Prodigi manually if it has not shipped`
+      `[stripe-webhook] Order ${order.id} refunded but print ${order.fulfillmentOrderId} was already sent to fulfillment (${order.fulfillmentStatus ?? "unknown"}) — COST NOT RECOVERABLE, cancel with the provider manually if it has not shipped`
     );
   }
 

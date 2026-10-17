@@ -36,5 +36,6 @@ scripts/smoke/output/
 # operational notes and agent state — not source
 .claude/
 PLAN/
+/-home-xen-docker-apps-imagecrafter/
 *.md
 !README.md

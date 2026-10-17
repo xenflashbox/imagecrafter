@@ -32,6 +32,7 @@ import { CreditPackCards } from "@/components/credit-pack-cards";
 import { getPackCatalog, getPrice, DIGITAL_SKU } from "@/lib/services/pricing";
 import { SiteHeader, SiteFooter } from "@/components/site-chrome";
 import { portraitReturnAccess } from "@/lib/services/portrait-return";
+import { PortraitViewEvent } from "@/components/portrait-analytics-events";
 
 export const metadata: Metadata = {
   title: "Order Confirmed — ImageCrafter Portrait Studio",
@@ -83,7 +84,7 @@ export default async function PortraitSuccessPage({ params, searchParams }: Prop
       maxDownloads: true,
       downloadExpiresAt: true,
       printSize: true,
-      prodigiStatus: true,
+      fulfillmentStatus: true,
       trackingNumber: true,
       trackingUrl: true,
       portrait: {
@@ -152,6 +153,11 @@ export default async function PortraitSuccessPage({ params, searchParams }: Prop
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas text-ink">
+      <PortraitViewEvent
+        eventName="checkout_returned"
+        portraitId={portraitId}
+        metadata={{ orderId, orderStatus: order.status, paid: isPaid }}
+      />
       <SiteHeader links={false} />
 
       <div className="mx-auto w-full max-w-2xl flex-1 px-6 pt-28 pb-16">
@@ -276,11 +282,11 @@ export default async function PortraitSuccessPage({ params, searchParams }: Prop
                 <Printer className="text-accent" /> Print status
               </h2>
 
-              {order.prodigiStatus ? (
+              {order.fulfillmentStatus ? (
                 <div className="flex flex-col gap-3 text-sm">
                   <div className="flex justify-between gap-4">
                     <span className="text-ink-muted">Fulfillment status</span>
-                    <span className="capitalize">{order.prodigiStatus}</span>
+                    <span className="capitalize">{order.fulfillmentStatus}</span>
                   </div>
                   {order.trackingNumber && (
                     <div className="flex justify-between gap-4">

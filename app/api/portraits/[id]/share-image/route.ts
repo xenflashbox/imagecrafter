@@ -11,12 +11,17 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import {
+  attributionFromRequest,
+  clientIp,
+  logAnalyticsEvent,
+} from "@/lib/services/analytics";
 import sharp from "sharp";
 import { ImageResponse } from "next/og";
 import { createElement } from "react";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
@@ -57,6 +62,20 @@ export async function GET(
   const footer = Buffer.from(await footerResponse.arrayBuffer());
   const branded = await sharp(preview.data).extend({ bottom: footerHeight, background: "#ffffff" })
     .composite([{ input: footer, top: preview.info.height, left: 0 }]).png().toBuffer();
+
+  // ShareButtons also fetches this image in the background to prepare native
+  // file sharing. Only the explicit Save image URL carries download intent.
+  if (request.nextUrl.searchParams.get("intent") === "download") {
+    await logAnalyticsEvent({
+      eventName: "share_image_downloaded",
+      sessionId: request.cookies.get("portrait_session_id")?.value || null,
+      portraitId: id,
+      ...attributionFromRequest(request),
+      metadata: { format: "png", watermarked: true },
+      ip: clientIp(request.headers),
+      userAgent: request.headers.get("user-agent"),
+    });
+  }
 
   return new NextResponse(new Uint8Array(branded), {
     headers: {

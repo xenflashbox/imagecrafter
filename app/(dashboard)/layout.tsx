@@ -25,7 +25,7 @@ import { ArchMark } from "@/components/arch-mark";
 const navItems = [
   { href: "/portraits/create", label: "New portrait", icon: Wand2, accent: true },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/gallery", label: "Gallery", icon: Images },
+  { href: "/dashboard/gallery", label: "Gallery", icon: Images },
   { href: "/history", label: "History", icon: History },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

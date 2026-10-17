@@ -17,6 +17,8 @@ import { notFound } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { SiteHeader, SiteFooter } from "@/components/site-chrome";
+import { PortraitViewEvent } from "@/components/portrait-analytics-events";
+import { ShareButtons } from "@/components/share-buttons";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -103,6 +105,15 @@ export default async function PublicPortraitPage({ params }: Props) {
 
   return (
     <div className="flex min-h-screen flex-col bg-canvas text-ink">
+      <PortraitViewEvent
+        eventName="share_page_viewed"
+        portraitId={id}
+        metadata={{
+          stylePackSlug: portrait.stylePackSlug,
+          styleVariantSlug: portrait.styleVariantSlug,
+          subjectType: portrait.subjectType,
+        }}
+      />
       <SiteHeader
         cta={
           <Link
@@ -134,6 +145,15 @@ export default async function PublicPortraitPage({ params }: Props) {
             <span className="capitalize">{titleCase(portrait.styleVariantSlug)}</span>
           </figcaption>
         </figure>
+
+        <div className="mt-8">
+          <ShareButtons
+            portraitId={id}
+            imageUrl={portrait.previewImageUrl!}
+            heading="Share this portrait"
+            caption="You have to see this portrait."
+          />
+        </div>
 
         <div className="mt-14 text-center">
           <h1 className="font-display mb-4 text-3xl font-light leading-tight md:text-4xl">

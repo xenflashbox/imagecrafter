@@ -97,7 +97,7 @@ export function SettingsClient({ packCards }: { packCards: React.ReactNode }) {
             )}
           </div>
           <p className="text-sm text-ink-muted mb-6">
-            Each credit unlocks one full 4K portrait download, no watermark. Credits
+            Each credit unlocks one high-resolution portrait download, no watermark. Credits
             never expire.
           </p>
           {packCards}

@@ -105,22 +105,10 @@ See `.env.example` for all required variables:
 
 ## Deployment
 
-### Docker Swarm (Recommended)
-
-1. Build the image:
-```bash
-docker build -t imagecrafter:latest .
-```
-
-2. Deploy to swarm:
-```bash
-docker stack deploy -c docker-compose.yml imagecrafter
-```
-
-### Vercel
+ImageCrafter frontend is deployed on Vercel.
 
 ```bash
-vercel deploy
+vercel deploy --prod
 ```
 
 ## Webhooks Setup

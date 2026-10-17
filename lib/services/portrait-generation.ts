@@ -568,6 +568,14 @@ export async function generatePortrait(
     return { success: false, error: "Portrait not found", errorType: "notfound" };
   }
 
+  // A regeneration must never destroy the last successful portrait. Failures
+  // from the new attempt return the row to its existing preview instead of
+  // replacing a valid, purchasable result with a terminal failure screen.
+  const failureData = (message: string) => ({
+    status: portrait.previewImageUrl ? "preview" : "failed",
+    errorMessage: portrait.previewImageUrl ? null : message,
+  });
+
   // --- Step 2: Update status to analyzing ---
   await prisma.portrait.update({
     where: { id: portraitId },
@@ -584,10 +592,7 @@ export async function generatePortrait(
   if (!analysisResult.success || !analysisResult.analysis) {
     await prisma.portrait.update({
       where: { id: portraitId },
-      data: {
-        status: "failed",
-        errorMessage: analysisResult.error || "Photo analysis failed",
-      },
+      data: failureData(analysisResult.error || "Photo analysis failed"),
     });
     return {
       success: false,
@@ -604,9 +609,8 @@ export async function generatePortrait(
     await prisma.portrait.update({
       where: { id: portraitId },
       data: {
-        status: "failed",
+        ...failureData(`Photo quality issues: ${issues.join(", ")}`),
         subjectAnalysis: analysis as object,
-        errorMessage: `Photo quality issues: ${issues.join(", ")}`,
       },
     });
     return {
@@ -624,9 +628,10 @@ export async function generatePortrait(
     await prisma.portrait.update({
       where: { id: portraitId },
       data: {
-        status: "failed",
+        ...failureData(
+          `Multiple subjects detected (${analysis.subjectCount}) — single-subject only in v1`
+        ),
         subjectAnalysis: analysis as object,
-        errorMessage: `Multiple subjects detected (${analysis.subjectCount}) — single-subject only in v1`,
       },
     });
     return {
@@ -648,9 +653,10 @@ export async function generatePortrait(
     await prisma.portrait.update({
       where: { id: portraitId },
       data: {
-        status: "failed",
+        ...failureData(
+          `Style/subject incompatible: elven does not preserve likeness for build="${subjectBuild}"`
+        ),
         subjectAnalysis: analysis as object,
-        errorMessage: `Style/subject incompatible: elven does not preserve likeness for build="${subjectBuild}"`,
       },
     });
     return {
@@ -674,7 +680,7 @@ export async function generatePortrait(
   if (!stylePack || stylePack.variants.length === 0) {
     await prisma.portrait.update({
       where: { id: portraitId },
-      data: { status: "failed", errorMessage: "Style not found" },
+      data: failureData("Style not found"),
     });
     return {
       success: false,
@@ -734,9 +740,9 @@ export async function generatePortrait(
     await prisma.portrait.update({
       where: { id: portraitId },
       data: {
-        status: "failed",
-        errorMessage:
+        ...failureData(
           "Face preservation not configured (ENABLE_FACE_PRESERVATION / REPLICATE_API_TOKEN)",
+        ),
       },
     });
     return {
@@ -782,10 +788,7 @@ export async function generatePortrait(
     );
     await prisma.portrait.update({
       where: { id: portraitId },
-      data: {
-        status: "failed",
-        errorMessage: `Output failed IP safety check (ip=${ip})`,
-      },
+      data: failureData(`Output failed IP safety check (ip=${ip})`),
     });
     return {
       success: false as const,
@@ -920,7 +923,7 @@ export async function generatePortrait(
     if (firstStandIn.kind === "engine") {
       await prisma.portrait.update({
         where: { id: portraitId },
-        data: { status: "failed", errorMessage: firstStandIn.message },
+        data: failureData(firstStandIn.message),
       });
       return {
         success: false,
@@ -931,10 +934,9 @@ export async function generatePortrait(
     if (firstStandIn.kind === "verifier") {
       await prisma.portrait.update({
         where: { id: portraitId },
-        data: {
-          status: "failed",
-          errorMessage: "Stand-in fidelity verification unavailable (vision leg down)",
-        },
+        data: failureData(
+          "Stand-in fidelity verification unavailable (vision leg down)"
+        ),
       });
       return {
         success: false,
@@ -944,10 +946,9 @@ export async function generatePortrait(
     }
     await prisma.portrait.update({
       where: { id: portraitId },
-      data: {
-        status: "failed",
-        errorMessage: `No stand-in candidate matched subject coloring (${STANDIN_CANDIDATES} rendered)`,
-      },
+      data: failureData(
+        `No stand-in candidate matched subject coloring (${STANDIN_CANDIDATES} rendered)`
+      ),
     });
     return {
       success: false,
@@ -973,7 +974,7 @@ export async function generatePortrait(
   if (!swap.success || !swap.imageUrl) {
     await prisma.portrait.update({
       where: { id: portraitId },
-      data: { status: "failed", errorMessage: swap.error || "Identity swap failed" },
+      data: failureData(swap.error || "Identity swap failed"),
     });
     return {
       success: false,
@@ -982,9 +983,9 @@ export async function generatePortrait(
     };
   }
 
-  // Step 8c: acceptance gate. A failing verdict still buys retries — a better
-  // draw is worth $0.08 — but it no longer decides whether the customer gets an
-  // image.
+  // Step 8c: acceptance gate. A failing verdict buys retries, but an output
+  // that still does not look like the source is never shown as a successful
+  // portrait. Shipping a polished stranger is worse than an honest retry.
   // The retry re-rolls the SWAP against the same stand-in. The swap does not
   // repaint a face onto a fixed scene — it redraws the whole composition, and
   // measurably reframes it in both directions (PLAN/results/best-of-n-verdict.md,
@@ -1035,11 +1036,24 @@ export async function generatePortrait(
       `[PortraitGen] Acceptance gate PASSED (identity=${verdict.identity}, style=${verdict.style}, ip=${verdict.ip}) after ${swapAttempts} swap(s)`
     );
   } else {
-    // Delivered anyway, verdict recorded on the row. The URL is logged so the
-    // call can be second-guessed against the actual image.
     console.warn(
-      `[PortraitGen] Acceptance gate did not pass (identity=${verdict.identity}, style=${verdict.style}) after ${swapAttempts} swap(s) — DELIVERING, verdict recorded; image=${swap.imageUrl}`
+      `[PortraitGen] Acceptance gate did not pass (identity=${verdict.identity}, style=${verdict.style}) after ${swapAttempts} swap(s) — rejecting output`
     );
+    await prisma.portrait.update({
+      where: { id: portraitId },
+      data: {
+        ...failureData(
+          `Likeness review failed (identity=${verdict.identity}, style=${verdict.style})`
+        ),
+        gateVerdict: { ...verdict, swapAttempts },
+      },
+    });
+    return {
+      success: false,
+      error:
+        "We couldn't make this version look enough like the original photo. Please try a clearer photo or another style.",
+      errorType: "quality",
+    };
   }
 
   // swap.imageUrl is guaranteed here: the initial swap was checked above and
@@ -1064,7 +1078,7 @@ export async function generatePortrait(
     console.error("[PortraitGen] Failed to fetch generated image:", error);
     await prisma.portrait.update({
       where: { id: portraitId },
-      data: { status: "failed", errorMessage: "Failed to retrieve generated image" },
+      data: failureData("Failed to retrieve generated image"),
     });
     return {
       success: false,
@@ -1078,7 +1092,7 @@ export async function generatePortrait(
   if (!watermarkResult.success || !watermarkResult.buffer) {
     await prisma.portrait.update({
       where: { id: portraitId },
-      data: { status: "failed", errorMessage: "Watermark processing failed" },
+      data: failureData("Watermark processing failed"),
     });
     return {
       success: false,
@@ -1095,28 +1109,24 @@ export async function generatePortrait(
   const newVersion = parseInt(existingVersions || "0", 10) + 1;
   console.log(`[PortraitGen] Generating version ${newVersion} for portrait ${portraitId}`);
 
-  // --- Step 12: Upscale ×4 + store hi-res (unwatermarked) ---
-  // Engines output ~1MP; we sell "full 4K". Real-ESRGAN ×4 makes the
-  // promise true. Fail CLOSED: a preview whose hi-res can't be delivered
-  // would be a purchasable product we can't fulfill.
+  // --- Step 12: Upscale ×4 + store the unwatermarked original ---
+  //
+  // The GPU upscaler is an enhancement, not permission to hide an otherwise
+  // completed portrait. If it is unavailable, preserve and store the native
+  // high-quality model output so the preview and digital purchase still work.
   const upscale = await upscalePortraitBuffer(imageBuffer);
-  if (!upscale.success || !upscale.buffer) {
+  let deliveryBuffer = imageBuffer;
+  if (upscale.success && upscale.buffer) {
+    deliveryBuffer = upscale.buffer;
+    console.log(
+      `[PortraitGen] Upscaled ×4 in ${upscale.processingTimeMs}ms (${imageBuffer.length} → ${upscale.buffer.length} bytes)`
+    );
+  } else {
     console.error(`[PortraitGen] Upscale failed: ${upscale.error}`);
-    await prisma.portrait.update({
-      where: { id: portraitId },
-      data: { status: "failed", errorMessage: `Upscale failed: ${upscale.error}` },
-    });
-    return {
-      success: false,
-      error: "Final image processing failed. Please try again.",
-      errorType: "generation",
-    };
+    console.warn("[PortraitGen] Falling back to the native unwatermarked output");
   }
-  console.log(
-    `[PortraitGen] Upscaled ×4 in ${upscale.processingTimeMs}ms (${imageBuffer.length} → ${upscale.buffer.length} bytes)`
-  );
 
-  const hiResBuffer = await prepareHiResImage(upscale.buffer);
+  const hiResBuffer = await prepareHiResImage(deliveryBuffer);
   let hiResImageUrl: string | undefined;
   if (hiResBuffer.success && hiResBuffer.buffer) {
     const hiResUpload = await uploadPortraitHiRes(hiResBuffer.buffer, portraitId, newVersion);
@@ -1128,7 +1138,7 @@ export async function generatePortrait(
     );
     await prisma.portrait.update({
       where: { id: portraitId },
-      data: { status: "failed", errorMessage: "Failed to store hi-res image" },
+      data: failureData("Failed to store hi-res image"),
     });
     return {
       success: false,
@@ -1142,7 +1152,7 @@ export async function generatePortrait(
   if (!previewUpload.success || !previewUpload.url) {
     await prisma.portrait.update({
       where: { id: portraitId },
-      data: { status: "failed", errorMessage: "Failed to store preview" },
+      data: failureData("Failed to store preview"),
     });
     return {
       success: false,

@@ -3,17 +3,12 @@
 ## Service Identity
 - **Service**: ImageCrafter — AI Image Generation SaaS
 - **URL**: https://imagecrafter.app
-- **Registry image**: `registry.xencolabs.com/imagecrafter`
-- **Swarm service**: `imagecrafter_imagecrafter`
-- **Stack**: `imagecrafter`
+- **Hosting**: Vercel project `imagecrafter`
 
-## Network (authoritative)
-- Cluster subnet: 10.8.8.0/24
-- NEVER use 192.168.x.x in this environment.
-
-## Swarm nodes (authoritative quick ref)
-- Managers: 10.8.8.15 (xenco3 — Leader), 10.8.8.14 (xenco2 — Reachable), 10.8.8.17 (xenco5 — Reachable)
-- Workers:  10.8.8.12 (xenco), 10.8.8.16 (xenco4), 10.8.8.108 (xenco6), 10.8.8.13 (xenco1)
+## Deployment (authoritative)
+- The frontend runs on Vercel.
+- Do not deploy the frontend with Docker, Docker Swarm, Traefik, NFS volumes, or registry images.
+- Use `./scripts/deploy.sh` for production deploys.
 
 ## Database (authoritative)
 - **Provider**: Shared Blogcraft Neon PostgreSQL
@@ -22,13 +17,12 @@
 - Do NOT write to tables without the `ic_` prefix — those belong to other services.
 
 ## Absolute rule: no guessing
-Before ANY infra action:
+Before ANY deployment action:
 1. ./scripts/whoami.sh
 2. ./scripts/preflight.sh
 
 ## Deployment rule
-- Only deploy using: `./deploy-imagecrafter.sh` (full build + push + swarm update)
-- OR use the guardrails wrapper: `./scripts/deploy.sh` (delegates to deploy-imagecrafter.sh)
+- Only deploy the frontend using the guardrails wrapper: `./scripts/deploy.sh`
 - Deploy BLOCKS if git is dirty unless you pass --force
 
 ## Emergency only

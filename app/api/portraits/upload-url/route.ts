@@ -24,6 +24,7 @@ import {
   createPortraitUploadTicket,
   generatePortraitId,
 } from "@/lib/services/file-storage";
+import { attributionFromRequest, clientIp, logAnalyticsEvent } from "@/lib/services/analytics";
 
 const SESSION_COOKIE = "portrait_session_id";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
@@ -101,6 +102,18 @@ export async function POST(request: NextRequest) {
         path: "/",
       });
     }
+
+    const attribution = attributionFromRequest(request);
+    await logAnalyticsEvent({
+      eventName: "upload_ticket_created",
+      sessionId,
+      userId,
+      portraitId,
+      ...attribution,
+      metadata: { contentType, sizeBytes },
+      ip: clientIp(request.headers),
+      userAgent: request.headers.get("user-agent"),
+    });
 
     return response;
   } catch (error) {

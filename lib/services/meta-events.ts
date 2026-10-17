@@ -15,13 +15,16 @@
  */
 
 import { createHash } from "node:crypto";
+import { logAnalyticsEvent } from "@/lib/services/analytics";
 
 const API_VERSION = "v23.0";
 
 export type MetaEventName =
   | "CompleteRegistration"
+  | "CustomizeProduct"
   | "InitiateCheckout"
   | "Purchase"
+  | "Share"
   | "ViewContent";
 
 export interface MetaEventInput {
@@ -48,6 +51,25 @@ function sha256(value: string): string {
   return createHash("sha256").update(value.trim().toLowerCase()).digest("hex");
 }
 
+async function recordDelivery(
+  status: "accepted" | "rejected" | "failed" | "skipped",
+  input: MetaEventInput,
+  detail?: { httpStatus?: number; error?: string }
+) {
+  await logAnalyticsEvent({
+    eventName: `meta_capi_${status}`,
+    portraitId: input.contentId?.length === 32 ? input.contentId : null,
+    metadata: {
+      metaEventName: input.event,
+      httpStatus: detail?.httpStatus ?? null,
+      error: detail?.error?.slice(0, 500) ?? null,
+      hasFbc: Boolean(input.fbc),
+      hasFbp: Boolean(input.fbp),
+      hasEmail: Boolean(input.email),
+    },
+  });
+}
+
 /** Build a _fbc-format value from an fbclid URL param when the cookie is absent. */
 export function fbcFromFbclid(fbclid: string): string {
   return `fb.1.${Date.now()}.${fbclid}`;
@@ -63,6 +85,7 @@ export async function trackMetaEvent(
     console.warn(
       `[meta-events] Skipping ${input.event} — Meta Conversions API not configured (pixel/token missing)`
     );
+    await recordDelivery("skipped", input, { error: "pixel/token missing" });
     return { success: false, error: "not configured" };
   }
 
@@ -116,12 +139,19 @@ export async function trackMetaEvent(
       console.error(
         `[meta-events] ${input.event} rejected: HTTP ${res.status} ${json.error?.message || ""}`
       );
+      await recordDelivery("rejected", input, {
+        httpStatus: res.status,
+        error: json.error?.message || `HTTP ${res.status}`,
+      });
       return { success: false, error: json.error?.message || `HTTP ${res.status}` };
     }
     console.log(`[meta-events] ${input.event} sent (event_id=${input.eventId})`);
+    await recordDelivery("accepted", input, { httpStatus: res.status });
     return { success: true };
   } catch (err) {
     console.error(`[meta-events] ${input.event} failed:`, err);
-    return { success: false, error: err instanceof Error ? err.message : String(err) };
+    const error = err instanceof Error ? err.message : String(err);
+    await recordDelivery("failed", input, { error });
+    return { success: false, error };
   }
 }

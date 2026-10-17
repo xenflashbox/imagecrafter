@@ -81,9 +81,11 @@ export default function PrivacyPage() {
           portrait ends that licence and removes it from the gallery.
         </p>
         <p>
-          We publish only what we have picked by hand. We never publish your
-          original photograph, your name or your email address. If you want a
-          free preview taken down, email{" "}
+          Purchased portraits are private. For unpaid pet previews, we may show
+          the uploaded pet photo beside the generated portrait as a
+          before-and-after example. We do not publish your name or email
+          address, and we do not publish original uploaded photographs for
+          human portraits. If you want a free preview taken down, email{" "}
           <a href={`mailto:${LEGAL.contactEmail}`}>{LEGAL.contactEmail}</a> and
           we will remove it.
         </p>

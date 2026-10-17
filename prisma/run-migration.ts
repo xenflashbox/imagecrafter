@@ -41,8 +41,9 @@ const statements = [
     "printSize"               TEXT,
     "printFrame"              TEXT,
     "printFormat"             TEXT,
-    "prodigiOrderId"          TEXT,
-    "prodigiStatus"           TEXT,
+    "fulfillmentProvider"     TEXT,
+    "fulfillmentOrderId"      TEXT,
+    "fulfillmentStatus"       TEXT,
     "trackingNumber"          TEXT,
     "trackingUrl"             TEXT,
     "shippingName"            TEXT,
@@ -144,7 +145,7 @@ const statements = [
   `CREATE INDEX IF NOT EXISTS "ic_Order_userId_idx" ON "ic_Order"("userId")`,
   `CREATE INDEX IF NOT EXISTS "ic_Order_email_idx" ON "ic_Order"("email")`,
   `CREATE INDEX IF NOT EXISTS "ic_Order_status_idx" ON "ic_Order"("status")`,
-  `CREATE INDEX IF NOT EXISTS "ic_Order_prodigiOrderId_idx" ON "ic_Order"("prodigiOrderId")`,
+  `CREATE INDEX IF NOT EXISTS "ic_Order_fulfillmentOrderId_idx" ON "ic_Order"("fulfillmentOrderId")`,
 
   // StylePack / StyleVariant indexes
   `CREATE INDEX IF NOT EXISTS "ic_StylePack_category_idx" ON "ic_StylePack"("category")`,
