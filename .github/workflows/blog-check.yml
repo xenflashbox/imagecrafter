@@ -1,0 +1,38 @@
+name: Blog page check
+
+# WHY THIS EXISTS. This property had no CI at all. A deploy that broke every
+# article route reached production and stayed there until somebody read the
+# blog — eight of seventeen blog frontends were in that state on 2026-11-02.
+#
+# The backend cannot see this class of failure: it hands a correct article to
+# Make, Make posts it to Payload, and the frontend decides whether a reader
+# ever sees it. Every failure in that last hop returns HTTP 200 somewhere and
+# looks plausible.
+#
+# Runs after each successful production deploy (Vercel reports
+# deployment_status to GitHub) and once a day, so a broken article route cannot
+# sit in production unnoticed.
+on:
+  deployment_status:
+  schedule:
+    - cron: "41 15 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/check-blog-pages.mjs"
+      - ".github/workflows/blog-check.yml"
+
+jobs:
+  check:
+    if: >-
+      github.event_name != 'deployment_status' ||
+      (github.event.deployment_status.state == 'success' &&
+       github.event.deployment.environment == 'Production')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Sitemap, article pages, bylines and a real 404
+        run: node scripts/check-blog-pages.mjs https://imagecrafter.app --prefix=/blog --sample=12
